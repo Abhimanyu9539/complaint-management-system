@@ -46,6 +46,11 @@ SPARSE_VECTOR_NAME = "sparse"
 # supplies the corpus statistics BM25 scoring needs.
 SPARSE_MODEL_NAME = "Qdrant/bm25"
 
+# The client default (5s) is too tight for a hosted Qdrant: a cold hybrid query
+# — dense + sparse prefetch plus server-side RRF — regularly exceeds it and
+# surfaces as a bare ReadTimeout that looks like an outage rather than a knob.
+QDRANT_TIMEOUT_SECONDS = 30
+
 # Fields retrieval filters on (build.md §0.4), as dotted paths into `metadata`.
 INDEXED_PAYLOAD_FIELDS: tuple[str, ...] = (
     "metadata.doc_id",
@@ -65,7 +70,11 @@ def get_qdrant_client() -> QdrantClient:
     """
     settings = get_settings()
     try:
-        client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+        client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+            timeout=QDRANT_TIMEOUT_SECONDS,
+        )
     except Exception:
         logger.exception("Failed to construct Qdrant client for %s", settings.qdrant_url)
         raise
