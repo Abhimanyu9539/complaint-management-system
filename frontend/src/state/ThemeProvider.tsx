@@ -10,12 +10,16 @@ import {
 import type { PaletteId } from '@/lib/palettes';
 import {
   applyPaletteAttribute,
+  applySurfaceAttribute,
   applyThemeClass,
   readStoredPalette,
+  readStoredSurface,
   readStoredTheme,
   resolveIsDark,
   writeStoredPalette,
+  writeStoredSurface,
   writeStoredTheme,
+  type SurfaceMode,
   type ThemePreference,
 } from '@/lib/theme';
 
@@ -24,6 +28,8 @@ interface ThemeContextValue {
   toggleTheme(): void;
   palette: PaletteId;
   setPalette(palette: PaletteId): void;
+  surface: SurfaceMode;
+  toggleSurface(): void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -32,6 +38,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreference] = useState<ThemePreference>(() => readStoredTheme());
   const [isDark, setIsDark] = useState(() => resolveIsDark(readStoredTheme()));
   const [palette, setPaletteState] = useState<PaletteId>(() => readStoredPalette());
+  const [surface, setSurfaceState] = useState<SurfaceMode>(() => readStoredSurface());
 
   useEffect(() => {
     applyThemeClass(isDark);
@@ -40,6 +47,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyPaletteAttribute(palette);
   }, [palette]);
+
+  useEffect(() => {
+    applySurfaceAttribute(surface);
+  }, [surface]);
 
   // While no explicit preference is stored, follow the OS setting live.
   useEffect(() => {
@@ -64,9 +75,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setPaletteState(next);
   }, []);
 
+  const toggleSurface = useCallback(() => {
+    setSurfaceState((prev) => {
+      const next: SurfaceMode = prev === 'tinted' ? 'neutral' : 'tinted';
+      writeStoredSurface(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<ThemeContextValue>(
-    () => ({ isDark, toggleTheme, palette, setPalette }),
-    [isDark, toggleTheme, palette, setPalette],
+    () => ({ isDark, toggleTheme, palette, setPalette, surface, toggleSurface }),
+    [isDark, toggleTheme, palette, setPalette, surface, toggleSurface],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

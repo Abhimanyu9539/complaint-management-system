@@ -1,5 +1,6 @@
 import { Sparkles, TriangleAlert, User } from 'lucide-react';
 import type { ChatMessage } from '@/lib/chat/types';
+import { CitationChips } from './CitationChips';
 import { Markdown } from './Markdown';
 import { TypingCursor } from './TypingCursor';
 
@@ -35,6 +36,9 @@ export function MessageBubble({ message, streaming }: MessageBubbleProps) {
           <Markdown content={message.content} />
           {streaming && <TypingCursor />}
         </div>
+        {!streaming && message.citations && message.citations.length > 0 && (
+          <CitationChips messageId={message.id} citations={message.citations} />
+        )}
         {message.interrupted && (
           <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-text-faint">
             <TriangleAlert size={12} strokeWidth={2} />

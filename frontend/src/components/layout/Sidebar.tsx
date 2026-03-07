@@ -1,36 +1,41 @@
 import { PanelLeftClose, SquarePen } from 'lucide-react';
+import { ICON_SIZE, IconButton } from '@/components/ui/IconButton';
 import { useChat } from '@/state/ChatProvider';
 import { PalettePicker } from './PalettePicker';
 import { SessionItem } from './SessionItem';
 import { ThemeToggle } from './ThemeToggle';
 
 interface SidebarProps {
+  /** Closes the mobile drawer (also fired after selecting a session). */
   onCloseMobile?: () => void;
+  /** Collapses the persistent desktop sidebar. */
+  onCollapse?: () => void;
 }
 
-export function Sidebar({ onCloseMobile }: SidebarProps) {
+export function Sidebar({ onCloseMobile, onCollapse }: SidebarProps) {
   const { sessions, activeSessionId, sessionsLoaded, selectSession, newChat, isMock } = useChat();
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-accent-text">
-            <span className="font-display text-[15px] leading-none">C</span>
+      <div className="flex h-13 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
+        <div className="flex min-w-0 items-center gap-2 pl-1">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-text">
+            <span className="font-display text-[13px] leading-none">C</span>
           </div>
-          <span className="font-display text-[15px] font-medium text-text">Complaint Assistant</span>
+          <span className="truncate font-display text-[14px] font-medium text-text">
+            Complaint Assistant
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={onCloseMobile}
-          className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text md:hidden"
-          aria-label="Close sidebar"
+        <IconButton
+          onClick={onCollapse ?? onCloseMobile}
+          aria-label="Collapse conversations"
+          title="Collapse conversations"
         >
-          <PanelLeftClose size={16} strokeWidth={1.75} />
-        </button>
+          <PanelLeftClose size={ICON_SIZE} strokeWidth={1.75} />
+        </IconButton>
       </div>
 
-      <div className="px-3 pt-2 pb-3">
+      <div className="p-3">
         <button
           type="button"
           onClick={() => {

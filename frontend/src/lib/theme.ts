@@ -4,6 +4,12 @@ export type ThemePreference = 'light' | 'dark' | null;
 
 const THEME_KEY = 'cms.theme';
 const PALETTE_KEY = 'cms.palette';
+const SURFACE_KEY = 'cms.surface';
+
+/** 'neutral' keeps backgrounds grey and shows the palette only on accents. */
+export type SurfaceMode = 'neutral' | 'tinted';
+
+export const DEFAULT_SURFACE: SurfaceMode = 'neutral';
 
 export function readStoredTheme(): ThemePreference {
   try {
@@ -42,6 +48,27 @@ export function writeStoredPalette(palette: PaletteId): void {
   } catch {
     // storage unavailable — palette just won't persist
   }
+}
+
+export function readStoredSurface(): SurfaceMode {
+  try {
+    const raw = localStorage.getItem(SURFACE_KEY);
+    return raw === 'tinted' || raw === 'neutral' ? raw : DEFAULT_SURFACE;
+  } catch {
+    return DEFAULT_SURFACE;
+  }
+}
+
+export function writeStoredSurface(surface: SurfaceMode): void {
+  try {
+    localStorage.setItem(SURFACE_KEY, surface);
+  } catch {
+    // storage unavailable — surface mode just won't persist
+  }
+}
+
+export function applySurfaceAttribute(surface: SurfaceMode): void {
+  document.documentElement.setAttribute('data-surface', surface);
 }
 
 export function systemPrefersDark(): boolean {

@@ -29,8 +29,12 @@
             'data-palette',
             palettes.indexOf(palette) === -1 ? 'violet' : palette,
           );
+
+          var surface = localStorage.getItem('cms.surface');
+          root.setAttribute('data-surface', surface === 'tinted' ? 'tinted' : 'neutral');
         } catch (e) {
           root.setAttribute('data-palette', 'violet');
+          root.setAttribute('data-surface', 'neutral');
         }
       })();
     </script>

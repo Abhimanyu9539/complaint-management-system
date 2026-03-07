@@ -1,4 +1,57 @@
-import type { Citation } from './types';
+import type { Citation, SourceDocument } from './types';
+
+/**
+ * Stands in for the Supabase `documents` table. `url` is null throughout
+ * because mock mode has no Storage bucket to sign against — the real transport
+ * returns a signed URL here and the UI unlocks the "Open document" action.
+ */
+export const MOCK_DOCUMENTS: Record<string, SourceDocument> = {
+  'pol-warranty-001': {
+    id: 'pol-warranty-001',
+    title: 'Small Appliance Warranty Policy v2',
+    doc_type: 'policy',
+    department: 'warranty',
+    storage_path: 'policies/small-appliance-warranty-v2.md',
+    url: null,
+    status: 'indexed',
+  },
+  'case-4521': {
+    id: 'case-4521',
+    title: 'Resolved Case #4521 — ProBlend 300 ERR-22',
+    doc_type: 'case',
+    department: 'warranty',
+    storage_path: 'cases/case-4521.md',
+    url: null,
+    status: 'indexed',
+  },
+  'pol-safety-002': {
+    id: 'pol-safety-002',
+    title: 'Product Safety Escalation Policy',
+    doc_type: 'policy',
+    department: 'product_safety',
+    storage_path: 'policies/product-safety-escalation.md',
+    url: null,
+    status: 'indexed',
+  },
+  'pol-shipping-004': {
+    id: 'pol-shipping-004',
+    title: 'Shipping & Delivery Policy',
+    doc_type: 'policy',
+    department: 'shipping',
+    storage_path: 'policies/shipping-delivery.md',
+    url: null,
+    status: 'indexed',
+  },
+  'pol-routing-000': {
+    id: 'pol-routing-000',
+    title: 'Department Routing Matrix',
+    doc_type: 'policy',
+    department: 'qa',
+    storage_path: 'policies/department-routing-matrix.md',
+    url: null,
+    status: 'indexed',
+  },
+};
 
 export interface MockAnswer {
   match: RegExp;

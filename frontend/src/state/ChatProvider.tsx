@@ -11,7 +11,7 @@ import {
 import { useChatStream } from '@/hooks/useChatStream';
 import { newId } from '@/lib/id';
 import { transport, useMock } from '@/lib/chat/transport';
-import type { ChatMessage, SessionMeta } from '@/lib/chat/types';
+import type { ChatMessage, Citation, SessionMeta } from '@/lib/chat/types';
 import { chatReducer, initialChatState } from './chatReducer';
 
 interface ChatContextValue {
@@ -21,6 +21,7 @@ interface ChatContextValue {
   messages: ChatMessage[];
   pendingUserMessage: ChatMessage | null;
   streamingText: string;
+  streamingCitations: Citation[];
   status: 'idle' | 'streaming' | 'error';
   error: string | null;
   isMock: boolean;
@@ -143,6 +144,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       messages: state.messages,
       pendingUserMessage: state.pendingUserMessage,
       streamingText: chatStream.streamingText,
+      streamingCitations: chatStream.citations,
       status: chatStream.status,
       error: chatStream.error,
       isMock: useMock,

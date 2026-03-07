@@ -136,127 +136,84 @@
   color-scheme: light;
 }
 
-/* --- Dark variants --- */
+/* ---------------------------------------------------------------------------
+   Neutral surfaces (default). Keeps backgrounds a true charcoal/grey so the
+   palette reads as accent colour on buttons, chips and highlights rather than
+   washing the entire screen. `data-surface="tinted"` opts back into
+   hue-tinted surfaces.
+   --------------------------------------------------------------------------- */
+[data-surface='neutral']:not(.dark) {
+  --bg: #fafaf9;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2f2f0;
+  --surface-hover: #eaeae7;
+  --border: #e6e6e3;
+  --border-strong: #cdcdc8;
+  --text: #1a1a1d;
+  --text-muted: #5d5d63;
+  --text-faint: #8f8f96;
+}
 
-.dark,
-[data-palette='violet'].dark {
-  --bg: #131020;
-  --bg-elevated: #1b1730;
-  --surface: #1b1730;
-  --surface-2: #241f3d;
-  --surface-hover: #2d2749;
-  --border: #322b52;
-  --border-strong: #443a6b;
-  --text: #ece7f7;
-  --text-muted: #a99fc4;
-  --text-faint: #766d92;
+/* --- Dark variants ---------------------------------------------------------
+   One neutral ramp shared by every palette; --tint-strength controls how much
+   of the accent hue bleeds into it, so palettes only need to override --accent.
+   --------------------------------------------------------------------------- */
+.dark {
+  --tint-strength: 0%;
   --accent: #a78bfa;
   --accent-strong: #c4b5fd;
-  --accent-soft: #2c2350;
-  --accent-text: #14102a;
+  --accent-text: #101014;
   --danger: #f2685c;
-  --focus-ring: #a78bfa;
+
+  --bg: color-mix(in oklab, var(--accent) var(--tint-strength), #101013);
+  --bg-elevated: color-mix(in oklab, var(--accent) var(--tint-strength), #17171b);
+  --surface: color-mix(in oklab, var(--accent) var(--tint-strength), #17171b);
+  --surface-2: color-mix(in oklab, var(--accent) var(--tint-strength), #1f1f24);
+  --surface-hover: color-mix(in oklab, var(--accent) var(--tint-strength), #27272d);
+  --border: color-mix(in oklab, var(--accent) var(--tint-strength), #292930);
+  --border-strong: color-mix(in oklab, var(--accent) var(--tint-strength), #3c3c45);
+  --accent-soft: color-mix(in oklab, var(--accent) 20%, #17171b);
+
+  --text: #f1f1f3;
+  --text-muted: #a5a5ad;
+  --text-faint: #73737c;
+  --focus-ring: var(--accent);
   color-scheme: dark;
+}
+
+[data-surface='tinted'].dark {
+  --tint-strength: 16%;
+}
+
+[data-palette='violet'].dark {
+  --accent: #a78bfa;
+  --accent-strong: #c4b5fd;
 }
 
 [data-palette='ocean'].dark {
-  --bg: #0b1620;
-  --bg-elevated: #101f2c;
-  --surface: #101f2c;
-  --surface-2: #172b3a;
-  --surface-hover: #1f3648;
-  --border: #21384a;
-  --border-strong: #2f4c62;
-  --text: #e2eef6;
-  --text-muted: #9ab2c4;
-  --text-faint: #698092;
   --accent: #38bdf8;
   --accent-strong: #7dd3fc;
-  --accent-soft: #12303f;
-  --accent-text: #04202e;
-  --danger: #f2685c;
-  --focus-ring: #38bdf8;
-  color-scheme: dark;
 }
 
 [data-palette='emerald'].dark {
-  --bg: #0c1712;
-  --bg-elevated: #12201a;
-  --surface: #12201a;
-  --surface-2: #1a2b22;
-  --surface-hover: #22362b;
-  --border: #24382d;
-  --border-strong: #334c3e;
-  --text: #e4f0e8;
-  --text-muted: #9db3a6;
-  --text-faint: #6c8175;
   --accent: #34d399;
   --accent-strong: #6ee7b7;
-  --accent-soft: #17342a;
-  --accent-text: #06231a;
-  --danger: #f2685c;
-  --focus-ring: #34d399;
-  color-scheme: dark;
 }
 
 [data-palette='rose'].dark {
-  --bg: #1a1013;
-  --bg-elevated: #23161b;
-  --surface: #23161b;
-  --surface-2: #2d1d23;
-  --surface-hover: #38252d;
-  --border: #3b272e;
-  --border-strong: #52353f;
-  --text: #f6e8ec;
-  --text-muted: #c2a3ad;
-  --text-faint: #8d7078;
   --accent: #fb7185;
   --accent-strong: #fda4af;
-  --accent-soft: #3d1f28;
-  --accent-text: #24080f;
-  --danger: #f2685c;
-  --focus-ring: #fb7185;
-  color-scheme: dark;
 }
 
 [data-palette='ember'].dark {
-  --bg: #16130f;
-  --bg-elevated: #1e1a14;
-  --surface: #1e1a14;
-  --surface-2: #262019;
-  --surface-hover: #2f2820;
-  --border: #362e23;
-  --border-strong: #46392b;
-  --text: #f2ece0;
-  --text-muted: #b4a992;
-  --text-faint: #7d7360;
   --accent: #e0824a;
   --accent-strong: #ef9862;
-  --accent-soft: #3a2a1c;
-  --accent-text: #1a1209;
-  --danger: #f2685c;
-  --focus-ring: #e0824a;
-  color-scheme: dark;
 }
 
 [data-palette='graphite'].dark {
-  --bg: #0f0f10;
-  --bg-elevated: #171719;
-  --surface: #171719;
-  --surface-2: #1e1e21;
-  --surface-hover: #26262a;
-  --border: #26262a;
-  --border-strong: #38383e;
-  --text: #f0f0f2;
-  --text-muted: #a1a1a8;
-  --text-faint: #6e6e76;
   --accent: #fafafa;
   --accent-strong: #ffffff;
-  --accent-soft: #232326;
-  --accent-text: #0f0f10;
-  --danger: #f2685c;
-  --focus-ring: #fafafa;
-  color-scheme: dark;
 }
 
 @theme inline {
@@ -291,8 +248,11 @@
     height: 100%;
   }
 
+  /* The shell is a fixed-viewport layout: scrolling belongs to the message
+     list and the two side panels, never to the page itself. */
   body {
     margin: 0;
+    overflow: hidden;
     background-color: var(--bg);
     color: var(--text);
     font-family: var(--font-sans);

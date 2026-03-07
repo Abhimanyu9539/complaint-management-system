@@ -1,11 +1,12 @@
 import { newId } from '@/lib/id';
-import { MOCK_ANSWERS, MOCK_FALLBACK_ANSWER } from './mockData';
+import { MOCK_ANSWERS, MOCK_DOCUMENTS, MOCK_FALLBACK_ANSWER } from './mockData';
 import type {
   ChatEvent,
   ChatMessage,
   ChatTransport,
   Citation,
   SessionMeta,
+  SourceDocument,
   StreamChatRequest,
 } from './types';
 
@@ -123,6 +124,15 @@ async function getMessages(sessionId: string): Promise<ChatMessage[]> {
   return store.messages[sessionId] ?? [];
 }
 
+async function getDocument(docId: string): Promise<SourceDocument | null> {
+  const document = MOCK_DOCUMENTS[docId];
+  if (!document) {
+    console.warn(`getDocument(${docId}): no mock document registered`);
+    return null;
+  }
+  return document;
+}
+
 async function saveTurn(sessionId: string, user: ChatMessage, assistant: ChatMessage): Promise<void> {
   const store = loadStore();
   if (!store.messages[sessionId]) store.messages[sessionId] = [];
@@ -144,5 +154,5 @@ async function saveTurn(sessionId: string, user: ChatMessage, assistant: ChatMes
 }
 
 export function createMockTransport(): ChatTransport {
-  return { streamChat, listSessions, getMessages, saveTurn };
+  return { streamChat, listSessions, getMessages, getDocument, saveTurn };
 }

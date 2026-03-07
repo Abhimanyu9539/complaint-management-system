@@ -1,5 +1,12 @@
 import { parseSSEStream } from './sse';
-import type { ChatEvent, ChatMessage, ChatTransport, SessionMeta, StreamChatRequest } from './types';
+import type {
+  ChatEvent,
+  ChatMessage,
+  ChatTransport,
+  SessionMeta,
+  SourceDocument,
+  StreamChatRequest,
+} from './types';
 
 function createRealTransport(baseUrl: string): ChatTransport {
   async function* streamChat(
@@ -50,6 +57,30 @@ function createRealTransport(baseUrl: string): ChatTransport {
       } catch {
         console.warn('getMessages: backend not available yet');
         return [];
+      }
+    },
+
+    async getDocument(docId: string): Promise<SourceDocument | null> {
+      try {
+        const res = await fetch(`${baseUrl}/documents/${docId}`);
+        if (!res.ok) {
+          console.warn(`getDocument(${docId}): backend responded ${res.status}`);
+          return null;
+        }
+        const data = await res.json();
+        return {
+          id: data.id ?? docId,
+          title: data.title ?? docId,
+          doc_type: data.doc_type ?? null,
+          department: data.department ?? data.department_id ?? null,
+          storage_path: data.storage_path ?? null,
+          // Accept whichever name the documents endpoint settles on.
+          url: data.url ?? data.signed_url ?? data.download_url ?? null,
+          status: data.status ?? null,
+        };
+      } catch (err) {
+        console.warn(`getDocument(${docId}): request failed`, err);
+        return null;
       }
     },
 

@@ -11,3 +11,6 @@ wheels/
 .claude
 # Data
 backend/data/
+
+# Working notes
+BACKEND_REQUIREMENTS.md
