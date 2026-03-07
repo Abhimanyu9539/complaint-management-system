@@ -20,10 +20,10 @@ export function Sidebar({ onCloseMobile, onCollapse }: SidebarProps) {
       <div className="flex h-13 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
         <div className="flex min-w-0 items-center gap-2 pl-1">
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-text">
-            <span className="font-display text-[13px] leading-none">C</span>
+            <span className="font-display text-[13px] leading-none">R</span>
           </div>
           <span className="truncate font-display text-[14px] font-medium text-text">
-            Complaint Assistant
+            Resolvr
           </span>
         </div>
         <IconButton
