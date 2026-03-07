@@ -1,5 +1,6 @@
 import { PanelLeftClose, SquarePen } from 'lucide-react';
 import { useChat } from '@/state/ChatProvider';
+import { PalettePicker } from './PalettePicker';
 import { SessionItem } from './SessionItem';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -63,6 +64,10 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="border-t border-border">
+        <PalettePicker />
       </div>
 
       <div className="flex items-center justify-between border-t border-border px-4 py-3">

@@ -1,6 +1,9 @@
+import { DEFAULT_PALETTE, isPaletteId, type PaletteId } from './palettes';
+
 export type ThemePreference = 'light' | 'dark' | null;
 
 const THEME_KEY = 'cms.theme';
+const PALETTE_KEY = 'cms.palette';
 
 export function readStoredTheme(): ThemePreference {
   try {
@@ -24,6 +27,23 @@ export function writeStoredTheme(theme: ThemePreference): void {
   }
 }
 
+export function readStoredPalette(): PaletteId {
+  try {
+    const raw = localStorage.getItem(PALETTE_KEY);
+    return isPaletteId(raw) ? raw : DEFAULT_PALETTE;
+  } catch {
+    return DEFAULT_PALETTE;
+  }
+}
+
+export function writeStoredPalette(palette: PaletteId): void {
+  try {
+    localStorage.setItem(PALETTE_KEY, palette);
+  } catch {
+    // storage unavailable — palette just won't persist
+  }
+}
+
 export function systemPrefersDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
@@ -34,4 +54,8 @@ export function resolveIsDark(preference: ThemePreference): boolean {
 
 export function applyThemeClass(isDark: boolean): void {
   document.documentElement.classList.toggle('dark', isDark);
+}
+
+export function applyPaletteAttribute(palette: PaletteId): void {
+  document.documentElement.setAttribute('data-palette', palette);
 }

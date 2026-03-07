@@ -14,14 +14,24 @@
     />
     <script>
       (function () {
+        var root = document.documentElement;
+        var palettes = ['violet', 'ocean', 'emerald', 'rose', 'ember', 'graphite'];
         try {
           var stored = localStorage.getItem('cms.theme');
           var dark =
             stored === 'dark' ||
             (stored !== 'light' &&
               window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) document.documentElement.classList.add('dark');
-        } catch (e) {}
+          if (dark) root.classList.add('dark');
+
+          var palette = localStorage.getItem('cms.palette');
+          root.setAttribute(
+            'data-palette',
+            palettes.indexOf(palette) === -1 ? 'violet' : palette,
+          );
+        } catch (e) {
+          root.setAttribute('data-palette', 'violet');
+        }
       })();
     </script>
   </head>
