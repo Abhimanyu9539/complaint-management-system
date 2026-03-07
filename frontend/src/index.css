@@ -1,0 +1,238 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #faf8f4;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2ede4;
+  --surface-hover: #ece5d8;
+  --border: #e4dccc;
+  --border-strong: #d3c7ae;
+  --text: #201b13;
+  --text-muted: #6b6252;
+  --text-faint: #9a9080;
+  --accent: #c4562b;
+  --accent-strong: #a8461f;
+  --accent-soft: #f4e2d4;
+  --accent-text: #ffffff;
+  --danger: #b3261e;
+  --focus-ring: #c4562b;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #16130f;
+  --bg-elevated: #1e1a14;
+  --surface: #1e1a14;
+  --surface-2: #262019;
+  --surface-hover: #2f2820;
+  --border: #362e23;
+  --border-strong: #46392b;
+  --text: #f2ece0;
+  --text-muted: #b4a992;
+  --text-faint: #7d7360;
+  --accent: #e0824a;
+  --accent-strong: #ef9862;
+  --accent-soft: #3a2a1c;
+  --accent-text: #1a1209;
+  --danger: #f2685c;
+  --focus-ring: #e0824a;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', ui-serif, Georgia, serif;
+
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-danger: var(--danger);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--accent-soft);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@keyframes blink-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.prose-cms {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.prose-cms > * + * {
+  margin-top: 0.75em;
+}
+
+.prose-cms h1,
+.prose-cms h2,
+.prose-cms h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.2em;
+}
+
+.prose-cms h1 {
+  font-size: 1.25em;
+}
+.prose-cms h2 {
+  font-size: 1.12em;
+}
+.prose-cms h3 {
+  font-size: 1.03em;
+}
+
+.prose-cms strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.prose-cms ul,
+.prose-cms ol {
+  padding-left: 1.35em;
+}
+
+.prose-cms ul {
+  list-style: disc;
+}
+.prose-cms ol {
+  list-style: decimal;
+}
+
+.prose-cms li + li {
+  margin-top: 0.3em;
+}
+
+.prose-cms a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose-cms code {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.88em;
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+}
+
+.prose-cms pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85em 1em;
+  overflow-x: auto;
+}
+
+.prose-cms pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.prose-cms table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+
+.prose-cms th,
+.prose-cms td {
+  border: 1px solid var(--border);
+  padding: 0.45em 0.7em;
+  text-align: left;
+}
+
+.prose-cms th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.prose-cms blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 0.9em;
+  color: var(--text-muted);
+}
