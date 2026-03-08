@@ -32,7 +32,8 @@ class Settings(BaseSettings):
     # --- Qdrant ---
     qdrant_url: str
     qdrant_api_key: str | None = None
-    qdrant_collection: str = "complaint_kb_v1"
+    qdrant_cases_collection: str = "cases_v1"
+    qdrant_policies_collection: str = "policies_v1"
 
     # --- Supabase ---
     supabase_url: str

@@ -1,13 +1,15 @@
-"""Idempotently create the Qdrant collection the ingestion pipeline writes into.
+"""Idempotently create the two Qdrant collections the ingestion pipeline writes into.
 
 The vector index is derived, rebuildable state (build.md §0.5) — but its *shape*
 is schema, so it is created by a versioned script rather than dashboard clicks,
 exactly like the SQL migrations in supabase/migrations/.
 
-Creates `complaint_kb_v1` with:
+Cases and policies are separate corpora with separate collections — see
+app/services/vector_store.py for why. Creates, for each of `cases_v1` and
+`policies_v1`:
   - named dense vector  `dense`  — 1536 dims, cosine (text-embedding-3-small)
   - named sparse vector `sparse` — IDF modifier, for BM25 via fastembed
-  - keyword payload indexes on the four filterable fields
+  - keyword payload indexes on that collection's filterable fields
 
 Payload indexes are on dotted paths (`metadata.doc_id`, ...) because
 `langchain_qdrant.QdrantVectorStore` nests all metadata under a `metadata` key.
@@ -23,6 +25,7 @@ Usage (cwd must be backend/ — config.py loads a relative ".env"):
 
 import logging
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Running a file inside scripts/ puts scripts/ on sys.path, not backend/, and the
@@ -33,8 +36,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # store into ssl. That must happen before any HTTPS client is constructed.
 from app.config import Settings, get_settings  # noqa: E402
 from app.services.vector_store import (  # noqa: E402
+    CASE_PAYLOAD_FIELDS,
     DENSE_VECTOR_NAME,
-    INDEXED_PAYLOAD_FIELDS,
+    POLICY_PAYLOAD_FIELDS,
     SPARSE_VECTOR_NAME,
     get_qdrant_client,
 )
@@ -43,10 +47,16 @@ from qdrant_client import QdrantClient, models  # noqa: E402
 logger = logging.getLogger("create_qdrant_collection")
 
 
-def create_collection(client: QdrantClient, settings: Settings) -> bool:
-    """Create the collection if absent. Returns True if it was created."""
-    name = settings.qdrant_collection
+@dataclass(frozen=True)
+class CollectionSpec:
+    """What to create — one per corpus."""
 
+    name: str
+    payload_fields: tuple[str, ...]
+
+
+def create_collection(client: QdrantClient, name: str, embedding_dims: int) -> bool:
+    """Create the collection if absent. Returns True if it was created."""
     if client.collection_exists(name):
         logger.info("Collection '%s' already exists — skipping creation", name)
         return False
@@ -56,7 +66,7 @@ def create_collection(client: QdrantClient, settings: Settings) -> bool:
             collection_name=name,
             vectors_config={
                 DENSE_VECTOR_NAME: models.VectorParams(
-                    size=settings.embedding_dims,
+                    size=embedding_dims,
                     distance=models.Distance.COSINE,
                 )
             },
@@ -75,35 +85,33 @@ def create_collection(client: QdrantClient, settings: Settings) -> bool:
     logger.info(
         "Created collection '%s' (dense=%d dims cosine, sparse=BM25/IDF)",
         name,
-        settings.embedding_dims,
+        embedding_dims,
     )
     return True
 
 
-def create_payload_indexes(client: QdrantClient, settings: Settings) -> None:
+def create_payload_indexes(
+    client: QdrantClient, name: str, payload_fields: tuple[str, ...]
+) -> None:
     """Create a keyword index per filterable field.
 
     Each field is wrapped separately so one failure is logged and the rest still
     get created, rather than aborting the run halfway through.
     """
-    name = settings.qdrant_collection
-
-    for field in INDEXED_PAYLOAD_FIELDS:
+    for field in payload_fields:
         try:
             client.create_payload_index(
                 collection_name=name,
                 field_name=field,
                 field_schema=models.PayloadSchemaType.KEYWORD,
             )
-            logger.info("Payload index ensured: %s (keyword)", field)
+            logger.info("Payload index ensured on '%s': %s (keyword)", name, field)
         except Exception:
-            logger.exception("Failed to create payload index on '%s'", field)
+            logger.exception("Failed to create payload index on '%s'.'%s'", name, field)
 
 
-def log_collection_summary(client: QdrantClient, settings: Settings) -> None:
+def log_collection_summary(client: QdrantClient, name: str) -> None:
     """Read the collection back and log what Qdrant actually stored."""
-    name = settings.qdrant_collection
-
     try:
         info = client.get_collection(name)
     except Exception:
@@ -118,21 +126,36 @@ def log_collection_summary(client: QdrantClient, settings: Settings) -> None:
     logger.info("Points: %s", info.points_count)
 
 
+def setup_collection(client: QdrantClient, settings: Settings, spec: CollectionSpec) -> None:
+    create_collection(client, spec.name, settings.embedding_dims)
+    create_payload_indexes(client, spec.name, spec.payload_fields)
+    log_collection_summary(client, spec.name)
+
+
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
     )
 
-    try:
-        settings = get_settings()
-        client = get_qdrant_client()
+    settings = get_settings()
+    client = get_qdrant_client()
+    specs = [
+        CollectionSpec(settings.qdrant_cases_collection, CASE_PAYLOAD_FIELDS),
+        CollectionSpec(settings.qdrant_policies_collection, POLICY_PAYLOAD_FIELDS),
+    ]
 
-        create_collection(client, settings)
-        create_payload_indexes(client, settings)
-        log_collection_summary(client, settings)
-    except Exception:
-        logger.exception("Collection setup failed")
+    # Each collection is isolated: a failure setting up one should not prevent
+    # the other from being reported.
+    failed = False
+    for spec in specs:
+        try:
+            setup_collection(client, settings, spec)
+        except Exception:
+            logger.exception("Collection setup failed for '%s'", spec.name)
+            failed = True
+
+    if failed:
         return 1
 
     logger.info("Done.")

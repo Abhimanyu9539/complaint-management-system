@@ -1,27 +1,38 @@
-"""The single definition of the Qdrant collection's shape.
+"""The single definition of the two Qdrant collections' shape.
+
+Cases and policies are separate corpora — separate Postgres tables, separate
+write permissions, separate chunking — and that separation carries through to
+retrieval as two Qdrant collections rather than one collection filtered by a
+`doc_type` field. The collection itself is the discriminator, so `doc_type` is
+not a payload field in either collection.
 
 Everything that touches vectors — `scripts/create_qdrant_collection.py` (Step 3)
 and the ingestion pipeline / retrieval nodes (Step 4+) — imports its vector
-names and indexed fields from here, so the collection that gets *created* and
-the collection that gets *written to* can never drift apart.
+names and indexed fields from here, so the collections that get *created* and
+the collections that get *written to* can never drift apart.
 
 Payload layout
 --------------
 Writes and reads go through ``langchain_qdrant.QdrantVectorStore``, which
 hardcodes its payload shape: chunk text under ``page_content``, all metadata
 nested under a single ``metadata`` key. There is no flat-metadata option
-(``metadata_payload_key`` renames the wrapper, it cannot remove it), so this
-diverges from the flat payload in docs/build.md §0.4::
+(``metadata_payload_key`` renames the wrapper, it cannot remove it)::
 
     {
       "page_content": "<chunk text>",
-      "metadata": {"doc_id": ..., "doc_type": ..., "department": ..., ...}
+      "metadata": {"doc_id": ..., "department": ..., ...}
     }
 
 Consequence: every payload filter must use the dotted path
 ``metadata.department``, never ``department``. Qdrant indexes and filters
 nested paths natively, so this costs nothing at retrieval time — but a filter
 written against the flat name silently matches zero points.
+
+BM25 IDF is computed per collection, so the sparse half of a hybrid score is
+calibrated against whichever corpus it came from. Scores from the `cases` and
+`policies` collections are therefore not comparable — merge results with RRF,
+or take a fixed top-k from each, rather than sorting a combined list by raw
+score.
 """
 
 import logging
@@ -51,12 +62,18 @@ SPARSE_MODEL_NAME = "Qdrant/bm25"
 # surfaces as a bare ReadTimeout that looks like an outage rather than a knob.
 QDRANT_TIMEOUT_SECONDS = 30
 
-# Fields retrieval filters on (build.md §0.4), as dotted paths into `metadata`.
-INDEXED_PAYLOAD_FIELDS: tuple[str, ...] = (
+# Fields retrieval filters on, as dotted paths into `metadata`. Split per
+# collection: cases filter on `category`, policies filter on `lifecycle` (so
+# retrieval can restrict to `published` clauses inside Qdrant).
+CASE_PAYLOAD_FIELDS: tuple[str, ...] = (
     "metadata.doc_id",
-    "metadata.doc_type",
     "metadata.department",
     "metadata.category",
+)
+POLICY_PAYLOAD_FIELDS: tuple[str, ...] = (
+    "metadata.doc_id",
+    "metadata.department",
+    "metadata.lifecycle",
 )
 
 
@@ -121,23 +138,27 @@ def get_sparse_embeddings() -> FastEmbedSparse:
 
 
 @lru_cache
-def get_vector_store() -> QdrantVectorStore:
-    """The hybrid (dense + sparse) vector store used for all writes and reads.
+def get_vector_store(collection_name: str) -> QdrantVectorStore:
+    """The hybrid (dense + sparse) vector store for one collection.
+
+    Takes the collection name explicitly — there are two collections (cases,
+    policies) and no single default. `@lru_cache` still applies: it now caches
+    one store per collection instead of one per process, since `collection_name`
+    is hashable.
 
     `validate_collection_config` is deliberately left on: it turns this
     constructor into a cross-check that `scripts/create_qdrant_collection.py`
     built the collection with the vector names and dimensions we expect, failing
     loudly here instead of silently writing mismatched vectors. That validation
     costs one throwaway embeddings API call to learn the dense dimension, which
-    is why this is cached — once per process, not once per document.
+    is why this is cached — once per collection per process, not once per document.
 
     Requires the collection to exist — run the creation script first.
     """
-    settings = get_settings()
     try:
         store = QdrantVectorStore(
             client=get_qdrant_client(),
-            collection_name=settings.qdrant_collection,
+            collection_name=collection_name,
             embedding=get_dense_embeddings(),
             sparse_embedding=get_sparse_embeddings(),
             retrieval_mode=RetrievalMode.HYBRID,
@@ -148,8 +169,8 @@ def get_vector_store() -> QdrantVectorStore:
         logger.exception(
             "Failed to open vector store for collection '%s' — "
             "run scripts/create_qdrant_collection.py if it does not exist yet",
-            settings.qdrant_collection,
+            collection_name,
         )
         raise
-    logger.info("Vector store ready on collection '%s'", settings.qdrant_collection)
+    logger.info("Vector store ready on collection '%s'", collection_name)
     return store
