@@ -11,7 +11,8 @@ const BASE_CLASS =
 /**
  * Opens the original document behind a citation. Uses `document_url` when the
  * answer already carried one, otherwise resolves it on demand through the
- * transport (which will hit `GET /documents/{id}` once that endpoint ships).
+ * transport (which will hit `GET /cases/{id}` or `GET /policies/{id}`,
+ * depending on `citation.doc_type`, once those endpoints ship).
  */
 export function SourceDocumentLink({ citation }: { citation: Citation }) {
   const [state, setState] = useState<LinkState>('idle');
@@ -33,7 +34,7 @@ export function SourceDocumentLink({ citation }: { citation: Citation }) {
   const handleOpen = async () => {
     setState('loading');
     try {
-      const document = await transport.getDocument(citation.doc_id);
+      const document = await transport.getDocument(citation.doc_id, citation.doc_type);
       if (document?.url) {
         window.open(document.url, '_blank', 'noopener,noreferrer');
         setState('idle');

@@ -3,12 +3,11 @@ import { Library, PanelRightClose, Pin } from 'lucide-react';
 import { ICON_SIZE, IconButton } from '@/components/ui/IconButton';
 import { useActiveCitations } from '@/hooks/useActiveCitations';
 import { useCitationsPanel } from '@/state/CitationsPanelProvider';
+import type { Citation } from '@/lib/chat/types';
 import { SourceDocumentLink } from './SourceDocumentLink';
 
-function docTypeLabel(docId: string): string {
-  if (docId.startsWith('pol-')) return 'Policy';
-  if (docId.startsWith('case-')) return 'Resolved case';
-  return 'Document';
+function docTypeLabel(docType: Citation['doc_type']): string {
+  return docType === 'policy' ? 'Policy' : 'Resolved case';
 }
 
 export function CitationsPanelContent() {
@@ -81,7 +80,7 @@ export function CitationsPanelContent() {
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[9.5px] font-medium text-accent">
-                        {docTypeLabel(citation.doc_id)}
+                        {docTypeLabel(citation.doc_type)}
                       </span>
                       <span className="font-mono text-[9.5px] text-text-faint">
                         {citation.chunk_id}

@@ -124,7 +124,10 @@ async function getMessages(sessionId: string): Promise<ChatMessage[]> {
   return store.messages[sessionId] ?? [];
 }
 
-async function getDocument(docId: string): Promise<SourceDocument | null> {
+async function getDocument(docId: string, _docType: 'case' | 'policy'): Promise<SourceDocument | null> {
+  // Mock ids are still globally unique via the `pol-`/`case-` prefix
+  // convention, so a flat lookup is enough here — docType is unused, kept
+  // only to satisfy the shared ChatTransport signature.
   const document = MOCK_DOCUMENTS[docId];
   if (!document) {
     console.warn(`getDocument(${docId}): no mock document registered`);

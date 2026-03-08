@@ -1,9 +1,10 @@
 import type { Citation, SourceDocument } from './types';
 
 /**
- * Stands in for the Supabase `documents` table. `url` is null throughout
- * because mock mode has no Storage bucket to sign against — the real transport
- * returns a signed URL here and the UI unlocks the "Open document" action.
+ * Stands in for the Supabase `cases` / `policies` tables. `url` is null
+ * throughout because mock mode has no Storage bucket to sign against — the
+ * real transport returns a signed URL here and the UI unlocks the "Open
+ * document" action.
  */
 export const MOCK_DOCUMENTS: Record<string, SourceDocument> = {
   'pol-warranty-001': {
@@ -75,6 +76,7 @@ Let the customer know the replacement ships within 2 business days once the clai
     citations: [
       {
         doc_id: 'pol-warranty-001',
+        doc_type: 'policy',
         chunk_id: 'pol-warranty-001#3',
         title: 'Small Appliance Warranty Policy v2 — §3.1 Motor faults',
         snippet:
@@ -82,6 +84,7 @@ Let the customer know the replacement ships within 2 business days once the clai
       },
       {
         doc_id: 'case-4521',
+        doc_type: 'case',
         chunk_id: 'case-4521#1',
         title: 'Resolved Case #4521 — ProBlend 300 ERR-22',
         snippet:
@@ -106,6 +109,7 @@ This matches the incident criteria in the safety escalation policy, so treat it 
     citations: [
       {
         doc_id: 'pol-safety-002',
+        doc_type: 'policy',
         chunk_id: 'pol-safety-002#1',
         title: 'Product Safety Escalation Policy — §1 Incident criteria',
         snippet:
@@ -125,6 +129,7 @@ Check the order's tracking status first — if it shows "delivered" but the cust
     citations: [
       {
         doc_id: 'pol-shipping-004',
+        doc_type: 'policy',
         chunk_id: 'pol-shipping-004#2',
         title: 'Shipping & Delivery Policy — §2 Delay remedies',
         snippet:
@@ -151,6 +156,7 @@ When confidence in the routing is low, it's safer to widen retrieval to the top 
     citations: [
       {
         doc_id: 'pol-routing-000',
+        doc_type: 'policy',
         chunk_id: 'pol-routing-000#1',
         title: 'Department Routing Matrix — 12 departments',
         snippet:
