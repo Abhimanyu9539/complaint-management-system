@@ -14,6 +14,10 @@
 
 CREATE TABLE IF NOT EXISTS policies (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Natural key of the seed corpus (the source filename, e.g.
+    -- 'warranty-policy.md'); NULL for uploads, which have no such identity.
+    -- Lets seed.py upsert on a readable key instead of deriving one.
+    source_ref      TEXT UNIQUE,
     title           TEXT NOT NULL,
     department_id   TEXT REFERENCES departments(id),  -- NULL = applies org-wide
     version         TEXT,
