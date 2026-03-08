@@ -1,13 +1,14 @@
 """Register the seed corpus in Postgres and run it through the ingest pipeline.
 
 The corpus lives on disk (data/seed/), so this script does not upload to
-Supabase Storage — `documents.storage_path` stays NULL and `source='seed'`
-marks these rows as fixture data rather than user uploads.
+Supabase Storage — `policies.storage_path` stays NULL and `source='seed'` marks
+these rows as fixture data rather than user uploads.
 
-Document ids are derived, not random: `uuid5(SEED_NAMESPACE, "case:C-1001")`.
-The schema has no natural unique key for a seed document, and without a stable
-id every re-run would create a second copy of all 25 documents. Deriving the
-primary key from the seed identity makes the whole script an upsert.
+Re-running this script must update the same 25 rows rather than duplicate them.
+Both `cases` and `policies` have a `source_ref TEXT UNIQUE` column for exactly
+this: the case id (`C-1001`) for cases, the source filename
+(`warranty-policy.md`) for policies. Upserting on `source_ref` makes the whole
+script idempotent without deriving synthetic ids.
 
 Usage (cwd must be backend/ — config.py loads a relative ".env"):
 
@@ -19,7 +20,6 @@ import argparse
 import json
 import logging
 import sys
-import uuid
 from pathlib import Path
 
 # Running a file inside scripts/ puts scripts/ on sys.path, not backend/, and the
@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Importing from `app` first runs app/__init__.py, which injects the OS trust
 # store into ssl. That must happen before any HTTPS client is constructed.
 from app.ingestion.chunkers import build_case_text, parse_frontmatter  # noqa: E402
-from app.ingestion.pipeline import IngestResult, ingest_document  # noqa: E402
+from app.ingestion.pipeline import IngestResult, ingest_case, ingest_policy  # noqa: E402
 from app.services.supabase_client import get_supabase  # noqa: E402
 
 logger = logging.getLogger("seed")
@@ -38,53 +38,51 @@ SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seed"
 CASES_FILE = SEED_DIR / "cases.json"
 POLICIES_DIR = SEED_DIR / "policies"
 
-# Fixed, like the point-id namespace: changing it would orphan every existing
-# seed document instead of updating it.
-SEED_NAMESPACE = uuid.UUID("c0ffee00-1111-4222-8333-444455556666")
+
+def upsert_row(table: str, row: dict) -> str:
+    """Upsert a row keyed by `source_ref`, returning its id."""
+    response = get_supabase().table(table).upsert(row, on_conflict="source_ref").execute()
+    return response.data[0]["id"]
 
 
-def seed_document_id(key: str) -> str:
-    return str(uuid.uuid5(SEED_NAMESPACE, key))
-
-
-def upsert_document_row(row: dict) -> None:
-    """Register (or refresh) the `documents` row before ingesting its text."""
-    get_supabase().table("documents").upsert(row, on_conflict="id").execute()
-
-
-def ingest_case(case: dict) -> IngestResult:
-    document_id = seed_document_id(f"case:{case['id']}")
+def seed_case(case: dict) -> IngestResult:
     title = f"{case['id']} — {case['department']} / {case['category']}"
 
-    upsert_document_row(
+    document_id = upsert_row(
+        "cases",
         {
-            "id": document_id,
+            "source_ref": case["id"],
             "title": title,
-            "doc_type": "case",
             "department_id": case["department"],
             "category": case["category"],
+            "resolution_path": case["resolution_path"],
+            "complaint_text": case["complaint_text"],
+            "dept_guidance": case.get("dept_guidance"),
+            "resolution_text": case["resolution_text"],
             "source": "seed",
-        }
+        },
     )
-    return ingest_document(document_id, build_case_text(case))
+    return ingest_case(document_id, build_case_text(case))
 
 
-def ingest_policy(path: Path) -> IngestResult:
+def seed_policy(path: Path) -> IngestResult:
     markdown = path.read_text(encoding="utf-8")
     meta, body = parse_frontmatter(markdown)
 
-    document_id = seed_document_id(f"policy:{path.name}")
-    upsert_document_row(
+    # Seeded policies are published outright — they are the shipped baseline,
+    # not a draft awaiting review — otherwise retrieval filtering on lifecycle
+    # would find nothing.
+    document_id = upsert_row(
+        "policies",
         {
-            "id": document_id,
+            "source_ref": path.name,
             "title": meta.get("title", path.stem),
-            "doc_type": "policy",
             "department_id": meta.get("department"),
-            "category": None,
+            "lifecycle": "published",
             "source": "seed",
-        }
+        },
     )
-    return ingest_document(document_id, body)
+    return ingest_policy(document_id, body)
 
 
 def run(one: bool) -> int:
@@ -106,14 +104,14 @@ def run(one: bool) -> int:
     # other 24 successful ingests.
     for case in cases:
         try:
-            counts[ingest_case(case).status] += 1
+            counts[seed_case(case).status] += 1
         except Exception:
             logger.exception("Case %s failed to ingest", case.get("id"))
             counts["failed"] += 1
 
     for path in policies:
         try:
-            counts[ingest_policy(path).status] += 1
+            counts[seed_policy(path).status] += 1
         except Exception:
             logger.exception("Policy %s failed to ingest", path.name)
             counts["failed"] += 1

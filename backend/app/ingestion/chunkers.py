@@ -33,7 +33,7 @@ _TOKEN_ENCODING = "cl100k_base"
 
 
 def count_tokens(text: str) -> int:
-    """Token count for `chunks.token_count`.
+    """Token count for `case_chunks.token_count` / `policy_chunks.token_count`.
 
     Never raises: the count is diagnostic metadata, so a tokenizer problem must
     not fail an otherwise good ingest.
@@ -124,20 +124,8 @@ def chunk_policy(text: str) -> list[str]:
         for piece in size_splitter.split_text(section.page_content):
             chunks.append(f"{breadcrumb}\n\n{piece}" if breadcrumb else piece)
 
-    return chunks
-
-
-def chunk_document(doc_type: str, text: str) -> list[str]:
-    """Dispatch to the strategy for this doc_type (`case` or `policy`)."""
-    if doc_type == "case":
-        chunks = chunk_case(text)
-    elif doc_type == "policy":
-        chunks = chunk_policy(text)
-    else:
-        raise ValueError(f"Unknown doc_type '{doc_type}' — expected 'case' or 'policy'")
-
     if not chunks:
-        raise ValueError(f"Chunking produced no chunks for doc_type '{doc_type}'")
+        raise ValueError("Chunking produced no chunks for this policy")
 
-    logger.debug("Chunked %s document into %d chunk(s)", doc_type, len(chunks))
+    logger.debug("Chunked policy into %d chunk(s)", len(chunks))
     return chunks
