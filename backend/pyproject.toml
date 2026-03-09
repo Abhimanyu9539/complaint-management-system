@@ -21,3 +21,22 @@ dependencies = [
     "truststore>=0.10.4",
     "uvicorn[standard]>=0.51.0",
 ]
+
+[tool.ruff.lint.isort]
+# The application packages sit directly under backend/ rather than inside a
+# single importable package, so ruff cannot infer which top-level names are
+# ours — without this it files them under third-party and reshuffles imports on
+# every save.
+known-first-party = [
+    "api",
+    "config",
+    "db",
+    "guardrails",
+    "ingestion",
+    "llm",
+    "observability",
+    "rag",
+    "retrieval",
+    "schemas",
+    "services",
+]

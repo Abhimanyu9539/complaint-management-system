@@ -1,161 +1,48 @@
-"""Idempotently create the two Qdrant collections the ingestion pipeline writes into.
+"""CLI entrypoint for creating the Qdrant collections.
 
-The vector index is derived, rebuildable state (build.md §0.5) — but its *shape*
-is schema, so it is created by a versioned script rather than dashboard clicks,
-exactly like the SQL migrations in supabase/migrations/.
-
-Cases and policies are separate corpora with separate collections — see
-app/services/vector_store.py for why. Creates, for each of `cases_v1` and
-`policies_v1`:
-  - named dense vector  `dense`  — 1536 dims, cosine (text-embedding-3-small)
-  - named sparse vector `sparse` — IDF modifier, for BM25 via fastembed
-  - keyword payload indexes on that collection's filterable fields
-
-Payload indexes are on dotted paths (`metadata.doc_id`, ...) because
-`langchain_qdrant.QdrantVectorStore` nests all metadata under a `metadata` key.
-See app/services/vector_store.py for the full explanation.
+The collections' shape and the code that applies it live in
+`retrieval/vector_store/create_qdrant_collections.py`; this file only wires a
+client to it and turns the outcome into an exit code.
 
 Safe to re-run: an existing collection is left untouched and index creation is
 a server-side no-op when the index already matches.
 
-Usage (cwd must be backend/ — config.py loads a relative ".env"):
+Usage (cwd must be backend/ — config/settings.py loads a relative ".env"):
 
     uv run python scripts/create_qdrant_collection.py
 """
 
 import logging
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 # Running a file inside scripts/ puts scripts/ on sys.path, not backend/, and the
-# project is not pip-installed — so make `app` importable before importing it.
+# project is not pip-installed — so make the packages importable before importing them.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Importing from `app` first runs app/__init__.py, which injects the OS trust
-# store into ssl. That must happen before any HTTPS client is constructed.
-from app.config import Settings, get_settings  # noqa: E402
-from app.services.vector_store import (  # noqa: E402
-    CASE_PAYLOAD_FIELDS,
-    DENSE_VECTOR_NAME,
-    POLICY_PAYLOAD_FIELDS,
-    SPARSE_VECTOR_NAME,
-    get_qdrant_client,
+# The `config` import must come first: importing it runs config/__init__.py, which
+# injects the OS trust store into ssl. That has to happen before any HTTPS client
+# is constructed.
+from config.logging_config import setup_logging  # noqa: E402
+from config.settings import get_settings  # noqa: E402
+from retrieval.vector_store.qdrant_store import get_qdrant_client  # noqa: E402
+from retrieval.vector_store.create_qdrant_collections import (  # noqa: E402
+    ensure_collections,
 )
-from qdrant_client import QdrantClient, models  # noqa: E402
 
 logger = logging.getLogger("create_qdrant_collection")
 
 
-@dataclass(frozen=True)
-class CollectionSpec:
-    """What to create — one per corpus."""
-
-    name: str
-    payload_fields: tuple[str, ...]
-
-
-def create_collection(client: QdrantClient, name: str, embedding_dims: int) -> bool:
-    """Create the collection if absent. Returns True if it was created."""
-    if client.collection_exists(name):
-        logger.info("Collection '%s' already exists — skipping creation", name)
-        return False
-
-    try:
-        client.create_collection(
-            collection_name=name,
-            vectors_config={
-                DENSE_VECTOR_NAME: models.VectorParams(
-                    size=embedding_dims,
-                    distance=models.Distance.COSINE,
-                )
-            },
-            sparse_vectors_config={
-                # IDF is required for BM25: without it Qdrant scores raw term
-                # frequencies and sparse retrieval quietly degrades.
-                SPARSE_VECTOR_NAME: models.SparseVectorParams(
-                    modifier=models.Modifier.IDF
-                )
-            },
-        )
-    except Exception:
-        logger.exception("Failed to create collection '%s'", name)
-        raise
-
-    logger.info(
-        "Created collection '%s' (dense=%d dims cosine, sparse=BM25/IDF)",
-        name,
-        embedding_dims,
-    )
-    return True
-
-
-def create_payload_indexes(
-    client: QdrantClient, name: str, payload_fields: tuple[str, ...]
-) -> None:
-    """Create a keyword index per filterable field.
-
-    Each field is wrapped separately so one failure is logged and the rest still
-    get created, rather than aborting the run halfway through.
-    """
-    for field in payload_fields:
-        try:
-            client.create_payload_index(
-                collection_name=name,
-                field_name=field,
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-            logger.info("Payload index ensured on '%s': %s (keyword)", name, field)
-        except Exception:
-            logger.exception("Failed to create payload index on '%s'.'%s'", name, field)
-
-
-def log_collection_summary(client: QdrantClient, name: str) -> None:
-    """Read the collection back and log what Qdrant actually stored."""
-    try:
-        info = client.get_collection(name)
-    except Exception:
-        logger.exception("Failed to read back collection '%s'", name)
-        raise
-
-    params = info.config.params
-    logger.info("--- '%s' as stored by Qdrant ---", name)
-    logger.info("Dense vectors:  %s", params.vectors)
-    logger.info("Sparse vectors: %s", params.sparse_vectors)
-    logger.info("Payload indexes: %s", sorted(info.payload_schema or {}))
-    logger.info("Points: %s", info.points_count)
-
-
-def setup_collection(client: QdrantClient, settings: Settings, spec: CollectionSpec) -> None:
-    create_collection(client, spec.name, settings.embedding_dims)
-    create_payload_indexes(client, spec.name, spec.payload_fields)
-    log_collection_summary(client, spec.name)
-
-
 def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-    )
+    setup_logging()
 
-    settings = get_settings()
-    client = get_qdrant_client()
-    specs = [
-        CollectionSpec(settings.qdrant_cases_collection, CASE_PAYLOAD_FIELDS),
-        CollectionSpec(settings.qdrant_policies_collection, POLICY_PAYLOAD_FIELDS),
-    ]
+    try:
+        succeeded = ensure_collections(get_qdrant_client(), get_settings())
+    except Exception:
+        logger.exception("Collection setup failed")
+        return 1
 
-    # Each collection is isolated: a failure setting up one should not prevent
-    # the other from being reported.
-    failed = False
-    for spec in specs:
-        try:
-            setup_collection(client, settings, spec)
-        except Exception:
-            logger.exception("Collection setup failed for '%s'", spec.name)
-            failed = True
-
-    if failed:
+    if not succeeded:
         return 1
 
     logger.info("Done.")
