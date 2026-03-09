@@ -6,6 +6,10 @@ dist/
 wheels/
 *.egg-info
 
+# Tool caches (ruff and pytest are dev dependencies now)
+.ruff_cache/
+.pytest_cache/
+
 # Virtual environments
 .venv
 docs/
