@@ -23,12 +23,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # The `config` import must come first: importing it runs config/__init__.py, which
 # injects the OS trust store into ssl. That has to happen before any HTTPS client
 # is constructed.
-from config.logging_config import setup_logging  # noqa: E402
-from config.settings import get_settings  # noqa: E402
-from retrieval.vector_store.qdrant_store import get_qdrant_client  # noqa: E402
-from retrieval.vector_store.create_qdrant_collections import (  # noqa: E402
+from config.logging_config import setup_logging
+from config.settings import get_settings
+from retrieval.vector_store.create_qdrant_collections import (
     ensure_collections,
 )
+from retrieval.vector_store.qdrant_store import get_qdrant_client
 
 logger = logging.getLogger("create_qdrant_collection")
 

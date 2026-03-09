@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # The `config` import must come first: importing it runs config/__init__.py, which
 # injects the OS trust store into ssl. That has to happen before any HTTPS client
 # (supabase, openai, qdrant, langsmith) is constructed.
-from config.logging_config import setup_logging  # noqa: E402
-from ingestion.seed import run_seed  # noqa: E402
+from config.logging_config import setup_logging
+from ingestion.seed import run_seed
 
 logger = logging.getLogger("seed_data")
 
