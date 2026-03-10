@@ -26,6 +26,12 @@ Files run in filename order, which is FK dependency order.
 | `0014_draft_feedback.sql` | `draft_feedback` | |
 | `0015_dept_responses.sql` | `dept_responses` | |
 | `0016_ticket_events.sql` | `ticket_events` | append-only |
+| `0017_tickets_web_intake.sql` | `tickets` | adds `body` + `source`; the first file to alter an existing table |
+
+`0017` breaks the "one file per table" rule in the only way that keeps it
+meaningful: `0004` is the file that *creates* `tickets`, and editing it in place
+would make a re-run of the set silently disagree with a database migrated
+earlier. Additive columns arrive as their own numbered file.
 
 ## Two corpora, not one
 

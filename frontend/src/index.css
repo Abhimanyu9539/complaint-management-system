@@ -137,6 +137,36 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Semantic status ramp — deliberately OUTSIDE the palette blocks.
+
+   Palette is taste; status is meaning. "Indexed" has to read green in ocean and
+   in rose alike, or the colour stops carrying information and becomes
+   decoration — and reading a queue at a glance is the entire point of the admin
+   panel. One shared ramp defined here and in .dark, rather than six more copies
+   of eight tokens.
+
+   `--danger` already exists and already means "this went wrong", so failure
+   reuses it; only its soft companion is new. There is deliberately no token for
+   `queued`: a queued job is not yet anything, and rendering it on --surface-2 /
+   --text-muted is the honest neutral.
+   --------------------------------------------------------------------------- */
+:root {
+  --ok: #2e7d46;
+  --ok-soft: #e3f0e7;
+  --warn: #a85b0b;
+  --warn-soft: #f7ecdd;
+  --info: #3a5fa8;
+  --info-soft: #e6ecf7;
+  --danger-soft: #f8e7e5;
+
+  /* Exactly one elevation token, applied only to cards. Everything else in the
+     admin panel separates with a border, so depth stays meaningful. */
+  --card-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 4px 16px rgb(0 0 0 / 0.05);
+}
+
+/* ---------------------------------------------------------------------------
    Neutral surfaces (default). Keeps backgrounds a true charcoal/grey so the
    palette reads as accent colour on buttons, chips and highlights rather than
    washing the entire screen. `data-surface="tinted"` opts back into
@@ -216,6 +246,25 @@
   --accent-strong: #ffffff;
 }
 
+/* Status ramp, dark. Same meanings, lifted lightness, dark soft backgrounds.
+   Placed after the per-palette .dark accent overrides so it wins in every
+   palette, and written as literal hexes rather than color-mix on purpose: a
+   status colour that drifted with --tint-strength would stop being comparable
+   between two screenshots taken in different surface modes. */
+.dark {
+  --ok: #6cc489;
+  --ok-soft: #1e2f24;
+  --warn: #e0a55c;
+  --warn-soft: #33291a;
+  --info: #8faee0;
+  --info-soft: #1f2836;
+  --danger-soft: #362020;
+
+  --card-shadow:
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 4px 16px rgb(0 0 0 / 0.25);
+}
+
 @theme inline {
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Fraunces', ui-serif, Georgia, serif;
@@ -235,6 +284,17 @@
   --color-accent-soft: var(--accent-soft);
   --color-accent-text: var(--accent-text);
   --color-danger: var(--danger);
+
+  /* Semantic status ramp — see the token block above. */
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-danger-soft: var(--danger-soft);
+
+  --shadow-card: var(--card-shadow);
 }
 
 @layer base {
@@ -309,6 +369,41 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Admin drawers slide in from the right edge they are anchored to. */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Skeletons and the "in flight" pulse on running-job dots. Motion here is
+   purely informational, so it is fully suppressed for reduced-motion users
+   rather than merely slowed. */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
