@@ -21,6 +21,7 @@ from functools import lru_cache
 
 from langchain_qdrant import FastEmbedSparse, QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from cms.config.settings import get_settings
 from cms.llm.embeddings.openai_embeddings import get_dense_embeddings
@@ -82,6 +83,73 @@ def get_sparse_embeddings() -> FastEmbedSparse:
         raise
     logger.debug("Sparse embeddings ready: %s", SPARSE_MODEL_NAME)
     return embeddings
+
+
+def collection_stats(name: str) -> dict:
+    """Point and vector counts for one collection.
+
+    Uniquely in this module, this never raises. The admin dashboard has to be
+    able to render its Supabase half when the vector store is unavailable —
+    a degraded row is a strictly better answer than a blank page, and it is
+    also the answer the operator actually needs in that moment.
+
+    Two failures are distinguished, because their remedies are completely
+    different and reporting both as "unreachable" sends someone to debug their
+    network when the real fix is one command:
+
+    - the collection does not exist yet  -> run `uv run cms-create-collections`
+    - Qdrant itself cannot be reached    -> check QDRANT_URL and /health/deps
+
+    `points_count` and `indexed_vectors_count` are Optional in the Qdrant API
+    (they are approximate, and absent on some backends), so both are coerced to
+    0 rather than propagating None into arithmetic.
+    """
+    missing = {
+        "name": name,
+        "reachable": True,
+        "status": "missing",
+        "points_count": 0,
+        "indexed_vectors_count": 0,
+        "segments_count": 0,
+    }
+
+    try:
+        info = get_qdrant_client().get_collection(name)
+    except UnexpectedResponse as exc:
+        # The server answered, so it is up — it just has no such collection.
+        if exc.status_code == 404:
+            logger.warning(
+                "Qdrant collection '%s' does not exist — run `uv run cms-create-collections`",
+                name,
+            )
+            return missing
+        logger.exception("Qdrant rejected the request for collection '%s'", name)
+        return {**missing, "reachable": False, "status": "unknown"}
+    except ValueError as exc:
+        # qdrant-client raises a bare ValueError for a missing collection on
+        # some transports rather than surfacing the 404.
+        if "not found" in str(exc).lower() or "doesn't exist" in str(exc).lower():
+            logger.warning(
+                "Qdrant collection '%s' does not exist — run `uv run cms-create-collections`",
+                name,
+            )
+            return missing
+        logger.exception("Could not read Qdrant collection '%s'", name)
+        return {**missing, "reachable": False, "status": "unknown"}
+    except Exception:
+        logger.exception("Could not reach Qdrant for collection '%s'", name)
+        return {**missing, "reachable": False, "status": "unknown"}
+
+    return {
+        "name": name,
+        "reachable": True,
+        # `status` is an enum on some client versions and a plain string on
+        # others; normalising here keeps the response model simple.
+        "status": str(getattr(info.status, "value", info.status)),
+        "points_count": info.points_count or 0,
+        "indexed_vectors_count": info.indexed_vectors_count or 0,
+        "segments_count": info.segments_count or 0,
+    }
 
 
 @lru_cache

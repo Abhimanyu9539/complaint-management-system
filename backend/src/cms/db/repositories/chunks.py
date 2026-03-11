@@ -27,6 +27,26 @@ def upsert_chunks(chunk_table: str, fk_column: str, rows: list[dict]) -> list[di
     return sorted(response.data, key=lambda row: row["chunk_index"])
 
 
+def count_chunks(chunk_table: str) -> int:
+    """Total rows in a chunk table, for the admin storage panel.
+
+    Compared against the Qdrant point count to surface drift: Postgres is
+    written before Qdrant, so chunk rows ahead of points is exactly what an
+    interrupted upsert leaves behind.
+
+    Logs and re-raises rather than returning 0 — a zero here would be read as
+    "nothing indexed" when it actually means "we could not ask".
+    """
+    try:
+        response = (
+            get_supabase().table(chunk_table).select("id", count="exact", head=True).execute()
+        )
+    except Exception:
+        logger.exception("Failed to count rows in %s", chunk_table)
+        raise
+    return response.count or 0
+
+
 def delete_chunks_from(
     chunk_table: str, fk_column: str, document_id: str, start_index: int
 ) -> None:

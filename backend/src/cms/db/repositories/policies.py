@@ -66,3 +66,111 @@ def mark_policy_failed(policy_id: str, error: str) -> None:
     get_supabase().table(TABLE).update(
         {"status": "failed", "error": error[:ERROR_MAX_CHARS]}
     ).eq("id", policy_id).execute()
+
+
+# ---------------------------------------------------------------------------
+# Reads for the admin surface. Mirrors `cases.py` for the reasons in the module
+# docstring: the two tables are expected to keep diverging, so a shared helper
+# would have to grow a table parameter and then a column parameter.
+#
+# These log and re-raise rather than returning an empty result — a zero shown
+# during an outage is indistinguishable from a genuinely empty corpus.
+# ---------------------------------------------------------------------------
+
+DOC_STATUSES: tuple[str, ...] = ("pending", "processing", "indexed", "failed", "deleting")
+
+
+def count_policies_by_status() -> dict[str, int]:
+    """How many policies sit in each lifecycle state.
+
+    `count="exact", head=True` per status rather than selecting and tallying:
+    PostgREST caps a bare select at 1000 rows.
+    """
+    counts: dict[str, int] = {}
+    try:
+        for status in DOC_STATUSES:
+            response = (
+                get_supabase()
+                .table(TABLE)
+                .select("id", count="exact", head=True)
+                .eq("status", status)
+                .execute()
+            )
+            counts[status] = response.count or 0
+    except Exception:
+        logger.exception("Failed to count %s rows by status", TABLE)
+        raise
+    return counts
+
+
+def list_processing_policies(limit: int = 20) -> list[dict]:
+    """Policies claimed for ingest that never finished — see `cases.py`."""
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("id,title,status,updated_at")
+            .eq("status", "processing")
+            .order("updated_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to list processing %s rows", TABLE)
+        raise
+    return response.data or []
+
+
+def count_policies_with_storage() -> int:
+    """Policies backed by a file in Supabase Storage.
+
+    A count, not a byte total: measuring size would need a Storage list call
+    per object, and the admin panel labels this "files stored" for that reason.
+    """
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("id", count="exact", head=True)
+            .not_.is_("storage_path", "null")
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to count %s rows with a storage_path", TABLE)
+        raise
+    return response.count or 0
+
+
+def titles_for_ids(policy_ids: list[str]) -> dict[str, str]:
+    """Map policy ids to titles, omitting ids that no longer exist.
+
+    The `ingestion_jobs` table has no FK on `document_id`, so a job can outlive
+    its document. A missing key means "deleted", not "error".
+    """
+    if not policy_ids:
+        return {}
+    try:
+        response = (
+            get_supabase().table(TABLE).select("id,title").in_("id", policy_ids).execute()
+        )
+    except Exception:
+        logger.exception("Failed to resolve %s titles", TABLE)
+        raise
+    return {row["id"]: row["title"] for row in response.data or []}
+
+
+def list_policy_options(limit: int = 200) -> list[dict]:
+    """Id, title and status for the admin's single-document ingest picker."""
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("id,title,status")
+            .order("title", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to list %s options", TABLE)
+        raise
+    return response.data or []

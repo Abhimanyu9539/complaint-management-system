@@ -64,3 +64,152 @@ def mark_case_failed(case_id: str, error: str) -> None:
     get_supabase().table(TABLE).update(
         {"status": "failed", "error": error[:ERROR_MAX_CHARS]}
     ).eq("id", case_id).execute()
+
+
+# ---------------------------------------------------------------------------
+# Reads for the admin surface
+#
+# These log and re-raise rather than swallowing into an empty result: a zero
+# shown during an outage is indistinguishable from a genuinely empty corpus.
+# ---------------------------------------------------------------------------
+
+DOC_STATUSES: tuple[str, ...] = ("pending", "processing", "indexed", "failed", "deleting")
+
+
+def count_cases_by_status() -> dict[str, int]:
+    """How many cases sit in each lifecycle state.
+
+    Uses `count="exact", head=True` per status rather than selecting the column
+    and tallying — PostgREST caps a bare select at 1000 rows, which would
+    silently under-report once the corpus grows past a demo.
+    """
+    counts: dict[str, int] = {}
+    try:
+        for status in DOC_STATUSES:
+            response = (
+                get_supabase()
+                .table(TABLE)
+                .select("id", count="exact", head=True)
+                .eq("status", status)
+                .execute()
+            )
+            counts[status] = response.count or 0
+    except Exception:
+        logger.exception("Failed to count %s rows by status", TABLE)
+        raise
+    return counts
+
+
+def list_processing_cases(limit: int = 20) -> list[dict]:
+    """Cases claimed for ingest that never finished.
+
+    `mark_case_processing` claims the row before the work begins, so anything
+    still sitting here is the visible residue of a crashed run. That is the
+    documented recovery signal, and nothing else surfaces it.
+    """
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("id,title,status,updated_at")
+            .eq("status", "processing")
+            .order("updated_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to list processing %s rows", TABLE)
+        raise
+    return response.data or []
+
+
+def count_cases_by_department() -> dict[str, int]:
+    """Indexed cases per department, for the distribution chart.
+
+    Only indexed rows are counted: a pending or failed case is not in the
+    retrieval corpus, so including it would overstate what the agent can
+    actually reach.
+    """
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("department_id")
+            .eq("status", "indexed")
+            .limit(5000)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to count %s rows by department", TABLE)
+        raise
+
+    counts: dict[str, int] = {}
+    for row in response.data or []:
+        department = row.get("department_id")
+        if department:
+            counts[department] = counts.get(department, 0) + 1
+    return counts
+
+
+def titles_for_ids(case_ids: list[str]) -> dict[str, str]:
+    """Map case ids to titles, omitting ids that no longer exist.
+
+    This is the LEFT JOIN that `ingestion_jobs` cannot express in SQL: that
+    table has no FK on `document_id` by design, so a job row outlives the
+    document it describes. Callers must treat a missing key as "deleted" rather
+    than as an error.
+    """
+    if not case_ids:
+        return {}
+    try:
+        response = (
+            get_supabase().table(TABLE).select("id,title").in_("id", case_ids).execute()
+        )
+    except Exception:
+        logger.exception("Failed to resolve %s titles", TABLE)
+        raise
+    return {row["id"]: row["title"] for row in response.data or []}
+
+
+def list_case_options(limit: int = 200) -> list[dict]:
+    """Id, title and status for the admin's single-document ingest picker."""
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("id,title,status")
+            .order("title", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to list %s options", TABLE)
+        raise
+    return response.data or []
+
+
+def count_by_resolution_path() -> dict[str, int]:
+    """Resolved cases split by the path that resolved them.
+
+    The second home of the escalation signal. `tickets.resolution_path` records
+    it for live tickets; this records it for the resolved complaints already in
+    the retrieval corpus, and the two must not be summed — a case may have been
+    minted from a ticket, and a seeded case was never a ticket at all.
+
+    Reported separately by the escalation metric for exactly that reason.
+    """
+    counts: dict[str, int] = {}
+    try:
+        for path in ("direct", "escalated"):
+            response = (
+                get_supabase()
+                .table(TABLE)
+                .select("id", count="exact", head=True)
+                .eq("resolution_path", path)
+                .execute()
+            )
+            counts[path] = response.count or 0
+    except Exception:
+        logger.exception("Failed to count %s rows by resolution path", TABLE)
+        raise
+    return counts
