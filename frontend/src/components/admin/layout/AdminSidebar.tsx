@@ -1,15 +1,7 @@
-import {
-  Activity,
-  ArrowLeft,
-  ChartNoAxesColumn,
-  Import,
-  Inbox,
-  LayoutDashboard,
-} from 'lucide-react';
-import { Link, NavLink } from 'react-router';
+import { Activity, ChartNoAxesColumn, Import, Inbox, LayoutDashboard } from 'lucide-react';
+import { NavLink } from 'react-router';
+import { SidebarFooter } from '@/components/layout/SidebarFooter';
 import { ICON_SIZE } from '@/components/ui/IconButton';
-import { PalettePicker } from '@/components/layout/PalettePicker';
-import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useMockAdmin } from '@/lib/admin/transport';
 
 interface AdminSidebarProps {
@@ -67,34 +59,11 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps) {
 
       <div className="min-h-0 flex-1" />
 
-      <div className="border-t border-border p-2">
-        <Link
-          to="/"
-          onClick={onNavigate}
-          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
-        >
-          <ArrowLeft size={ICON_SIZE} strokeWidth={1.75} className="shrink-0" />
-          Back to chat
-        </Link>
-      </div>
-
-      <div className="border-t border-border">
-        <PalettePicker />
-      </div>
-
-      <div className="flex items-center justify-between border-t border-border px-4 py-3">
-        {useMockAdmin ? (
-          <span
-            title="No VITE_API_BASE_URL configured — every panel is showing simulated data."
-            className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-medium text-warn"
-          >
-            Mock mode
-          </span>
-        ) : (
-          <span className="text-[11px] text-text-faint">Connected</span>
-        )}
-        <ThemeToggle />
-      </div>
+      <SidebarFooter
+        mocked={useMockAdmin}
+        mockedReason="No VITE_API_BASE_URL configured — every panel is showing simulated data."
+        onNavigate={onNavigate}
+      />
     </div>
   );
 }

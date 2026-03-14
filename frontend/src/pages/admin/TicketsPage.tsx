@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { AdminPageHeader } from '@/components/admin/layout/AdminShell';
 import { LiveIndicator } from '@/components/admin/layout/LiveIndicator';
 import { TicketDrawer } from '@/components/admin/tickets/TicketDrawer';
@@ -12,10 +12,10 @@ import { StatCard } from '@/components/ui/StatCard';
 import { useAdminLayout } from '@/hooks/useAdminLayout';
 import { usePanelData } from '@/hooks/usePanelData';
 import { useQueryParamNumber, useQueryParamState } from '@/hooks/useQueryParamState';
+import { useTicketActions } from '@/hooks/useTicketActions';
 import { formatCount, formatPercent } from '@/lib/format';
 import { adminTransport } from '@/lib/admin/transport';
-import { AdminRequestError } from '@/lib/admin/errors';
-import type { TicketDetail, TicketSeverity, TicketStatus } from '@/lib/tickets/types';
+import type { TicketSeverity, TicketStatus } from '@/lib/tickets/types';
 
 const PAGE_SIZE = 25;
 
@@ -51,11 +51,6 @@ export function TicketsPage() {
   const [severity, setSeverity] = useQueryParamState('severity', 'all');
   const [search, setSearch] = useQueryParamState('q', '');
   const [page, setPage] = useQueryParamNumber('page', 1);
-
-  const [detail, setDetail] = useState<TicketDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [acting, setActing] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
 
   const offset = (page - 1) * PAGE_SIZE;
   const isFiltered = status !== 'all' || severity !== 'all' || search !== '';
@@ -96,77 +91,15 @@ export function TicketsPage() {
     [departments.data],
   );
 
-  const openTicket = useCallback(async (ticketId: string) => {
-    setActionError(null);
-    setDetailLoading(true);
-    const controller = new AbortController();
-    try {
-      const result = await adminTransport.getTicket(ticketId, controller.signal);
-      setDetail(result.data);
-    } catch (err) {
-      console.warn('tickets: failed to load ticket detail', err);
-      setDetail(null);
-      setActionError(
-        err instanceof AdminRequestError ? err.message : 'Could not load that ticket.',
-      );
-    } finally {
-      setDetailLoading(false);
-    }
-  }, []);
-
-  /**
-   * Escalate and resolve share everything except the call, so they share a
-   * runner. The refreshes matter: an action changes the row, the queue counts
-   * and the escalation rate at once, and refreshing only the drawer would leave
-   * a resolved ticket sitting in the list behind it.
-   */
-  const runAction = useCallback(
-    async (action: (signal: AbortSignal) => Promise<unknown>, ticketId: string) => {
-      setActing(true);
-      setActionError(null);
-      const controller = new AbortController();
-      try {
-        await action(controller.signal);
-        await openTicket(ticketId);
-        tickets.refresh();
-        escalation.refresh();
-      } catch (err) {
-        setActionError(
-          err instanceof AdminRequestError
-            ? err.message
-            : 'That action failed. Please try again.',
-        );
-      } finally {
-        setActing(false);
-      }
-    },
-    [openTicket, tickets, escalation],
-  );
-
-  const handleEscalate = useCallback(
-    async (departmentId: string, note: string) => {
-      const ticketId = detail?.ticket.id;
-      if (!ticketId) return;
-      await runAction(
-        (signal) =>
-          adminTransport.escalateTicket(ticketId, departmentId, note.trim() || null, signal),
-        ticketId,
-      );
-    },
-    [detail, runAction],
-  );
-
-  const handleResolve = useCallback(
-    async (note: string) => {
-      const ticketId = detail?.ticket.id;
-      if (!ticketId) return;
-      await runAction(
-        (signal) => adminTransport.resolveTicket(ticketId, note.trim() || null, signal),
-        ticketId,
-      );
-    },
-    [detail, runAction],
-  );
+  // An action changes the row, the queue counts and the escalation rate at
+  // once, so both panels refresh together — refreshing only the drawer would
+  // leave a resolved ticket sitting in the list behind it.
+  const ticketActions = useTicketActions(() => {
+    tickets.refresh();
+    escalation.refresh();
+  });
+  const { detail, detailLoading, acting, actionError, openTicket, escalate, resolve, clear } =
+    ticketActions;
 
   const summary = escalation.data;
   const openCount = useMemo(() => {
@@ -265,12 +198,9 @@ export function TicketsPage() {
         detail={detail}
         loading={detailLoading}
         departments={departments.data ?? []}
-        onClose={() => {
-          setDetail(null);
-          setActionError(null);
-        }}
-        onEscalate={handleEscalate}
-        onResolve={handleResolve}
+        onClose={clear}
+        onEscalate={escalate}
+        onResolve={resolve}
         actionError={actionError}
         acting={acting}
       />

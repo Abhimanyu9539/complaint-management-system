@@ -1,10 +1,8 @@
-import { Gauge, MessageSquarePlus, PanelLeftClose, SquarePen } from 'lucide-react';
-import { Link } from 'react-router';
+import { PanelLeftClose, SquarePen } from 'lucide-react';
 import { ICON_SIZE, IconButton } from '@/components/ui/IconButton';
 import { useChat } from '@/state/ChatProvider';
-import { PalettePicker } from './PalettePicker';
 import { SessionItem } from './SessionItem';
-import { ThemeToggle } from './ThemeToggle';
+import { SidebarFooter } from './SidebarFooter';
 
 interface SidebarProps {
   /** Closes the mobile drawer (also fired after selecting a session). */
@@ -72,46 +70,7 @@ export function Sidebar({ onCloseMobile, onCollapse }: SidebarProps) {
         )}
       </div>
 
-      <div className="border-t border-border">
-        <PalettePicker />
-      </div>
-
-      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-3">
-        <div className="flex min-w-0 items-center">
-          <Link
-            to="/admin"
-            title="Admin panel"
-            onClick={onCloseMobile}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
-          >
-            <Gauge size={ICON_SIZE} strokeWidth={1.75} />
-            Admin
-          </Link>
-          {/* The customer intake form. Here for discoverability during
-              development — /ticket is a public standalone page and a customer
-              reaches it directly, never through this sidebar. */}
-          <Link
-            to="/ticket"
-            title="Customer complaint form"
-            onClick={onCloseMobile}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
-          >
-            <MessageSquarePlus size={ICON_SIZE} strokeWidth={1.75} />
-            Intake
-          </Link>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {isMock ? (
-            <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent">
-              Mock mode
-            </span>
-          ) : (
-            <span className="text-[11px] text-text-faint">Connected</span>
-          )}
-          <ThemeToggle />
-        </div>
-      </div>
+      <SidebarFooter mocked={isMock} onNavigate={onCloseMobile} />
     </div>
   );
 }

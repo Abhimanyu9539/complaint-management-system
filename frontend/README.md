@@ -1,7 +1,8 @@
 # Resolvr — frontend
 
-React 19 + Vite + TypeScript + Tailwind v4. Two areas: the agent **chat** at `/`
-and the **admin panel** at `/admin`.
+React 19 + Vite + TypeScript + Tailwind v4. Three areas: the **complaint
+workbench** at `/`, the agent **chat** at `/chat`, and the **admin panel** at
+`/admin`.
 
 ```bash
 npm install
@@ -14,24 +15,34 @@ npm run lint     # oxlint
 
 | Path | What it is |
 | --- | --- |
-| `/` | Chat — the agent-facing assistant |
+| `/` | **The main page.** The complaint workbench: a queue organised by status, and — for the selected ticket — its real progress, a simulated draft, and simulated evidence. |
+| `/chat` | Chat — the agent-facing assistant |
 | `/ticket` | **Customer-facing.** Submit a complaint. Public, standalone. |
 | `/admin` | Dashboard: health, KPIs, ingest queue, document counts, storage |
-| `/admin/tickets` | The complaint queue; escalate to a department or resolve |
+| `/admin/tickets` | The complaint queue as a searchable, paged table; escalate to a department or resolve |
 | `/admin/ingestion` | Trigger ingestion runs; browse and retry the ingest history |
 | `/admin/activity` | Agent graph executions, routing confidence, latency |
 | `/admin/stats` | Throughput, processing times, corpus distribution, escalation rate |
 
-The admin panel and `/ticket` are each `React.lazy`-loaded as their own chunk, so
-a chat user downloads neither the charts nor the form primitives.
+`/` and `/admin/tickets` do the same two actions (escalate, resolve) for
+different jobs: the workbench triages one ticket at a time — a queue rail plus
+`J`/`K` navigation — while `/admin/tickets` searches, filters and paginates
+past the workbench's 100-ticket ceiling. Both share one implementation of the
+action logic (`hooks/useTicketActions.ts`) and one mirror of the backend's
+state machine (`lib/tickets/transitions.ts`) so they cannot drift.
+
+The admin panel, chat and `/ticket` are each `React.lazy`-loaded as their own
+chunk; the workbench at `/` is not, since it is the landing page.
 
 `/ticket` deliberately does **not** mount `ChatProvider`. That provider fires
 `listSessions()` on mount, and a customer arriving to complain must not pay for
-an agent's chat history. The same rule keeps chat's providers inside `/`.
+an agent's chat history. The workbench doesn't mount it either, for the same
+reason. The provider now lives inside `/chat` only.
 
 Filters and pagination on `/admin/tickets`, `/admin/ingestion` and
 `/admin/activity` live in the query string, so a filtered view is shareable and
-the back button steps through filter states.
+the back button steps through filter states. The workbench's status filter,
+search and selected ticket (`?ticket=`) follow the same convention.
 
 ## Environment
 
@@ -65,13 +76,36 @@ customer whose complaint was quietly simulated has lost it. With no
 `VITE_API_BASE_URL` set, the form shows a banner saying it is not connected and
 the submit fails with a message, rather than pretending to succeed.
 
-`/admin/tickets` reads the same real rows for the same reason: a simulated queue
-in front of a real one would hide genuine complaints behind a badge nobody
-investigates.
+`/admin/tickets` and the workbench at `/` both read the same real rows for the
+same reason: a simulated queue in front of a real one would hide genuine
+complaints behind a badge nobody investigates.
 
 **The ticket routes need migration `0017_tickets_web_intake.sql`** applied to
 Supabase. Until then every ticket endpoint returns 503 and the server log names
-the missing column.
+the missing column — which means the workbench, now the landing page, opens to
+an error state until the migration is applied.
+
+### The workbench's Draft and Evidence panes are simulated
+
+There is no classifier, retriever or drafter — `backend/src/cms/rag/` and
+`retrieval/retrievers/` are empty packages, and `drafts`/`dept_responses` have
+no writer. Rather than an empty state, those two panes render a deterministic,
+per-ticket fixture (`lib/tickets/simulated.ts`) behind a **Simulated** banner,
+so the intended shape of the finished product is visible today.
+
+Three rules keep that honest:
+
+- **"Send to customer" is permanently disabled.** There is no send endpoint —
+  a simulated draft is structurally incapable of reaching a customer.
+- **Escalate and Resolve are real** (the same `useTicketActions` the rest of
+  the app uses) and render outside the simulated banner's border, so a real
+  action is never visually confused with a fake one.
+- **Department names always come from the live `/admin/departments` list.**
+  The fixture only ever picks an id from that list; it never invents a name.
+
+When the drafting pipeline lands (`lld.md` §6.3, `0013_drafts.sql`), `DraftPane`
+and `EvidencePane` keep their markup — only the import changes, from
+`lib/tickets/simulated` to a transport call.
 
 ## Deploying — SPA history fallback is required
 

@@ -1,4 +1,5 @@
-import { Inbox } from 'lucide-react';
+import { Inbox, SquareArrowOutUpRight } from 'lucide-react';
+import { Link } from 'react-router';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -28,10 +29,21 @@ export function TicketsTable({
     {
       key: 'ref',
       header: 'Ref',
-      width: 'w-[76px]',
+      width: 'w-[104px]',
       render: (ticket) => (
-        <span className="font-mono text-[11.5px] text-text-muted tabular-nums">
-          T-{ticket.ticketNo}
+        <span className="flex items-center gap-1.5">
+          <span className="font-mono text-[11.5px] text-text-muted tabular-nums">
+            T-{ticket.ticketNo}
+          </span>
+          <Link
+            to={`/?ticket=${ticket.id}`}
+            title="Open in workbench"
+            aria-label={`Open T-${ticket.ticketNo} in the workbench`}
+            onClick={(event) => event.stopPropagation()}
+            className="text-text-faint transition-colors hover:text-accent"
+          >
+            <SquareArrowOutUpRight size={12} strokeWidth={1.75} />
+          </Link>
         </span>
       ),
     },

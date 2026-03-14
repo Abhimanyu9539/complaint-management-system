@@ -14,7 +14,7 @@ export function NotFoundRoute() {
             to="/"
             className="inline-flex items-center rounded-lg border border-border bg-bg-elevated px-3 py-2 text-[13px] font-medium text-text shadow-sm transition-colors hover:border-border-strong hover:bg-surface-hover"
           >
-            Back to chat
+            Back to workbench
           </Link>
         }
       />
