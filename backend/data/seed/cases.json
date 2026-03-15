@@ -1,0 +1,182 @@
+[
+  {
+    "id": "C-1001",
+    "department": "warranty",
+    "category": "faulty_product",
+    "resolution_path": "direct",
+    "complaint_text": "My X200 Cordless Vacuum (order #4521) has stopped charging completely after about three months of normal use. The indicator light no longer turns on when docked. I bought this on the 12-month warranty plan and would like it repaired or replaced.",
+    "dept_guidance": null,
+    "resolution_text": "Confirmed the unit is within the 12-month warranty period and the fault (charging circuit failure) is covered under warranty §2.3 (manufacturing defects). Issued a free replacement unit and arranged a prepaid reverse pickup for the faulty vacuum. No cost to the customer."
+  },
+  {
+    "id": "C-1002",
+    "department": "warranty",
+    "category": "safety_concern",
+    "resolution_path": "escalated",
+    "complaint_text": "The AV-450 Blender (order #5810) started giving off a burning smell from the motor after only two weeks of light use. This was a gift from my sister and I don't have the original receipt, so I'm not sure if it's still under warranty, but honestly I'm more worried it's a fire risk than about the paperwork.",
+    "dept_guidance": "Confirmed via serial number lookup that the unit is registered to the original purchaser and the extended warranty covers gifted items once the serial is registered (warranty §4.1). Because the customer reported a burning smell, this qualifies for the safety exception clause (warranty §5.1), which authorizes an immediate full refund instead of the standard repair-first remedy, regardless of receipt availability.",
+    "resolution_text": "Issued a full refund under the warranty §5.1 safety exception, plus a ₹1,500 goodwill credit for the inconvenience. Customer was advised to stop using the unit immediately and provided safe disposal instructions."
+  },
+  {
+    "id": "C-1003",
+    "department": "warranty",
+    "category": "faulty_product",
+    "resolution_path": "direct",
+    "complaint_text": "The blade assembly on my ProBlend 300 mixer (order #6099) cracked right down the middle after about five months of normal home use. It wasn't dropped or misused, the plastic just gave way while blending. Warranty card says 12 months.",
+    "dept_guidance": null,
+    "resolution_text": "Cracked blade housing under normal use is a known manufacturing defect pattern covered by warranty §2.3. Approved a free replacement blade assembly plus the full unit if the customer prefers a swap. Customer opted for the assembly-only replacement, shipped at no charge."
+  },
+  {
+    "id": "C-1004",
+    "department": "billing",
+    "category": "duplicate_charge",
+    "resolution_path": "direct",
+    "complaint_text": "I was charged twice for the same SmartHub Pro order (#7788) on my card ending in 4432 — once on the 3rd and again on the 5th, both for ₹7,499. I only placed one order. Please refund the duplicate.",
+    "dept_guidance": null,
+    "resolution_text": "Verified in the payment gateway that a retry-on-timeout bug caused a second authorization to settle. Refunded the duplicate ₹7,499 charge to the original card; confirmed the customer should see it within 5–7 working days per billing §4 (refund timelines)."
+  },
+  {
+    "id": "C-1005",
+    "department": "billing",
+    "category": "subscription_billing",
+    "resolution_path": "escalated",
+    "complaint_text": "I cancelled my CarePlan+ subscription by email over two months ago and have a confirmation reply from support, but I've been billed ₹749 for three months since then. I want all three months refunded and the subscription actually cancelled this time.",
+    "dept_guidance": "Confirmed the original cancellation request was logged in the ticket system on the date claimed, but a sync failure between the ticketing tool and the billing platform meant the cancellation flag never reached the subscription engine. This is a known integration gap (see internal incident INC-2291), not customer error — approve full refund of all three erroneous charges per billing §2 (subscription cancellations), and manually cancel the subscription in the billing platform directly rather than relying on the sync.",
+    "resolution_text": "Refunded all three months (₹2,247) to the original payment method and manually confirmed subscription cancellation in the billing system. Added a ₹750 apology credit to the account in case of future orders."
+  },
+  {
+    "id": "C-1006",
+    "department": "billing",
+    "category": "pricing_error",
+    "resolution_path": "direct",
+    "complaint_text": "I ordered the AV-450 Blender bundle (order #8010) during the promo that showed ₹15,999 but I was charged ₹19,999 at checkout. The promo banner was still up on the site when I placed the order.",
+    "dept_guidance": null,
+    "resolution_text": "Checkout logs confirmed the promotional price was live at the time of order but a bundle-pricing rule failed to apply for bundle SKUs specifically. Manually adjusted the charge to the promotional ₹15,999 price and refunded the ₹4,000 difference to the original payment method per billing §3 (promotional pricing errors)."
+  },
+  {
+    "id": "C-1007",
+    "department": "shipping",
+    "category": "lost_package",
+    "resolution_path": "direct",
+    "complaint_text": "Tracking for order #9021 (ProBlend 300 mixer) says 'delivered' as of yesterday but nothing arrived at my address, and my building has a security desk that logs all packages — nothing was logged. Can you look into this?",
+    "dept_guidance": null,
+    "resolution_text": "Filed a lost-package claim with the carrier per shipping §2 (lost package claims); buildings with passive package logging and a 'delivered but not received' scan are treated as presumptive carrier loss. Reshipped a replacement ProBlend 300 at no cost via standard shipping without waiting on the carrier investigation outcome."
+  },
+  {
+    "id": "C-1008",
+    "department": "shipping",
+    "category": "damaged_in_transit",
+    "resolution_path": "escalated",
+    "complaint_text": "Order #9144 (SmartHub Pro) arrived today with the box crushed on one corner and the unit inside rattling — sounds like something broke internally. I'm moving apartments next week and really need a working hub before then, so I'd appreciate a fast turnaround.",
+    "dept_guidance": "Photos confirm transit damage consistent with the crushed-corner impact pattern, sufficient to approve without requiring the customer to return the damaged unit first (shipping §3, damaged in transit — write-off threshold met for units under ₹12,000). Given the stated moving deadline, approved same-day express replacement shipment per shipping §4 (expedited replacement eligibility) at no charge.",
+    "resolution_text": "Shipped a replacement SmartHub Pro via express courier the same day, no charge. Customer was told to dispose of the damaged unit's packaging themselves — no return required."
+  },
+  {
+    "id": "C-1009",
+    "department": "product_safety",
+    "category": "safety_hazard",
+    "resolution_path": "escalated",
+    "complaint_text": "The battery pack on my X200 Cordless Vacuum (order #4599) got noticeably hot and started smoking a little while it was charging on the dock overnight. I unplugged it immediately and nothing caught fire, but I'm concerned — is this part of a recall? I want a refund, not a replacement of the same battery.",
+    "dept_guidance": "Serial number falls within batch prefix X200-2025Q1, which is currently under internal safety review for a suspected charging-circuit overheating defect. This batch is not yet subject to a public recall, so do not use the word 'recall' with the customer — refer to it as 'under internal review.' Per product_safety §4 (immediate remedies for safety concerns), any reported overheating/smoke incident authorizes an immediate full refund regardless of standard remedy hierarchy, and the case must be logged for the quality escalation queue.",
+    "resolution_text": "Issued a full refund immediately and provided safe battery disposal instructions via the e-waste take-back route (do not place in household trash). Customer was told the batch is under internal safety review, not a confirmed public recall, and that they'll be notified directly if that changes. Case flagged internally for QA batch investigation."
+  },
+  {
+    "id": "C-1010",
+    "department": "returns",
+    "category": "late_return_request",
+    "resolution_path": "direct",
+    "complaint_text": "I'd like to return my unopened AV-450 Blender (order #5555). I know the 30-day window technically passed — it's been 34 days — but I was traveling for work. Is there any flexibility here? I've ordered from you several times before.",
+    "dept_guidance": null,
+    "resolution_text": "Return window exceeded by 4 days; approved as a one-time courtesy exception given the customer's order history and unopened condition, per returns §3 (exceptions & courtesy extensions). Reverse pickup scheduled; full refund to original payment method on receipt of the unopened item."
+  },
+  {
+    "id": "C-1011",
+    "department": "returns",
+    "category": "change_of_mind",
+    "resolution_path": "direct",
+    "complaint_text": "I ordered a SmartHub Pro (order #6210) but changed my mind — it's still sealed, never opened. It's only been 10 days. How do I return it for a refund?",
+    "dept_guidance": null,
+    "resolution_text": "Well within the standard 30-day return window (returns §1). Processed as a standard change-of-mind return; refund issued minus the original outbound shipping fee per returns §4 (refund method). Reverse pickup scheduled with the customer."
+  },
+  {
+    "id": "C-1012",
+    "department": "tech_support",
+    "category": "connectivity_issue",
+    "resolution_path": "direct",
+    "complaint_text": "My SmartHub Pro (order #6023) keeps dropping off WiFi every few hours and the app shows error code E-1043 when it happens. I've power cycled it twice and re-entered my WiFi password, no change.",
+    "dept_guidance": null,
+    "resolution_text": "Error E-1043 is a known WiFi handshake bug fixed in firmware 2.3.1. Walked the customer through triggering a remote firmware update from the app's device settings screen. Confirmed resolved after update — no replacement needed."
+  },
+  {
+    "id": "C-1013",
+    "department": "tech_support",
+    "category": "hardware_malfunction",
+    "resolution_path": "direct",
+    "complaint_text": "The ProBlend 300 mixer (order #6310) is flashing error code ERR-22 and the motor won't start at all, even on an empty jug. It worked fine yesterday.",
+    "dept_guidance": null,
+    "resolution_text": "ERR-22 indicates the lid safety-lock sensor is stuck in an unlocked state, which blocks the motor as a safety measure. Guided the customer through the reset procedure (remove jug, hold power for 5 seconds, reseat lid until it clicks). Resolved — motor started normally afterward."
+  },
+  {
+    "id": "C-1014",
+    "department": "tech_support",
+    "category": "app_pairing",
+    "resolution_path": "escalated",
+    "complaint_text": "This is my third time contacting you about the X200 Cordless Vacuum (order #4650) app pairing. It fails at the same step every single time on my phone, and I'm getting pretty frustrated — I've already tried reinstalling the app twice like your last agent suggested.",
+    "dept_guidance": "This matches an open bug ticket: X200 app pairing fails on Android 14 specifically due to a Bluetooth permissions regression introduced in the last OS update; not a device defect. A fix is scheduled for app version 4.2. In the meantime, the workaround is manual Bluetooth pairing via phone settings rather than in-app auto-discovery. Given this is the customer's third contact for the same unresolved issue, tech_support approves a ₹1,200 account credit for the inconvenience.",
+    "resolution_text": "Provided the manual Bluetooth pairing workaround, which the customer confirmed worked. Applied a ₹1,200 credit for the repeated contacts and let the customer know app version 4.2 will resolve the underlying pairing bug when it ships."
+  },
+  {
+    "id": "C-1015",
+    "department": "qa",
+    "category": "quality_defect",
+    "resolution_path": "direct",
+    "complaint_text": "I found a small plastic shaving in the smoothie I just blended with my new ProBlend 300 mixer (order #6402). I didn't drink it, thankfully, but I'm pretty unsettled — is this a known issue? I want a refund, not another one of the same batch.",
+    "dept_guidance": null,
+    "resolution_text": "Treated as a food-safety-adjacent quality defect regardless of severity. Advised customer to stop using the unit and not to attempt a same-batch replacement. Issued a full refund plus a ₹4,000 goodwill voucher for a different product line. Batch/lot number collected from the customer and flagged internally for QA inspection of the blade-housing molding process."
+  },
+  {
+    "id": "C-1016",
+    "department": "legal",
+    "category": "injury_claim",
+    "resolution_path": "escalated",
+    "complaint_text": "The lid on my AV-450 Blender (order #5701) detached mid-use while blending and hot liquid splashed onto my arm, causing a minor burn. I have photos of the injury and the product. I'm considering my options here and want to know what the company is going to do about this.",
+    "dept_guidance": "Do not offer any refund, replacement, or statement that could be read as an admission of fault or liability — this is now a potential injury claim and must be handled by Legal directly. Support should acknowledge receipt of the report, request the photos and any medical documentation the customer is willing to share, and provide the direct legal@company contact for continued correspondence. No goodwill gestures, credits, or apologies implying fault should be issued from the support queue.",
+    "resolution_text": "Acknowledged the report, requested photo/documentation for the file, and handed the case off to Legal (legal@company) with all correspondence attached. No refund, credit, or liability statement issued from support; customer informed Legal would follow up directly."
+  },
+  {
+    "id": "C-1017",
+    "department": "sales",
+    "category": "promo_not_applied",
+    "resolution_path": "direct",
+    "complaint_text": "I used promo code SPRING20 at checkout for the SmartHub Pro bundle (order #6555) expecting 20% off, but the code didn't apply and I was charged full price. The code was still listed as active on your promotions page when I ordered.",
+    "dept_guidance": null,
+    "resolution_text": "Confirmed SPRING20 was live at time of order but excluded bundle SKUs due to a promo-configuration oversight, which wasn't reflected on the public promotions page. Manually price-matched the order to the intended 20% discount and refunded the ₹2,700 difference to the original payment method."
+  },
+  {
+    "id": "C-1018",
+    "department": "manufacturing",
+    "category": "batch_defect",
+    "resolution_path": "escalated",
+    "complaint_text": "We're a retail partner and received a wholesale shipment of 50 units of the ProBlend 300 mixer (batch #MB-2291, order #WS-3390). On unboxing for shelf display, 12 of the 50 units have visibly cracked outer housings, clearly a manufacturing issue and not shipping damage — the cracks are all in the same spot on the seam.",
+    "dept_guidance": "Manufacturing confirms batch #MB-2291 has an open tooling-defect investigation for exactly this seam-cracking pattern, traced to a mold alignment issue on one production line. Approve replacement of all 12 affected units from a verified-good batch, and apply a 5% credit on the full wholesale order for the disruption. This batch should be quarantined from any further outbound shipments pending the tooling fix.",
+    "resolution_text": "Replaced all 12 cracked-housing units at no charge from a confirmed non-affected batch, and applied a 5% credit to the wholesale order total. Internally flagged batch #MB-2291 as quarantined — no further units from this batch to ship until the tooling issue is resolved."
+  },
+  {
+    "id": "C-1019",
+    "department": "retention",
+    "category": "cancellation_request",
+    "resolution_path": "direct",
+    "complaint_text": "I want to cancel my CarePlan+ subscription. It went up from ₹499 to ₹749 a month and I don't think it's worth that price anymore for what I'm using it for.",
+    "dept_guidance": null,
+    "resolution_text": "Offered a loyalty discount reinstating the ₹499 rate for the next 12 months in exchange for staying on the plan, per standard retention offer tiers for accounts over 6 months old. Customer accepted; subscription retained at the discounted rate, no cancellation processed."
+  },
+  {
+    "id": "C-1020",
+    "department": "spare_parts",
+    "category": "part_request",
+    "resolution_path": "direct",
+    "complaint_text": "I need a replacement blade assembly for my ProBlend 300 mixer (original order #6099, purchased over a year ago so I know it's outside warranty). The blades have just worn down from regular use, nothing broken suddenly. Can I order just the part?",
+    "dept_guidance": null,
+    "resolution_text": "Confirmed unit is outside the 12-month warranty window and wear-and-tear is not a covered defect, so this is a standard paid spare-parts order. Placed a replacement blade assembly order at ₹1,450 plus standard shipping, ETA 5–7 business days."
+  }
+]

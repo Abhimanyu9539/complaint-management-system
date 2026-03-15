@@ -4,7 +4,7 @@ The corpus lives on disk (data/seed/), so nothing here uploads to Supabase
 Storage — `policies.storage_path` stays NULL and `source='seed'` marks these
 rows as fixture data rather than user uploads.
 
-Re-running must update the same 25 rows rather than duplicate them. Both `cases`
+Re-running must update the same 54 rows rather than duplicate them. Both `cases`
 and `policies` have a `source_ref TEXT UNIQUE` column for exactly this: the case
 id (`C-1001`) for cases, the source filename (`warranty-policy.md`) for
 policies. Upserting on `source_ref` makes the whole run idempotent without
@@ -107,7 +107,15 @@ def seed_case(case: dict) -> IngestResult:
 
 
 def seed_policy(path: Path) -> IngestResult:
-    """Register one seed policy file, then ingest its body."""
+    """Register one seed policy file, then ingest its body.
+
+    A company-wide policy omits `department` from its frontmatter entirely,
+    which lands as NULL in `department_id` — the schema's marker for "applies
+    to every department". `or None` on the rest matters for the same reason: the
+    frontmatter parser yields `""` for a key present but empty, and an empty
+    string is a FK violation on `department_id` and a cast error on the
+    `effective_date` DATE column, where NULL is simply "not recorded".
+    """
     meta, body = read_policy_file(path)
 
     # Seeded policies are published outright — they are the shipped baseline,
@@ -117,7 +125,9 @@ def seed_policy(path: Path) -> IngestResult:
         {
             "source_ref": path.name,
             "title": meta.get("title", path.stem),
-            "department_id": meta.get("department"),
+            "department_id": meta.get("department") or None,
+            "version": meta.get("version") or None,
+            "effective_date": meta.get("effective_date") or None,
             "lifecycle": "published",
             "source": "seed",
         }

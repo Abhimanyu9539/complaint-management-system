@@ -9,8 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .claude
-# Data
-backend/data/
+
 
 # Working notes
 BACKEND_REQUIREMENTS.md

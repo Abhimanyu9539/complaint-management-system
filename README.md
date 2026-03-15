@@ -89,7 +89,7 @@ supabase link --project-ref <ref> && supabase db push   # apply the 16 migration
 
 uv run cms-create-collections # create the two Qdrant collections
 uv run cms-seed --one         # ingest one case end to end (the walking-skeleton check)
-uv run cms-seed               # then the full corpus: 20 cases + 5 policies
+uv run cms-seed               # then the full corpus: 20 cases + 34 policies
 
 uv run uvicorn cms.main:app --reload
 ```
@@ -129,7 +129,11 @@ Built and working end to end:
   BM25 IDF modifier, plus the payload indexes retrieval filters on
 - The ingestion pipeline: extract → clean/chunk/enrich → chunk rows in Postgres → one
   batched embedding call → Qdrant upsert, wrapped in a single LangSmith trace
-- A 25-document synthetic seed corpus and its runner
+- A 54-document synthetic seed corpus and its runner, modelling an Indian D2C e-commerce
+  brand: 20 resolved cases, 18 department-scoped policies across the 12 departments, and
+  16 company-wide policies (SLA, escalation, approval authority, PII/DPDP, AI-drafting
+  governance, statutory grievance redressal) that the department policies cross-reference
+  rather than restate
 - The chat UI: streaming messages, expandable citation chips, a citations panel, session
   sidebar, themes — currently against the mock transport
 
