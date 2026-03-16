@@ -1,12 +1,14 @@
-"""Extract company policy documents.
+﻿"""Extract company policies through LangChain text loaders.
 
-Two jobs: find the policy files on disk, and split the frontmatter off a policy
-markdown file so the metadata and the body can go their separate ways. Reading a
-policy *row* is a table access and lives in `db.repositories.policies`, not here.
+TextLoader owns filesystem decoding and returns a LangChain Document. The
+existing lightweight frontmatter parser remains the normalization boundary:
+metadata goes to the policy row and the body alone goes to chunking/embedding.
 """
 
 import logging
 from pathlib import Path
+
+from langchain_community.document_loaders import TextLoader
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +21,19 @@ def find_seed_policies(directory: Path) -> list[Path]:
 
 
 def read_policy_file(path: Path) -> tuple[dict[str, str], str]:
-    """Read one policy file, returning its frontmatter and its body."""
-    return parse_frontmatter(path.read_text(encoding="utf-8"))
+    """Load one policy as a LangChain Document, returning metadata and body."""
+    documents = TextLoader(str(path), encoding="utf-8").load()
+    if len(documents) != 1:
+        raise ValueError(f"Expected one document from policy file {path}")
+
+    return parse_frontmatter(documents[0].page_content)
 
 
 def parse_frontmatter(markdown: str) -> tuple[dict[str, str], str]:
-    """Split a leading `---` block of `key: value` lines from the body.
+    """Split a leading frontmatter delimiter block into key/value lines.
 
-    Hand-rolled rather than pulling in pyyaml: the policy frontmatter is three
-    flat string fields, and pyyaml is only a transitive dependency here — not
-    something pyproject.toml declares, so importing it would be borrowing.
+    The seed frontmatter is three flat string fields, so pulling in a YAML
+    parser would add capability that this input does not need.
     """
     if not markdown.startswith("---"):
         return {}, markdown
