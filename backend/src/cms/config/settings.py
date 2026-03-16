@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_publishable_key: str
     supabase_secret_key: str
+    # Private bucket policy files upload into; created by migration 0018.
+    supabase_policy_bucket: str = "policy-files"
 
     @property
     def supabase_jwks_url(self) -> str:

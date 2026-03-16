@@ -43,7 +43,7 @@ def main() -> int:
         logger.exception("Seed run failed")
         return 1
 
-    return 1 if summary.failed else 0
+    return 1 if summary.failed or summary.upload_failed else 0
 
 
 if __name__ == "__main__":
