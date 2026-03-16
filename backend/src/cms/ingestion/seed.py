@@ -183,20 +183,29 @@ def seed_policy(path: Path) -> tuple[IngestResult, str | None]:
     return ingest_policy(document_id, body), storage_path
 
 
-def run_seed(one: bool = False) -> SeedSummary:
-    """Ingest the corpus. `one` ingests a single case — the walking-skeleton gate.
+def run_seed(one: bool = False, one_policy: bool = False) -> SeedSummary:
+    """Ingest the corpus. `one` and `one_policy` are independent walking-skeleton
+    gates, one per corpus: each narrows its own corpus to its first document and
+    skips the *other* corpus entirely unless that corpus's flag is also given.
+    Passing neither ingests everything — the default `cms-seed` run. Passing
+    both narrows each corpus to one document rather than skipping either.
 
     Raises if the corpus itself cannot be read; individual documents are
-    isolated, so one malformed case does not cost us the other 24 ingests.
+    isolated, so one malformed document does not cost us the rest of the run.
     """
     seed_dir = resolve_seed_dir()
 
     cases = load_seed_cases(seed_dir / "cases.json")
-    policies = [] if one else find_seed_policies(seed_dir / "policies")
+    policies = find_seed_policies(seed_dir / "policies")
 
-    if one:
-        cases = cases[:1]
-        logger.info("--one: ingesting a single case document")
+    if one or one_policy:
+        cases = cases[:1] if one else []
+        policies = policies[:1] if one_policy else []
+        logger.info(
+            "Walking-skeleton mode: %d case(s), %d policy file(s)",
+            len(cases),
+            len(policies),
+        )
 
     summary = SeedSummary()
 
