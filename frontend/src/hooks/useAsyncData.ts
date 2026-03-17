@@ -23,9 +23,6 @@ export interface AsyncData<T> {
   errorDetail: string | null;
   /** ISO time of the last *successful* load. Drives "Updated 14s ago". */
   updatedAt: string | null;
-  /** Whether the retained payload was simulated rather than measured. */
-  mocked: boolean;
-  note: string | null;
   /** Consecutive failures. Also drives the backoff multiplier. */
   failureCount: number;
   refresh(): void;
@@ -65,8 +62,6 @@ export function useAsyncData<T>(
   const [error, setError] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
-  const [mocked, setMocked] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
   const [failureCount, setFailureCount] = useState(0);
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -118,8 +113,6 @@ export function useAsyncData<T>(
         if (cancelled || controller.signal.aborted) return;
 
         setData(result.data);
-        setMocked(result.mocked);
-        setNote(result.note ?? null);
         setUpdatedAt(result.fetchedAt);
         setError(null);
         setErrorDetail(null);
@@ -193,8 +186,6 @@ export function useAsyncData<T>(
     error,
     errorDetail,
     updatedAt,
-    mocked,
-    note,
     failureCount,
     refresh,
   };

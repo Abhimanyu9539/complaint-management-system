@@ -17,26 +17,17 @@ import type { Ticket, TicketDetail, TicketQuery } from '@/lib/tickets/types';
 // ---------------------------------------------------------------------------
 
 /**
- * Every admin payload is wrapped so the UI can always answer two questions
- * without the call site special-casing anything: "when was this true?" and "is
- * this a measurement or a simulation?".
+ * Every admin payload is wrapped so the UI can always answer "when was this
+ * true?" without the call site special-casing anything.
  *
- * The chat transport is all-or-nothing — mock or real, decided once by env.
- * Admin is genuinely mixed: document counts, ingestion history and storage come
- * from live Supabase and Qdrant reads, while the ingestion *trigger* and the
- * agent activity log have no backend at all, because the pipeline is CLI-only
- * and the RAG graph has not been built. Returning empty arrays for those would
- * render as "a working system with nothing happening" — a lie the operator
- * cannot detect. `mocked` is how the panel tells the truth instead.
+ * The admin transport is real-only — there is no mock fallback, so every
+ * value here is a measurement, never a simulation. (Chat and the workbench
+ * keep their own mocks; see `lib/chat/transport.ts` and `lib/tickets/simulated.ts`.)
  */
 export interface AdminResult<T> {
   data: T;
-  /** True when this value was synthesised rather than measured. */
-  mocked: boolean;
   /** ISO time the client received it. Drives "Updated 14s ago". */
   fetchedAt: string;
-  /** Shown beside the Simulated badge. Required in practice whenever `mocked`. */
-  note?: string;
 }
 
 /** Server-side paging. `total` is the unfiltered-by-page count, for the pager. */
@@ -388,14 +379,13 @@ export interface AgentRunQuery {
 
 export interface TriggerIngestionRequest {
   docType: DocType;
-  /** 'seed' re-runs the whole corpus (as `cms-seed` does); 'document' targets one row. */
+  /** 'seed' re-runs the whole corpus (as `cms-seed` does); 'document' re-seeds one file. */
   mode: 'seed' | 'document';
-  documentId?: string;
   /**
-   * Bypass the content-hash short-circuit. Costs real embedding calls on every
-   * chunk, so it defaults to false and the UI states the cost next to it.
+   * The seed corpus's natural key (a policy filename or a case id) — not a
+   * Postgres id, since a file that has never been seeded has no row yet.
    */
-  force?: boolean;
+  sourceRef?: string;
 }
 
 export interface TriggerIngestionResponse {
@@ -405,12 +395,19 @@ export interface TriggerIngestionResponse {
   message: string;
 }
 
-/** A picker entry for "ingest one document". Deliberately minimal. */
+/**
+ * A picker entry for "ingest one document". Deliberately minimal.
+ *
+ * Lists the on-disk seed corpus, not the `cases`/`policies` tables — a
+ * partially seeded corpus otherwise looks complete (see `backend/docs/admin-api.md` §3).
+ */
 export interface DocumentOption {
-  id: string;
+  /** The seed corpus's natural key (a policy filename or a case id), not a Postgres id. */
+  sourceRef: string;
   title: string;
   docType: DocType;
-  status: DocStatus;
+  /** Null when the document has no Postgres row yet — it has never been seeded. */
+  status: DocStatus | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -418,12 +415,11 @@ export interface DocumentOption {
 // ---------------------------------------------------------------------------
 
 /**
- * The admin data surface.
- *
- * Methods are marked LIVE or CONTRACT-ONLY. `createRealAdminTransport` spreads
- * the mock implementation and overrides only the LIVE ones, so a CONTRACT-ONLY
- * method keeps returning `mocked: true` until a route exists for it — at which
- * point wiring it up is deleting one line. See `realTransport.ts`.
+ * The admin data surface. Real-only — see `AdminResult`. Every method here has
+ * a route behind it; `AgentRun`/`ApiUsageSummary` above are kept as the
+ * contract for the agent-runs log and API-usage counter once those exist (see
+ * `backend/docs/admin-api.md` §6/§7), but neither has a transport method until
+ * a backend does.
  */
 export interface AdminTransport {
   /**
@@ -454,41 +450,35 @@ export interface AdminTransport {
     signal: AbortSignal,
   ): Promise<AdminResult<IngestionSummary>>;
 
-  /** LIVE. Populates the "ingest a single document" picker. */
+  /** LIVE. Populates the "ingest a single document" picker from the on-disk seed corpus. */
   listDocumentOptions(
     docType: DocType,
     signal: AbortSignal,
   ): Promise<AdminResult<DocumentOption[]>>;
 
   /**
-   * CONTRACT-ONLY. No POST route exists: the pipeline is driven by `cms-seed`,
-   * and running it inside a request would hold a worker for the whole embedding
-   * run. The mock returns an accepted job so the progress UI is exercised; the
-   * intended contract is in `backend/docs/admin-api.md`.
+   * LIVE. Queues a job row and returns immediately (202 semantics) — the
+   * embedding run happens in a background task, not inline. See
+   * `backend/docs/admin-api.md` §4.
    */
   triggerIngestion(
     req: TriggerIngestionRequest,
     signal: AbortSignal,
   ): Promise<AdminResult<TriggerIngestionResponse>>;
 
-  /** CONTRACT-ONLY. A retry is a re-ingest, so it blocks on the same thing. */
+  /** LIVE. Re-ingests the document a finished/failed job referenced, as a new job row. */
   retryJob(jobId: string, signal: AbortSignal): Promise<AdminResult<TriggerIngestionResponse>>;
 
   /**
-   * CONTRACT-ONLY. There is no agent. The graph in lld.md §6 has not been
-   * built, so there is nothing to log — these shapes are the contract that
-   * graph must emit.
+   * LIVE. Re-runs a document stuck at `processing` (the dashboard queue
+   * panel), by its own Postgres id — distinct from `triggerIngestion`'s
+   * `mode: 'document'`, which now names a seed-corpus file by `sourceRef`.
    */
-  listAgentRuns(query: AgentRunQuery, signal: AbortSignal): Promise<AdminResult<Page<AgentRun>>>;
-
-  /** CONTRACT-ONLY. Returns null for an unknown id, and the UI closes the drawer. */
-  getAgentRun(runId: string, signal: AbortSignal): Promise<AdminResult<AgentRun | null>>;
-
-  /**
-   * CONTRACT-ONLY. Nothing counts requests today. Wiring this for real means
-   * ASGI middleware writing to a request log, not a query over existing tables.
-   */
-  getApiUsage(rangeDays: number, signal: AbortSignal): Promise<AdminResult<ApiUsageSummary>>;
+  rerunStuckDocument(
+    docType: DocType,
+    documentId: string,
+    signal: AbortSignal,
+  ): Promise<AdminResult<TriggerIngestionResponse>>;
 
   // -------------------------------------------------------------------------
   // Tickets — all LIVE. The customer form writes real rows, so an ops view of

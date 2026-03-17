@@ -4,16 +4,18 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel } from '@/components/ui/Panel';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { usePanelData } from '@/hooks/usePanelData';
 import { formatBytes, formatCount } from '@/lib/format';
-import { adminTransport } from '@/lib/admin/transport';
 import type { AsyncData } from '@/hooks/useAsyncData';
 import type { StorageUsage } from '@/lib/admin/types';
 
 type CollectionStatus = StorageUsage['collections'][number]['status'];
 
-/** Qdrant's own collection health, mapped onto the panel's tones. */
-function collectionTone(status: CollectionStatus) {
+/**
+ * Qdrant's own collection health, mapped onto the panel's tones. Exported so
+ * `DashboardPage`'s "Vector points" stat card can share the same read of
+ * `reachable`/`status` rather than inventing a second interpretation of it.
+ */
+export function collectionTone(status: CollectionStatus) {
   if (status === 'green') return 'ok' as const;
   if (status === 'yellow') return 'warn' as const;
   if (status === 'red' || status === 'unknown') return 'danger' as const;
@@ -41,13 +43,13 @@ function collectionRemedy(status: CollectionStatus): string | null {
  *    drift between them is a real consistency signal.
  * 3. How many policy files are in Supabase Storage. A count, not a size: we
  *    cannot measure bytes without a Storage list call we do not make.
+ *
+ * Takes `storage` as a prop rather than fetching it — `DashboardPage` owns the
+ * single `usePanelData` call so its "Vector points" stat card can read the
+ * same poll instead of doubling the Qdrant traffic this panel already singles
+ * out for its own cadence.
  */
-export function StoragePanel() {
-  // 2× the base cadence — this is the only panel that talks to Qdrant.
-  const storage = usePanelData('storage', (signal) => adminTransport.getStorageUsage(signal), {
-    intervalFactor: 2,
-  });
-
+export function StoragePanel({ storage }: { storage: AsyncData<StorageUsage> }) {
   return (
     <Panel title="Storage" eyebrow="Vector store">
       <StorageBody storage={storage} />

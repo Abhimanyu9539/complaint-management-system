@@ -1,11 +1,6 @@
 /**
- * Live admin transport.
- *
- * Only some of the admin surface has a backend. The five methods overridden at
- * the bottom of this file read real Supabase and Qdrant state; everything else
- * falls through to the simulated transport and keeps `mocked: true`, which the
- * pages render as a "Simulated" badge. Adding a route later means deleting one
- * spread member — see `backend/docs/admin-api.md` for the status table.
+ * Live admin transport. Every `AdminTransport` method hits a real route —
+ * see `backend/docs/admin-api.md` for the endpoint each one calls.
  *
  * Error handling deliberately diverges from `lib/chat/realTransport.ts`. Chat
  * swallows failures and returns an empty list, because an empty session list is
@@ -20,6 +15,7 @@ import type {
   AdminResult,
   AdminTransport,
   DepartmentOption,
+  DocStatus,
   DocType,
   DocumentOption,
   EscalationSummary,
@@ -29,15 +25,11 @@ import type {
   Page,
   StorageUsage,
   SystemHealth,
+  TriggerIngestionRequest,
+  TriggerIngestionResponse,
 } from './types';
 import type { Ticket, TicketDetail, TicketEvent, TicketQuery } from '@/lib/tickets/types';
-import { createMockAdminTransport } from './mockTransport';
 import { AdminRequestError } from './errors';
-
-// Re-exported so existing importers keep working. The class itself lives in
-// `errors.ts` because `mockTransport` throws it too, and declaring it here
-// would close an import cycle — see that module's docstring.
-export { AdminRequestError };
 
 function isAbort(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError';
@@ -97,7 +89,7 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
 }
 
 function live<T>(data: T): AdminResult<T> {
-  return { data, mocked: false, fetchedAt: new Date().toISOString() };
+  return { data, fetchedAt: new Date().toISOString() };
 }
 
 /**
@@ -142,7 +134,10 @@ async function postJson<T>(url: string, body: unknown, signal: AbortSignal): Pro
       throw new AdminRequestError(detail ?? 'That action was refused.', response.status, detail);
     }
     if (response.status === 404) {
-      throw new AdminRequestError('That ticket no longer exists.', 404, detail);
+      // Callers write specific 404s (ticket, job, …); `detail` is the
+      // backend's own `HTTPException` string, so this generic fallback is
+      // rarely what actually renders.
+      throw new AdminRequestError(detail ?? 'That item no longer exists.', 404, detail);
     }
     throw new AdminRequestError(
       response.status >= 500
@@ -181,6 +176,25 @@ interface WireJobPage {
   total: number;
   limit: number;
   offset: number;
+}
+
+interface WireTriggerResponse {
+  job_id: string;
+  accepted: boolean;
+  message: string;
+}
+
+interface WireDocumentCounts {
+  total: number;
+  by_status: Record<DocStatus, number>;
+}
+
+interface WireStuckDocument {
+  id: string;
+  doc_type: DocType;
+  title: string;
+  status: DocStatus;
+  since: string;
 }
 
 interface WireHealthDeps {
@@ -246,6 +260,26 @@ function toTicketEvent(wire: WireTicketEvent): TicketEvent {
   };
 }
 
+function toDocumentCounts(wire: WireDocumentCounts): AdminOverview['documents']['cases'] {
+  return {
+    total: wire.total,
+    // Defaults to `{}` rather than trusting the key is always present — a
+    // status the backend never returned for this window must read as 0, not
+    // crash every panel that indexes into it.
+    byStatus: wire.by_status ?? {},
+  };
+}
+
+function toStuckDocument(wire: WireStuckDocument): AdminOverview['queue']['stuck'][number] {
+  return {
+    id: wire.id,
+    docType: wire.doc_type,
+    title: wire.title,
+    status: wire.status,
+    since: wire.since,
+  };
+}
+
 function toJob(wire: WireJob): IngestionJob {
   return {
     id: wire.id,
@@ -295,19 +329,27 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
 
   async function getOverview(signal: AbortSignal): Promise<AdminResult<AdminOverview>> {
     const wire = await getJson<{
-      documents: AdminOverview['documents'];
+      documents: { cases: WireDocumentCounts; policies: WireDocumentCounts };
       jobs: AdminOverview['jobs'];
-      queue: { active: WireJob[]; stuck: AdminOverview['queue']['stuck']; queued_count: number; running_count: number };
+      queue: {
+        active: WireJob[];
+        stuck: WireStuckDocument[];
+        queued_count: number;
+        running_count: number;
+      };
       last_ingest_at: string | null;
       generated_at: string;
     }>(`${api}/overview`, signal);
 
     return live<AdminOverview>({
-      documents: wire.documents,
+      documents: {
+        cases: toDocumentCounts(wire.documents.cases),
+        policies: toDocumentCounts(wire.documents.policies),
+      },
       jobs: wire.jobs,
       queue: {
         active: wire.queue.active.map(toJob),
-        stuck: wire.queue.stuck,
+        stuck: wire.queue.stuck.map(toStuckDocument),
         queuedCount: wire.queue.queued_count,
         runningCount: wire.queue.running_count,
       },
@@ -408,17 +450,75 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     signal: AbortSignal,
   ): Promise<AdminResult<DocumentOption[]>> {
     const wire = await getJson<{
-      items: { id: string; title: string; doc_type: DocType; status: DocumentOption['status'] }[];
+      items: {
+        source_ref: string;
+        title: string;
+        doc_type: DocType;
+        status: DocumentOption['status'];
+      }[];
     }>(`${api}/documents?doc_type=${docType}&limit=200`, signal);
 
     return live(
       wire.items.map((item) => ({
-        id: item.id,
+        sourceRef: item.source_ref,
         title: item.title,
         docType: item.doc_type,
         status: item.status,
       })),
     );
+  }
+
+  async function triggerIngestion(
+    req: TriggerIngestionRequest,
+    signal: AbortSignal,
+  ): Promise<AdminResult<TriggerIngestionResponse>> {
+    const wire = await postJson<WireTriggerResponse>(
+      `${api}/ingestion/jobs`,
+      {
+        doc_type: req.docType,
+        mode: req.mode,
+        source_ref: req.mode === 'document' ? (req.sourceRef ?? null) : null,
+      },
+      signal,
+    );
+    return live<TriggerIngestionResponse>({
+      jobId: wire.job_id,
+      accepted: wire.accepted,
+      message: wire.message,
+    });
+  }
+
+  async function retryJob(
+    jobId: string,
+    signal: AbortSignal,
+  ): Promise<AdminResult<TriggerIngestionResponse>> {
+    const wire = await postJson<WireTriggerResponse>(
+      `${api}/ingestion/jobs/${encodeURIComponent(jobId)}/retry`,
+      {},
+      signal,
+    );
+    return live<TriggerIngestionResponse>({
+      jobId: wire.job_id,
+      accepted: wire.accepted,
+      message: wire.message,
+    });
+  }
+
+  async function rerunStuckDocument(
+    docType: DocType,
+    documentId: string,
+    signal: AbortSignal,
+  ): Promise<AdminResult<TriggerIngestionResponse>> {
+    const wire = await postJson<WireTriggerResponse>(
+      `${api}/documents/${encodeURIComponent(docType)}/${encodeURIComponent(documentId)}/rerun`,
+      {},
+      signal,
+    );
+    return live<TriggerIngestionResponse>({
+      jobId: wire.job_id,
+      accepted: wire.accepted,
+      message: wire.message,
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -534,21 +634,16 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     return live(wire.items);
   }
 
-  // Five of these seventeen methods have no server behind them. Rather than
-  // stub them with empty results — which render as "a healthy system with
-  // nothing happening", a lie the operator cannot detect — the simulated
-  // transport is spread first and only the served methods are overridden.
-  // Everything left over keeps `mocked: true` and the pages badge it.
-  const simulated = createMockAdminTransport();
-
   return {
-    ...simulated,
     getSystemHealth,
     getOverview,
     getStorageUsage,
     listIngestionJobs,
     getIngestionSummary,
     listDocumentOptions,
+    triggerIngestion,
+    retryJob,
+    rerunStuckDocument,
     listTickets,
     getTicket,
     escalateTicket,

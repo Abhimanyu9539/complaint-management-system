@@ -2,7 +2,6 @@ import { Activity, ChartNoAxesColumn, Import, Inbox, LayoutDashboard } from 'luc
 import { NavLink } from 'react-router';
 import { SidebarFooter } from '@/components/layout/SidebarFooter';
 import { ICON_SIZE } from '@/components/ui/IconButton';
-import { useMockAdmin } from '@/lib/admin/transport';
 
 interface AdminSidebarProps {
   /** Closes the mobile drawer after a navigation. */
@@ -59,11 +58,7 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps) {
 
       <div className="min-h-0 flex-1" />
 
-      <SidebarFooter
-        mocked={useMockAdmin}
-        mockedReason="No VITE_API_BASE_URL configured — every panel is showing simulated data."
-        onNavigate={onNavigate}
-      />
+      <SidebarFooter mocked={false} onNavigate={onNavigate} />
     </div>
   );
 }

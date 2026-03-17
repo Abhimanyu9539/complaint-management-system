@@ -4,7 +4,6 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { LineChart } from '@/components/charts/LineChart';
 import { StackedBar } from '@/components/charts/StackedBar';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { Panel } from '@/components/ui/Panel';
 import { usePanelData } from '@/hooks/usePanelData';
 import { formatCount, formatDate, formatPercent } from '@/lib/format';
@@ -53,11 +52,6 @@ export function EscalationPanel({ days }: EscalationPanelProps) {
         eyebrow="North star"
         span={2}
         description="The share of resolved complaints that needed a specialist department. Lower is better."
-        actions={
-          escalation.mocked && escalation.note ? (
-            <MockBadge reason={escalation.note} />
-          ) : undefined
-        }
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">

@@ -1,20 +1,16 @@
-import { createMockAdminTransport } from './mockTransport';
 import { createRealAdminTransport } from './realTransport';
 import type { AdminTransport } from './types';
 
 /**
- * Mirrors `lib/chat/transport.ts` so both surfaces switch on the same two env
- * vars and there is one rule to remember: no `VITE_API_BASE_URL` means mock.
+ * The admin panel is real-only — no mock fallback. Unlike chat, which has a
+ * genuine offline demo mode, every admin surface reads live operational state
+ * (job counts, ticket queues, Qdrant point counts): a simulated dashboard is
+ * actively misleading for the one audience this panel serves.
  *
- * Note that "not mocked" is weaker for admin than for chat. Even against a real
- * backend, six of the eleven transport methods have no route yet and keep
- * returning simulated data — `useMockAdmin` only says whether *any* live call
- * is attempted. Per-payload truth lives in `AdminResult.mocked`.
+ * Defaults to uvicorn's own default port so a missing env var still points
+ * somewhere plausible and fails as a visible connection error rather than
+ * silently substituting fake data.
  */
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000';
 
-export const useMockAdmin = import.meta.env.VITE_USE_MOCK === 'true' || !apiBaseUrl;
-
-export const adminTransport: AdminTransport = useMockAdmin
-  ? createMockAdminTransport()
-  : createRealAdminTransport(apiBaseUrl!);
+export const adminTransport: AdminTransport = createRealAdminTransport(apiBaseUrl);

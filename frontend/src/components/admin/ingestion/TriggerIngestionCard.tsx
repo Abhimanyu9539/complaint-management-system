@@ -1,12 +1,11 @@
 import { CircleCheck, Play, TriangleAlert } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/Button';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { Panel } from '@/components/ui/Panel';
 import { Select } from '@/components/ui/Select';
 import { usePanelData } from '@/hooks/usePanelData';
 import { adminTransport } from '@/lib/admin/transport';
-import type { DocType, TriggerIngestionRequest } from '@/lib/admin/types';
+import type { DocStatus, DocType, TriggerIngestionRequest } from '@/lib/admin/types';
 
 interface TriggerIngestionCardProps {
   /** Called after a run is accepted, so the jobs table picks it up immediately. */
@@ -20,32 +19,39 @@ interface Outcome {
   message: string;
 }
 
-/**
- * Manual ingestion trigger.
- *
- * The form is complete and the request it would send is exact, but there is no
- * POST route behind it yet: the pipeline is driven by the `cms-seed` CLI, and
- * calling `ingest_case` inline would hold a request worker for the length of an
- * embedding run. The banner says so plainly rather than letting the button
- * imply a capability the system does not have.
- *
- * In mock mode the simulated job does progress through queued → running → done,
- * so the states this form leads to are genuinely exercised.
- */
+/** A short suffix on the picker label, so an operator can see which of the
+ * seed corpus's files are actually in the index without opening the jobs table. */
+const STATUS_LABELS: Record<DocStatus, string> = {
+  pending: 'registered, not indexed',
+  processing: 'in progress',
+  indexed: 'indexed',
+  failed: 'last run failed',
+  deleting: 'deleting',
+};
+
+function statusLabel(status: DocStatus | null): string {
+  return status === null ? 'not ingested' : STATUS_LABELS[status];
+}
+
+/** Manual ingestion trigger. Queues a real job — see `backend/docs/admin-api.md` §4. */
 export function TriggerIngestionCard({ onTriggered }: TriggerIngestionCardProps) {
   const [docType, setDocType] = useState<DocType>('case');
   const [mode, setMode] = useState<Mode>('seed');
-  const [documentId, setDocumentId] = useState('');
-  const [force, setForce] = useState(false);
+  const [sourceRef, setSourceRef] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // Bumped on every accepted trigger so the (otherwise `once: true`) picker
+  // re-fetches — without this, the status suffix goes stale the moment an
+  // operator triggers a file: the job finishes but the dropdown still says
+  // "not ingested".
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   // Only fetched when the picker is actually shown — a seed re-run does not
   // need a document list.
   const options = usePanelData(
     `document-options-${docType}`,
     (signal) => adminTransport.listDocumentOptions(docType, signal),
-    { once: true, enabled: mode === 'document', deps: [docType] },
+    { once: true, enabled: mode === 'document', deps: [docType, refreshNonce] },
   );
 
   const submit = useCallback(async () => {
@@ -58,13 +64,18 @@ export function TriggerIngestionCard({ onTriggered }: TriggerIngestionCardProps)
         {
           docType,
           mode,
-          documentId: mode === 'document' ? documentId : undefined,
-          force,
+          sourceRef: mode === 'document' ? sourceRef : undefined,
         },
         controller.signal,
       );
-      setOutcome({ ok: response.data.accepted, message: response.data.message });
-      if (response.data.accepted) onTriggered();
+      setOutcome({
+        ok: response.data.accepted,
+        message: response.data.message,
+      });
+      if (response.data.accepted) {
+        onTriggered();
+        setRefreshNonce((n) => n + 1);
+      }
     } catch (err) {
       // Rendered inline rather than as a toast: there are two mutations in this
       // whole panel, and a toast system for two call sites is a provider, a
@@ -76,22 +87,17 @@ export function TriggerIngestionCard({ onTriggered }: TriggerIngestionCardProps)
     } finally {
       setSubmitting(false);
     }
-  }, [docType, mode, documentId, force, onTriggered]);
+  }, [docType, mode, sourceRef, onTriggered]);
 
-  const canSubmit = mode === 'seed' || documentId !== '';
+  const canSubmit = mode === 'seed' || sourceRef !== '';
 
   return (
     <Panel
       title="Trigger ingestion"
       eyebrow="Manual run"
-      description="Re-index the seed corpus or a single document."
+      description="Re-index the whole seed corpus, or one file from the server's seed directory."
     >
       <div className="flex flex-col gap-3">
-        <MockBadge
-          variant="banner"
-          reason="Ingestion runs as a CLI job today (uv run cms-seed). This form simulates the request and shows the exact contract it will POST — see backend/docs/admin-api.md."
-        />
-
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Select
             label="Document type"
@@ -108,42 +114,26 @@ export function TriggerIngestionCard({ onTriggered }: TriggerIngestionCardProps)
             onChange={(value) => setMode(value as Mode)}
             options={[
               { value: 'seed', label: 'Re-seed whole corpus' },
-              { value: 'document', label: 'Single document' },
+              { value: 'document', label: 'One document from the corpus' },
             ]}
           />
           {mode === 'document' && (
             <Select
-              label="Document"
-              value={documentId}
+              label="Seed document"
+              value={sourceRef}
               disabled={options.status === 'loading'}
-              onChange={setDocumentId}
+              onChange={setSourceRef}
               options={[
-                { value: '', label: options.status === 'loading' ? 'Loading…' : 'Select a document' },
+                { value: '', label: options.status === 'loading' ? 'Loading…' : 'Select a seed document' },
                 ...(options.data ?? []).map((option) => ({
-                  value: option.id,
-                  label: option.title,
+                  value: option.sourceRef,
+                  label: `${option.title} · ${statusLabel(option.status)}`,
                 })),
               ]}
               className="sm:col-span-2"
             />
           )}
         </div>
-
-        <label className="flex cursor-pointer items-start gap-2">
-          <input
-            type="checkbox"
-            checked={force}
-            onChange={(event) => setForce(event.target.checked)}
-            className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--accent)]"
-          />
-          <span className="min-w-0">
-            <span className="text-[12.5px] font-medium text-text">Force re-index</span>
-            <span className="block text-[11.5px] text-text-muted">
-              Bypasses the content-hash check, so unchanged documents are embedded again. Costs a
-              real embedding call per chunk.
-            </span>
-          </span>
-        </label>
 
         <div className="flex items-center gap-3">
           <Button
@@ -156,7 +146,7 @@ export function TriggerIngestionCard({ onTriggered }: TriggerIngestionCardProps)
             Start ingestion
           </Button>
           {!canSubmit && (
-            <span className="text-[11.5px] text-text-faint">Pick a document first.</span>
+            <span className="text-[11.5px] text-text-faint">Pick a seed document first.</span>
           )}
         </div>
 
@@ -174,7 +164,7 @@ export function TriggerIngestionCard({ onTriggered }: TriggerIngestionCardProps)
             ) : (
               <TriangleAlert size={14} strokeWidth={2} className="mt-0.5 shrink-0" />
             )}
-            <p className="min-w-0">{outcome.message}</p>
+            <p className="min-w-0 flex-1">{outcome.message}</p>
           </div>
         )}
       </div>

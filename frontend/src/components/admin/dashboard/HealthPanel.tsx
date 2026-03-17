@@ -1,7 +1,6 @@
 import { Activity } from 'lucide-react';
 import { AsyncBoundary } from '@/components/ui/AsyncBoundary';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { Panel } from '@/components/ui/Panel';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -18,7 +17,7 @@ import { adminTransport } from '@/lib/admin/transport';
  * cheap read would put real load on both just to keep a green dot green.
  */
 export function HealthPanel() {
-  const { data, status, error, errorDetail, failureCount, refresh, mocked, note } = usePanelData(
+  const { data, status, error, errorDetail, failureCount, refresh } = usePanelData(
     'health',
     (signal) => adminTransport.getSystemHealth(signal),
     { intervalFactor: 3 },
@@ -29,15 +28,12 @@ export function HealthPanel() {
       title="System health"
       eyebrow="Dependencies"
       actions={
-        <>
-          {mocked && <MockBadge reason={note ?? 'Simulated health check.'} />}
-          {data && (
-            <StatusPill
-              label={data.overall === 'ok' ? 'All systems go' : 'Degraded'}
-              tone={healthTone(data.overall)}
-            />
-          )}
-        </>
+        data && (
+          <StatusPill
+            label={data.overall === 'ok' ? 'All systems go' : 'Degraded'}
+            tone={healthTone(data.overall)}
+          />
+        )
       }
     >
       <AsyncBoundary

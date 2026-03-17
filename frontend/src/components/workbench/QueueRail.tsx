@@ -2,11 +2,9 @@ import { Inbox } from 'lucide-react';
 import { SidebarFooter } from '@/components/layout/SidebarFooter';
 import { AsyncBoundary } from '@/components/ui/AsyncBoundary';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useMockAdmin } from '@/lib/admin/transport';
 import { ticketStatusLabel } from '@/lib/status';
 import { QUEUE_GROUP_ORDER, groupTicketsByStatus } from '@/lib/tickets/queue';
 import type { AsyncData } from '@/hooks/useAsyncData';
@@ -87,12 +85,6 @@ export function QueueRail({
         <SearchInput value={search} onChange={onSearchChange} placeholder="Search subject or email…" />
       </div>
 
-      {queue.mocked && queue.note && (
-        <div className="px-3 pb-2.5">
-          <MockBadge reason={queue.note} variant="banner" />
-        </div>
-      )}
-
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         <AsyncBoundary
           status={queue.status}
@@ -164,11 +156,7 @@ export function QueueRail({
         </AsyncBoundary>
       </div>
 
-      <SidebarFooter
-        mocked={useMockAdmin}
-        mockedReason="No VITE_API_BASE_URL configured — the queue is showing simulated data."
-        onNavigate={onCloseMobile}
-      />
+      <SidebarFooter mocked={false} onNavigate={onCloseMobile} />
     </div>
   );
 }

@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import type { AsyncStatus } from '@/hooks/useAsyncData';
 import { TONE_CLASSES, type Tone } from '@/lib/status';
 import { Sparkline } from '@/components/charts/Sparkline';
-import { MockBadge } from './MockBadge';
 import { Skeleton } from './Skeleton';
 
 interface StatCardProps {
@@ -26,9 +25,6 @@ interface StatCardProps {
   trendClass?: string;
   tone?: Tone;
   status: AsyncStatus;
-  /** Renders the Simulated chip in the corner. */
-  mocked?: boolean;
-  mockReason?: string;
 }
 
 export function StatCard({
@@ -41,8 +37,6 @@ export function StatCard({
   trendClass,
   tone = 'neutral',
   status,
-  mocked = false,
-  mockReason,
 }: StatCardProps) {
   const toneClasses = TONE_CLASSES[tone];
 
@@ -68,11 +62,7 @@ export function StatCard({
         <p className="min-w-0 truncate text-[11px] font-semibold tracking-[0.06em] text-text-faint uppercase">
           {label}
         </p>
-        {mocked ? (
-          <MockBadge reason={mockReason ?? 'Simulated value.'} />
-        ) : (
-          icon && <span className={`shrink-0 ${toneClasses.text}`}>{icon}</span>
-        )}
+        {icon && <span className={`shrink-0 ${toneClasses.text}`}>{icon}</span>}
       </div>
 
       <div className="mt-2 flex items-end justify-between gap-3">

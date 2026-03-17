@@ -3,7 +3,6 @@ import { AdminPageHeader } from '@/components/admin/layout/AdminShell';
 import { LiveIndicator } from '@/components/admin/layout/LiveIndicator';
 import { TicketDrawer } from '@/components/admin/tickets/TicketDrawer';
 import { TicketsTable } from '@/components/admin/tickets/TicketsTable';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { Pagination } from '@/components/ui/Pagination';
 import { Panel } from '@/components/ui/Panel';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -126,8 +125,6 @@ export function TicketsPage() {
             value={formatCount(openCount)}
             hint={`${formatCount(summary?.totalTickets)} total`}
             status={escalation.status}
-            mocked={escalation.mocked}
-            mockReason={escalation.note ?? undefined}
           />
           <StatCard
             label="Awaiting a department"
@@ -135,8 +132,6 @@ export function TicketsPage() {
             hint="escalated, no reply yet"
             tone={(summary?.openEscalated ?? 0) > 0 ? 'warn' : 'neutral'}
             status={escalation.status}
-            mocked={escalation.mocked}
-            mockReason={escalation.note ?? undefined}
           />
           <StatCard
             label="Escalation rate"
@@ -149,17 +144,10 @@ export function TicketsPage() {
                   )} resolved`
             }
             status={escalation.status}
-            mocked={escalation.mocked}
-            mockReason={escalation.note ?? undefined}
           />
         </div>
 
-        <Panel
-          title="Complaint queue"
-          eyebrow="Tickets"
-          flush
-          actions={tickets.mocked && tickets.note ? <MockBadge reason={tickets.note} /> : undefined}
-        >
+        <Panel title="Complaint queue" eyebrow="Tickets" flush>
           <div className="flex flex-wrap items-end gap-2 px-4 pb-3">
             <Select label="Status" value={status} onChange={setStatus} options={STATUS_OPTIONS} />
             <Select

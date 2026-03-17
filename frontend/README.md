@@ -46,28 +46,28 @@ search and selected ticket (`?ticket=`) follow the same convention.
 
 ## Environment
 
-`.env.local`, or leave everything unset to run fully mocked:
+`.env.local`:
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | *(unset)* | Backend origin. Unset ⇒ mock mode. |
-| `VITE_USE_MOCK` | `false` | `true` forces mock mode even with a base URL set. |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | Backend origin. The admin panel always calls it — there is no mock fallback. |
+| `VITE_CHAT_USE_MOCK` | `true` | Chat's own switch, independent of the admin panel. `false` requires a running chat backend, which does not exist yet (`/api/v1/chat`, `/sessions` are 404 today). |
 | `VITE_ADMIN_POLL_MS` | `20000` | Admin base poll cadence. Panels multiply it — health 3×, Qdrant reads 2×. Values under 2000 are ignored. |
 
-### Mock mode is not all-or-nothing on `/admin`
+### The admin panel is real-only
 
-The chat transport is mock **or** real. The admin transport is genuinely mixed:
-twelve endpoints read live Supabase and Qdrant state, while the ingestion
-*trigger* and the agent activity log have no backend at all — the pipeline is
-CLI-driven and the RAG graph has not been built.
+`lib/admin/transport.ts` has no mock path — every `/admin` panel reads live
+Supabase and Qdrant state, and a request failure surfaces as a connection
+error rather than substituting fake data. Two surfaces have no backend yet
+(the agent activity log and the API-usage counter — the RAG graph and a
+request-log middleware, respectively) and render an honest empty state
+instead of a "Simulated" badge over fabricated rows.
 
-So even against a real backend, parts of the admin panel are simulated. Every
-payload carries a `mocked` flag and those parts render a **Simulated** badge
-explaining why. That is deliberate: showing zeros instead would make a missing
-subsystem indistinguishable from an idle one.
-
-See `backend/docs/admin-api.md` for which endpoints are live and what the rest
+See `backend/docs/admin-api.md` for which endpoints exist and what those two
 must eventually return.
+
+Chat is the one area that still has a mock, because it has no backend at all —
+see `VITE_CHAT_USE_MOCK` above.
 
 ### `/ticket` is never mocked
 

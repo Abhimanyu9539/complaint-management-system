@@ -2,7 +2,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
-  readonly VITE_USE_MOCK?: string;
+  /** Chat's own mock switch — see `lib/chat/transport.ts`. Admin has no mock. */
+  readonly VITE_CHAT_USE_MOCK?: string;
   /**
    * Base poll cadence for the admin panel, in ms. Defaults to 20000. Individual
    * panels multiply it — health checks 3×, Qdrant reads 2× — so lowering this

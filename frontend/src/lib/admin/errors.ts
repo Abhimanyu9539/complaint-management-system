@@ -1,13 +1,7 @@
 /**
- * The admin transport's error type.
- *
- * Its own module because both transports throw it and `realTransport` already
- * imports `mockTransport` (it spreads the mock and overrides the served
- * methods). Declaring the class in either one would close that into an import
- * cycle, and a cycle through a `class` declaration is the kind that bites at
- * runtime: the binding is hoisted but uninitialised, so whichever module the
- * bundler evaluates second throws a temporal-dead-zone error on first use —
- * inside a `catch`, where it would be reported as the original failure.
+ * The admin transport's error type. Its own module so both `realTransport.ts`
+ * and callers like `hooks/useTicketActions.ts` can import it without pulling
+ * in the whole transport.
  */
 
 /**

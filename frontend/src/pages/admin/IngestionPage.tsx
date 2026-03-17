@@ -4,7 +4,6 @@ import { LiveIndicator } from '@/components/admin/layout/LiveIndicator';
 import { JobDrawer } from '@/components/admin/ingestion/JobDrawer';
 import { JobsTable } from '@/components/admin/ingestion/JobsTable';
 import { TriggerIngestionCard } from '@/components/admin/ingestion/TriggerIngestionCard';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { Pagination } from '@/components/ui/Pagination';
 import { Panel } from '@/components/ui/Panel';
 import { SearchInput } from '@/components/ui/SearchInput';
@@ -77,14 +76,7 @@ export function IngestionPage() {
       <div className="flex flex-col gap-4 p-4">
         <TriggerIngestionCard onTriggered={jobs.refresh} />
 
-        <Panel
-          title="Ingestion history"
-          eyebrow="Ops log"
-          flush
-          actions={
-            jobs.mocked && jobs.note ? <MockBadge reason={jobs.note} /> : undefined
-          }
-        >
+        <Panel title="Ingestion history" eyebrow="Ops log" flush>
           <div className="flex flex-wrap items-end gap-2 px-4 pb-3">
             <Select
               label="Status"

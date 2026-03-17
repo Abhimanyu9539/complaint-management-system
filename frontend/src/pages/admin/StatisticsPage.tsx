@@ -7,7 +7,6 @@ import { ChartFrame } from '@/components/charts/ChartFrame';
 import { LineChart } from '@/components/charts/LineChart';
 import { StackedBar } from '@/components/charts/StackedBar';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { Panel } from '@/components/ui/Panel';
 import { Select } from '@/components/ui/Select';
 import { StatCard } from '@/components/ui/StatCard';
@@ -22,7 +21,7 @@ import {
   docStatusTone,
   quantitySeries,
 } from '@/lib/status';
-import { adminTransport, useMockAdmin } from '@/lib/admin/transport';
+import { adminTransport } from '@/lib/admin/transport';
 import type { DocumentCounts } from '@/lib/admin/types';
 
 const RANGE_OPTIONS = [
@@ -61,11 +60,6 @@ export function StatisticsPage() {
   const storage = usePanelData('stats-storage', (signal) => adminTransport.getStorageUsage(signal), {
     intervalFactor: 2,
   });
-  const apiUsage = usePanelData(
-    'stats-api',
-    (signal) => adminTransport.getApiUsage(days, signal),
-    { intervalFactor: 2, deps: [days] },
-  );
 
   const perDay = summary.data?.perDay ?? [];
   const dayLabels = perDay.map((bucket) => formatDate(bucket.date));
@@ -100,24 +94,13 @@ export function StatisticsPage() {
 
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2 xl:grid-cols-3">
         {/* Summary row */}
-        <div className="grid grid-cols-2 gap-4 lg:col-span-2 lg:grid-cols-4 xl:col-span-3">
-          <StatCard
-            label="API requests"
-            value={formatCount(apiUsage.data?.totalRequests)}
-            hint={`last ${days} days`}
-            icon={<Activity size={15} strokeWidth={1.75} />}
-            status={apiUsage.status}
-            mocked={apiUsage.mocked}
-            mockReason={apiUsage.note ?? undefined}
-          />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-2 xl:col-span-3">
           <StatCard
             label="Ingest jobs"
             value={formatCount(jobsInRange)}
             hint={`${formatPercent(summary.data?.successRate, 1)} succeeded`}
             icon={<Boxes size={15} strokeWidth={1.75} />}
             status={summary.status}
-            mocked={summary.mocked}
-            mockReason={summary.note ?? undefined}
           />
           <StatCard
             label="Median ingest time"
@@ -125,26 +108,17 @@ export function StatisticsPage() {
             hint={`p95 ${formatDuration(summary.data?.durations.p95Ms)}`}
             icon={<Clock size={15} strokeWidth={1.75} />}
             status={summary.status}
-            mocked={summary.mocked}
-            mockReason={summary.note ?? undefined}
           />
           <StatCard
             label="Indexed documents"
             value={formatCount(totalIndexed)}
             icon={<FileCheck size={15} strokeWidth={1.75} />}
             status={overview.status}
-            mocked={overview.mocked}
-            mockReason={overview.note ?? undefined}
           />
         </div>
 
         {/* Ingestion frequency */}
-        <Panel
-          title="Ingestion frequency"
-          eyebrow="Throughput"
-          span={2}
-          actions={summary.mocked && summary.note ? <MockBadge reason={summary.note} /> : undefined}
-        >
+        <Panel title="Ingestion frequency" eyebrow="Throughput" span={2}>
           <ChartFrame
             title="Ingestion jobs per day"
             summary={`Completed and failed ingestion jobs over the last ${days} days.`}
@@ -320,56 +294,12 @@ export function StatisticsPage() {
         </Panel>
 
         {/* API usage */}
-        <Panel
-          title="API usage"
-          eyebrow="Traffic"
-          span={2}
-          actions={apiUsage.note ? <MockBadge reason={apiUsage.note} /> : undefined}
-        >
-          <ChartFrame
-            title="API requests per day"
-            summary={`Requests and errors per day over the last ${days} days.`}
-            height={200}
-            status={apiUsage.status}
-            error={apiUsage.error}
-            isEmpty={(apiUsage.data?.points.length ?? 0) === 0}
-            onRetry={apiUsage.refresh}
-            legend={[
-              { label: 'Requests', swatchClass: 'bg-accent' },
-              { label: 'Errors', swatchClass: 'bg-danger' },
-            ]}
-            dataTable={{
-              columns: ['Date', 'Requests', 'Errors'],
-              rows: (apiUsage.data?.points ?? []).map((point) => [
-                point.date,
-                point.requests,
-                point.errors,
-              ]),
-            }}
-          >
-            {(width) => (
-              <LineChart
-                width={width}
-                height={200}
-                labels={(apiUsage.data?.points ?? []).map((point) => formatDate(point.date))}
-                series={[
-                  {
-                    key: 'requests',
-                    label: 'Requests',
-                    strokeClass: 'stroke-accent',
-                    areaClass: 'fill-accent/10',
-                    values: (apiUsage.data?.points ?? []).map((point) => point.requests),
-                  },
-                  {
-                    key: 'errors',
-                    label: 'Errors',
-                    strokeClass: 'stroke-danger',
-                    values: (apiUsage.data?.points ?? []).map((point) => point.errors),
-                  },
-                ]}
-              />
-            )}
-          </ChartFrame>
+        <Panel title="API usage" eyebrow="Traffic" span={2}>
+          <EmptyState
+            icon={<Activity size={18} strokeWidth={1.5} />}
+            title="No request counter exists yet"
+            description="Wiring this means ASGI middleware writing a request log, not a query over an existing table — see backend/docs/admin-api.md §7."
+          />
         </Panel>
 
         <EscalationPanel days={days} />
@@ -399,20 +329,12 @@ function OutcomeMetricsPanel() {
         icon={<Lock size={18} strokeWidth={1.5} />}
         title="Draft acceptance, time-to-response and cost per ticket"
         description={
-          useMockAdmin ? (
-            <>
-              These three need the drafting pipeline. The <code>drafts</code> and{' '}
-              <code>draft_feedback</code> tables exist but nothing writes to them yet — no draft is
-              generated, so none is accepted or edited (cms.md §6). Escalation rate, the fourth
-              metric from §4.4, is live above.
-            </>
-          ) : (
-            <>
-              No data yet — <code>drafts</code> and <code>draft_feedback</code> are empty, and
-              nothing prices a request. These land with the drafting pipeline; escalation rate, the
-              fourth §4.4 metric, is live above.
-            </>
-          )
+          <>
+            These three need the drafting pipeline. The <code>drafts</code> and{' '}
+            <code>draft_feedback</code> tables exist but nothing writes to them yet — no draft is
+            generated, so none is accepted or edited (cms.md §6). Escalation rate, the fourth
+            metric from §4.4, is live above.
+          </>
         }
       />
     </Panel>

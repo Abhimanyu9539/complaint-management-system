@@ -1,4 +1,4 @@
-import { CircleAlert, FileCheck, Loader, TrendingUp } from 'lucide-react';
+import { Boxes, CircleAlert, FileCheck, Loader, TrendingUp } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { AdminPageHeader } from '@/components/admin/layout/AdminShell';
@@ -6,7 +6,7 @@ import { LiveIndicator } from '@/components/admin/layout/LiveIndicator';
 import { DocumentCountsPanel } from '@/components/admin/dashboard/DocumentCountsPanel';
 import { HealthPanel } from '@/components/admin/dashboard/HealthPanel';
 import { QueuePanel } from '@/components/admin/dashboard/QueuePanel';
-import { StoragePanel } from '@/components/admin/dashboard/StoragePanel';
+import { collectionTone, StoragePanel } from '@/components/admin/dashboard/StoragePanel';
 import { JobDrawer } from '@/components/admin/ingestion/JobDrawer';
 import { JobsTable } from '@/components/admin/ingestion/JobsTable';
 import { Panel } from '@/components/ui/Panel';
@@ -14,11 +14,17 @@ import { StatCard } from '@/components/ui/StatCard';
 import { useAdminLayout } from '@/hooks/useAdminLayout';
 import { usePanelData } from '@/hooks/usePanelData';
 import { formatCount, formatPercent } from '@/lib/format';
+import type { Tone } from '@/lib/status';
 import { adminTransport } from '@/lib/admin/transport';
 import type { IngestionJob } from '@/lib/admin/types';
 
 const RECENT_JOBS_LIMIT = 5;
 const TREND_DAYS = 14;
+
+// Worst-of ordering for combining several collections' individual tones into
+// one card. `ok`/`neutral`/`accent`/`info` never appear from `collectionTone`,
+// so they are equally "nothing to report" here.
+const TONE_SEVERITY: Record<Tone, number> = { neutral: 0, accent: 0, ok: 0, info: 0, warn: 1, danger: 2 };
 
 export function DashboardPage() {
   const { openMobileNav } = useAdminLayout();
@@ -37,17 +43,24 @@ export function DashboardPage() {
     adminTransport.listIngestionJobs({ limit: RECENT_JOBS_LIMIT, offset: 0 }, signal),
   );
 
+  // 2× the base cadence — this is the only poll on this page that talks to
+  // Qdrant. Owned here rather than inside `StoragePanel` so the "Vector
+  // points" stat card reads the same fetch instead of doubling Qdrant traffic.
+  const storage = usePanelData('storage', (signal) => adminTransport.getStorageUsage(signal), {
+    intervalFactor: 2,
+  });
+
   /**
-   * Re-runs a stuck document. Contract-only today, so the transport returns a
-   * simulated job — but the optimistic refresh below is real, and will keep
-   * working unchanged once a POST route exists.
+   * Re-runs a stuck document. This is a fresh trigger, not a job retry: a
+   * document stuck in `processing` has no finished/failed job row to retry —
+   * the crash that stranded it may have happened before one was ever written.
    */
   const handleRerun = useCallback(
-    async (_docType: 'case' | 'policy', documentId: string) => {
+    async (docType: 'case' | 'policy', documentId: string) => {
       setRerunningId(documentId);
       const controller = new AbortController();
       try {
-        await adminTransport.retryJob(documentId, controller.signal);
+        await adminTransport.rerunStuckDocument(docType, documentId, controller.signal);
         overview.refresh();
         recentJobs.refresh();
       } catch (err) {
@@ -60,10 +73,20 @@ export function DashboardPage() {
   );
 
   const documents = overview.data?.documents;
-  const indexed =
-    (documents?.cases.byStatus.indexed ?? 0) + (documents?.policies.byStatus.indexed ?? 0);
-  const totalDocuments = (documents?.cases.total ?? 0) + (documents?.policies.total ?? 0);
+  const policiesIndexed = documents?.policies.byStatus.indexed ?? 0;
   const activeJobs = (overview.data?.jobs.queued ?? 0) + (overview.data?.jobs.running ?? 0);
+
+  const casesIndexed = documents?.cases.byStatus.indexed ?? 0;
+
+  const collections = storage.data?.collections ?? [];
+  const vectorPoints = collections.reduce((sum, collection) => sum + collection.pointCount, 0);
+  const vectorPointsTone = collections.reduce<Tone>(
+    (worst, collection) =>
+      TONE_SEVERITY[collectionTone(collection.status)] > TONE_SEVERITY[worst]
+        ? collectionTone(collection.status)
+        : worst,
+    'neutral',
+  );
 
   // Failures in the last 24h, derived from the per-day buckets rather than
   // fetched separately — one fewer round trip for a number nobody drills into.
@@ -87,15 +110,30 @@ export function DashboardPage() {
       <div className="flex flex-col gap-4 p-4">
         <HealthPanel />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <StatCard
-            label="Indexed documents"
-            value={formatCount(indexed)}
-            hint={`of ${formatCount(totalDocuments)} total`}
+            label="Indexed policies"
+            value={formatCount(policiesIndexed)}
             icon={<FileCheck size={15} strokeWidth={1.75} />}
             status={overview.status}
-            mocked={overview.mocked}
-            mockReason={overview.note ?? undefined}
+          />
+          <StatCard
+            label="Cases indexed"
+            value={formatCount(casesIndexed)}
+            icon={<FileCheck size={15} strokeWidth={1.75} />}
+            status={overview.status}
+          />
+          <StatCard
+            label="Vector points"
+            value={formatCount(vectorPoints)}
+            hint={
+              collections.length > 0
+                ? collections.map((collection) => collection.name).join(' + ')
+                : 'no collections'
+            }
+            tone={vectorPointsTone}
+            icon={<Boxes size={15} strokeWidth={1.75} />}
+            status={storage.status}
           />
           <StatCard
             label="Active jobs"
@@ -104,8 +142,6 @@ export function DashboardPage() {
             tone={activeJobs > 0 ? 'accent' : 'neutral'}
             icon={<Loader size={15} strokeWidth={1.75} />}
             status={overview.status}
-            mocked={overview.mocked}
-            mockReason={overview.note ?? undefined}
           />
           <StatCard
             label="Failed today"
@@ -114,8 +150,6 @@ export function DashboardPage() {
             tone={recentFailures > 0 ? 'danger' : 'ok'}
             icon={<CircleAlert size={15} strokeWidth={1.75} />}
             status={summary.status}
-            mocked={summary.mocked}
-            mockReason={summary.note ?? undefined}
           />
           <StatCard
             label={`Success rate (${TREND_DAYS}d)`}
@@ -133,8 +167,6 @@ export function DashboardPage() {
             trend={jobTrend}
             icon={<TrendingUp size={15} strokeWidth={1.75} />}
             status={summary.status}
-            mocked={summary.mocked}
-            mockReason={summary.note ?? undefined}
           />
         </div>
 
@@ -142,7 +174,7 @@ export function DashboardPage() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <DocumentCountsPanel overview={overview} />
-          <StoragePanel />
+          <StoragePanel storage={storage} />
         </div>
 
         <Panel
