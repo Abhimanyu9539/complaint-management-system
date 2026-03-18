@@ -106,9 +106,11 @@ npm install
 npm run dev
 ```
 
-It runs **fully mocked by default** (`VITE_USE_MOCK=true`) — realistic streamed responses
-and localStorage sessions, no backend required. Point `VITE_API_BASE_URL` at the API and
-set `VITE_USE_MOCK=false` to switch to the real SSE transport.
+The admin panel (`/admin`) is real-only and always calls `VITE_API_BASE_URL`
+(defaults to `http://localhost:8000`) — start the backend first. Chat has its
+own switch and **runs mocked by default** (`VITE_CHAT_USE_MOCK=true`):
+realistic streamed responses and localStorage sessions, no backend required,
+since no chat backend exists yet. Set `VITE_CHAT_USE_MOCK=false` once one does.
 
 ## Configuration
 

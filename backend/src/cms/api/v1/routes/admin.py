@@ -28,7 +28,7 @@ before it exists.
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from cms.schemas.admin import (
     DepartmentOptionPage,
@@ -38,8 +38,10 @@ from cms.schemas.admin import (
     JobPage,
     OverviewResponse,
     StorageResponse,
+    TriggerIngestionRequest,
+    TriggerIngestionResponse,
 )
-from cms.services import admin_stats
+from cms.services import admin_ingest, admin_stats
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,15 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # in front of a user who could act on a stack trace: the traceback is logged
 # server-side and the response body stays generic.
 UNAVAILABLE = "That admin view is unavailable right now. Check the server log."
+
+# `resolve_seed_dir` raises this when the seed corpus isn't mounted — a
+# deployment problem, not "that document doesn't exist" (which would be a 422)
+# nor a generic Supabase-flavoured 503. Named separately so an operator isn't
+# sent to debug the database for what is actually a missing SEED_DATA_DIR.
+SEED_CORPUS_UNAVAILABLE = (
+    "The seed corpus directory is not readable. Set SEED_DATA_DIR — see the server log "
+    "for the paths tried."
+)
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -94,6 +105,61 @@ def list_ingestion_jobs(
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
+@router.post("/ingestion/jobs", response_model=TriggerIngestionResponse, status_code=202)
+def trigger_ingestion_job(
+    payload: TriggerIngestionRequest, background_tasks: BackgroundTasks
+) -> TriggerIngestionResponse:
+    """Queue a manual ingest. Returns before the embedding run finishes — see admin-api.md §4."""
+    try:
+        return admin_ingest.trigger_ingestion(payload, background_tasks)
+    except admin_ingest.UnknownDocument as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except FileNotFoundError:
+        logger.exception("Seed corpus directory not readable while queuing an ingestion job")
+        raise HTTPException(status_code=503, detail=SEED_CORPUS_UNAVAILABLE) from None
+    except Exception:
+        logger.exception("Failed to queue an ingestion job")
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.post(
+    "/ingestion/jobs/{job_id}/retry", response_model=TriggerIngestionResponse, status_code=202
+)
+def retry_ingestion_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestionResponse:
+    """Re-ingest the document a finished/failed job referenced — see admin-api.md §5."""
+    try:
+        return admin_ingest.retry_job(job_id, background_tasks)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="No such ingestion job.") from None
+    except Exception:
+        logger.exception("Failed to retry ingestion job %s", job_id)
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.post(
+    "/documents/{doc_type}/{document_id}/rerun",
+    response_model=TriggerIngestionResponse,
+    status_code=202,
+)
+def rerun_stuck_document(
+    doc_type: Literal["case", "policy"], document_id: str, background_tasks: BackgroundTasks
+) -> TriggerIngestionResponse:
+    """Re-run a document stuck at `processing` — the dashboard queue panel's action.
+
+    Distinct from `POST /ingestion/jobs` (`mode="document"` seeds a corpus file
+    by `source_ref`) and from the retry route (which resolves an existing job
+    row): this acts directly on the document's own Postgres id, which is what
+    the queue panel's `queue.stuck[].id` already is — see admin-api.md §4a.
+    """
+    try:
+        return admin_ingest.rerun_stuck_document(doc_type, document_id, background_tasks)
+    except admin_ingest.UnknownDocument as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except Exception:
+        logger.exception("Failed to queue a re-run for %s %s", doc_type, document_id)
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
 @router.get("/ingestion/summary", response_model=IngestionSummaryResponse)
 def get_ingestion_summary(days: int = Query(30, ge=1, le=90)) -> IngestionSummaryResponse:
     """Per-day job counts, duration percentiles and success rate over a window.
@@ -113,9 +179,12 @@ def list_documents(
     doc_type: Literal["case", "policy"] = Query(...),
     limit: int = Query(200, ge=1, le=500),
 ) -> DocumentOptionPage:
-    """Ids and titles for the single-document ingest picker."""
+    """Seed-corpus entries and their index status, for the single-document ingest picker."""
     try:
         return DocumentOptionPage(items=admin_stats.build_document_options(doc_type, limit))
+    except FileNotFoundError:
+        logger.exception("Seed corpus directory not readable while listing %s documents", doc_type)
+        raise HTTPException(status_code=503, detail=SEED_CORPUS_UNAVAILABLE) from None
     except Exception:
         logger.exception("Failed to list %s documents", doc_type)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None

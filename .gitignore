@@ -10,6 +10,10 @@ wheels/
 .venv
 .claude
 
+# Local environment files (secrets / machine-specific config)
+.env
+.env.local
+
 
 # Working notes
 BACKEND_REQUIREMENTS.md

@@ -30,6 +30,30 @@ def fetch_policy(policy_id: str) -> dict:
     return response.data[0]
 
 
+POLICY_REINGEST_COLUMNS = "source_ref,storage_path"
+
+
+def fetch_policy_for_reingest(policy_id: str) -> dict:
+    """The fields needed to recover a policy's raw body for re-ingest.
+
+    Policies have no body column (see the module docstring) — the text lives
+    only in `policy_chunks` and in the source file, so `ingestion/reingest.py`
+    reads `storage_path` (the primary route, via Supabase Storage) and
+    `source_ref` (the on-disk seed-file fallback) instead. Raises LookupError
+    if the id does not exist.
+    """
+    response = (
+        get_supabase()
+        .table(TABLE)
+        .select(POLICY_REINGEST_COLUMNS)
+        .eq("id", policy_id)
+        .execute()
+    )
+    if not response.data:
+        raise LookupError(f"No {TABLE} row with id {policy_id}")
+    return response.data[0]
+
+
 def upsert_policy(row: dict) -> str:
     """Insert or update a policy keyed by `source_ref`, returning its id.
 
@@ -174,3 +198,30 @@ def list_policy_options(limit: int = 200) -> list[dict]:
         logger.exception("Failed to list %s options", TABLE)
         raise
     return response.data or []
+
+
+def statuses_for_source_refs(source_refs: list[str]) -> dict[str, str]:
+    """Map seed `source_ref`s (filenames) to their row status.
+
+    A missing key means "never seeded" — the on-disk seed corpus is the full
+    set the admin ingest picker shows, and Postgres holds only what has
+    actually been registered. Logs and re-raises rather than degrading to an
+    empty map: a status lookup failure would otherwise render every file as
+    "not ingested", which is the exact false picture this function exists to
+    prevent, and the trigger button next to a degraded list would fail anyway
+    since it also needs Supabase.
+    """
+    if not source_refs:
+        return {}
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("source_ref,status")
+            .in_("source_ref", source_refs)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to resolve %s statuses by source_ref", TABLE)
+        raise
+    return {row["source_ref"]: row["status"] for row in response.data or []}

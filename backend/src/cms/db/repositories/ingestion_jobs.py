@@ -45,6 +45,60 @@ def start_job(doc_type: str, document_id: str) -> str:
     return response.data[0]["id"]
 
 
+def queue_job(doc_type: str, document_id: str) -> str:
+    """Open a job row in `queued` state and return its id.
+
+    Exists for the HTTP trigger path (`services/admin_ingest.py`): the request
+    handler must return a job id synchronously, before a `BackgroundTasks`
+    callback does the actual embedding work, so it needs a row to exist before
+    `start_job`'s moment would normally come. The CLI path never calls this —
+    `run_seed` still goes straight to `start_job`, which has no such gap.
+    """
+    response = (
+        get_supabase()
+        .table(TABLE)
+        .insert({"doc_type": doc_type, "document_id": document_id, "status": "queued"})
+        .execute()
+    )
+    return response.data[0]["id"]
+
+
+def claim_job(job_id: str) -> None:
+    """Move a queued job row to running, right before the pipeline starts work on it."""
+    get_supabase().table(TABLE).update(
+        {"status": "running", "started_at": utc_now_iso()}
+    ).eq("id", job_id).execute()
+
+
+def set_job_document(job_id: str, document_id: str) -> None:
+    """Point a queued job row at the document its run just resolved.
+
+    `document_id` is `UUID NOT NULL` (migration 0012), but the admin's
+    seed-file trigger only knows a `source_ref` at `queue_job` time — the
+    Postgres id does not exist until the background task's upsert runs. The
+    row is queued with a placeholder id and patched here, before any embedding
+    work starts, so a run that then fails still leaves a row pointing at a real
+    document for `retry_job` to act on.
+    """
+    get_supabase().table(TABLE).update({"document_id": document_id}).eq(
+        "id", job_id
+    ).execute()
+
+
+def fetch_job(job_id: str) -> dict:
+    """Read one job row. Raises LookupError if the id does not exist."""
+    response = (
+        get_supabase()
+        .table(TABLE)
+        .select("id,doc_type,document_id")
+        .eq("id", job_id)
+        .execute()
+    )
+    if not response.data:
+        raise LookupError(f"No {TABLE} row with id {job_id}")
+    return response.data[0]
+
+
 def finish_job(job_id: str, chunk_count: int, point_count: int) -> None:
     get_supabase().table(TABLE).update(
         {
