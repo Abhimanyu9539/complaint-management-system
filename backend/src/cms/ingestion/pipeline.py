@@ -42,7 +42,7 @@ from cms.db.repositories.cases import (
     mark_case_indexed,
     mark_case_processing,
 )
-from cms.db.repositories.ingestion_jobs import fail_job, finish_job, start_job
+from cms.db.repositories.ingestion_jobs import claim_job, fail_job, finish_job, start_job
 from cms.db.repositories.policies import (
     fetch_policy,
     mark_policy_failed,
@@ -96,24 +96,38 @@ def _record_failure(
 
 
 @traceable(name="ingest_case", project_name=INGEST_PROJECT)
-def ingest_case(case_id: str, raw_text: str) -> IngestResult:
-    """Ingest one case end to end. Returns what happened; raises on failure."""
+def ingest_case(
+    case_id: str, raw_text: str, *, force: bool = False, job_id: str | None = None
+) -> IngestResult:
+    """Ingest one case end to end. Returns what happened; raises on failure.
+
+    `force` bypasses the content-hash short-circuit — the admin trigger's
+    checkbox. `job_id`, when given, is an already-`queued` row from
+    `ingestion_jobs.queue_job` that this call claims instead of inserting a
+    fresh one: the HTTP trigger path needs a job id to hand back before this
+    function is even called. `cms-seed` never passes one and keeps the
+    original insert-on-start behaviour unchanged.
+    """
     collection = get_settings().qdrant_cases_collection
 
     case = fetch_case(case_id)
     content_hash = compute_content_hash(raw_text)
 
-    if case["status"] == "indexed" and case["content_hash"] == content_hash:
+    if not force and case["status"] == "indexed" and case["content_hash"] == content_hash:
         logger.info(
             "Case %s ('%s') unchanged — skipping (no embedding cost)",
             case_id,
             case["title"],
         )
+        if job_id:
+            finish_job(job_id, 0, 0)
         return IngestResult(case_id, "skipped", 0, 0)
 
-    job_id: str | None = None
     try:
-        job_id = start_job("case", case_id)
+        if job_id:
+            claim_job(job_id)
+        else:
+            job_id = start_job("case", case_id)
         mark_case_processing(case_id)
 
         chunk_texts = chunk_case(raw_text)
@@ -145,24 +159,34 @@ def ingest_case(case_id: str, raw_text: str) -> IngestResult:
 
 
 @traceable(name="ingest_policy", project_name=INGEST_PROJECT)
-def ingest_policy(policy_id: str, raw_text: str) -> IngestResult:
-    """Ingest one policy end to end. Returns what happened; raises on failure."""
+def ingest_policy(
+    policy_id: str, raw_text: str, *, force: bool = False, job_id: str | None = None
+) -> IngestResult:
+    """Ingest one policy end to end. Returns what happened; raises on failure.
+
+    See `ingest_case` for what `force` and `job_id` are for — the two entry
+    points share the same contract.
+    """
     collection = get_settings().qdrant_policies_collection
 
     policy = fetch_policy(policy_id)
     content_hash = compute_content_hash(raw_text)
 
-    if policy["status"] == "indexed" and policy["content_hash"] == content_hash:
+    if not force and policy["status"] == "indexed" and policy["content_hash"] == content_hash:
         logger.info(
             "Policy %s ('%s') unchanged — skipping (no embedding cost)",
             policy_id,
             policy["title"],
         )
+        if job_id:
+            finish_job(job_id, 0, 0)
         return IngestResult(policy_id, "skipped", 0, 0)
 
-    job_id: str | None = None
     try:
-        job_id = start_job("policy", policy_id)
+        if job_id:
+            claim_job(job_id)
+        else:
+            job_id = start_job("policy", policy_id)
         mark_policy_processing(policy_id)
 
         chunk_texts = chunk_policy(raw_text)

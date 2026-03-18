@@ -24,6 +24,29 @@ def fetch_case(case_id: str) -> dict:
     return response.data[0]
 
 
+CASE_REINGEST_COLUMNS = "complaint_text,dept_guidance,resolution_text"
+
+
+def fetch_case_for_reingest(case_id: str) -> dict:
+    """The fields `build_case_text` needs to rebuild a case's raw embedded text.
+
+    Separate from `fetch_case`/`CASE_COLUMNS` — cases are self-contained in
+    Postgres, so re-ingesting one over HTTP (`ingestion/reingest.py`) reads
+    this instead of re-deriving text a document loader has to hand for free.
+    Raises LookupError if the id does not exist.
+    """
+    response = (
+        get_supabase()
+        .table(TABLE)
+        .select(CASE_REINGEST_COLUMNS)
+        .eq("id", case_id)
+        .execute()
+    )
+    if not response.data:
+        raise LookupError(f"No {TABLE} row with id {case_id}")
+    return response.data[0]
+
+
 def upsert_case(row: dict) -> str:
     """Insert or update a case keyed by `source_ref`, returning its id.
 
@@ -186,6 +209,30 @@ def list_case_options(limit: int = 200) -> list[dict]:
         logger.exception("Failed to list %s options", TABLE)
         raise
     return response.data or []
+
+
+def statuses_for_source_refs(source_refs: list[str]) -> dict[str, str]:
+    """Map seed `source_ref`s (case ids) to their row status.
+
+    A missing key means "never seeded" — the on-disk seed corpus is the full
+    set the admin ingest picker shows, and Postgres holds only what has
+    actually been registered. Logs and re-raises rather than degrading to an
+    empty map: see `policies.statuses_for_source_refs`, this is its mirror.
+    """
+    if not source_refs:
+        return {}
+    try:
+        response = (
+            get_supabase()
+            .table(TABLE)
+            .select("source_ref,status")
+            .in_("source_ref", source_refs)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to resolve %s statuses by source_ref", TABLE)
+        raise
+    return {row["source_ref"]: row["status"] for row in response.data or []}
 
 
 def count_by_resolution_path() -> dict[str, int]:
