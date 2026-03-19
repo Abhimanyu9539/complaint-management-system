@@ -17,7 +17,7 @@ These are the first DTOs in the codebase, so this module sets the pattern:
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DocType = Literal["case", "policy"]
 DocStatus = Literal["pending", "processing", "indexed", "failed", "deleting"]
@@ -49,12 +49,25 @@ class DocumentCountsByType(_Base):
 
 
 class DocumentOption(_Base):
-    """One entry in the admin's single-document ingest picker."""
+    """One entry in the admin's single-document ingest picker.
 
-    id: str
+    Lists the on-disk seed corpus, not the `cases`/`policies` tables — a
+    partially seeded corpus (e.g. `cms-seed --one-policy`) has a row for one
+    file only, and listing rows made the rest invisible.
+    """
+
+    source_ref: str = Field(
+        description="The corpus's natural key: a policy filename or a case id — "
+        "not a Postgres id, which may not exist yet."
+    )
     title: str
     doc_type: DocType
-    status: DocStatus
+    status: DocStatus | None = Field(
+        default=None,
+        description="Null when the document has no Postgres row yet, i.e. it has "
+        "never been seeded. Distinct from 'pending', which means a row exists "
+        "and is awaiting ingest.",
+    )
 
 
 class DocumentOptionPage(_Base):
@@ -98,6 +111,32 @@ class JobPage(_Base):
     total: int
     limit: int
     offset: int
+
+
+class TriggerIngestionRequest(_Base):
+    """`POST /admin/ingestion/jobs` body — see `backend/docs/admin-api.md` §4."""
+
+    doc_type: DocType
+    mode: Literal["seed", "document"]
+    source_ref: str | None = Field(
+        default=None,
+        description="Required when mode == 'document'; ignored for 'seed'. The seed "
+        "corpus's natural key (a policy filename or a case id), not a Postgres id.",
+    )
+
+    @model_validator(mode="after")
+    def _source_ref_required_for_document_mode(self) -> "TriggerIngestionRequest":
+        if self.mode == "document" and not self.source_ref:
+            raise ValueError("source_ref is required when mode is 'document'.")
+        return self
+
+
+class TriggerIngestionResponse(_Base):
+    """202 body for both the trigger and the retry route — same shape, §4/§5."""
+
+    job_id: str
+    accepted: bool
+    message: str
 
 
 class StuckDocument(_Base):
