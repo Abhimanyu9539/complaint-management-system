@@ -24,6 +24,7 @@ from cms.db.repositories import (
     policies,
     tickets,
 )
+from cms.ingestion import seed as seed_module
 from cms.retrieval.vector_store import qdrant_store
 from cms.schemas.admin import (
     ChunkRowCounts,
@@ -252,20 +253,30 @@ def build_ingestion_summary(days: int) -> IngestionSummaryResponse:
 
 
 def build_document_options(doc_type: str, limit: int) -> list[DocumentOption]:
-    """The single-document ingest picker's contents."""
-    rows = (
-        cases.list_case_options(limit)
+    """The single-document ingest picker's contents.
+
+    Enumerates the seed corpus on disk rather than the `cases`/`policies`
+    tables (`seed.list_seed_entries` — the sole owner of the corpus layout and
+    the `source_ref` derivation, so the picker cannot drift from what the
+    trigger actually upserts). `status` is joined back from Postgres, null for
+    a file that has never been seeded, so a partially seeded corpus is visible
+    instead of looking complete.
+    """
+    entries = seed_module.list_seed_entries(doc_type)[:limit]
+    source_refs = [entry.source_ref for entry in entries]
+    statuses = (
+        cases.statuses_for_source_refs(source_refs)
         if doc_type == "case"
-        else policies.list_policy_options(limit)
+        else policies.statuses_for_source_refs(source_refs)
     )
     return [
         DocumentOption(
-            id=row["id"],
-            title=row.get("title") or row["id"],
+            source_ref=entry.source_ref,
+            title=entry.title or entry.source_ref,
             doc_type=doc_type,
-            status=row["status"],
+            status=statuses.get(entry.source_ref),
         )
-        for row in rows
+        for entry in entries
     ]
 
 
