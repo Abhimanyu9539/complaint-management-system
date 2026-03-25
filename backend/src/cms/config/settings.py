@@ -105,14 +105,45 @@ class Settings(BaseSettings):
     dept_confidence_threshold: float = 0.60
     max_retrieval_attempts: int = 2
 
-    # --- CORS: comma-separated origins, e.g. "http://localhost:5173,http://localhost:3000" ---
-    cors_origins: str = "http://localhost:5173"
+    # --- CORS: comma-separated origins, e.g. "https://cms.example.com,https://admin.example.com" ---
+    # Deployments set this. It is empty by default because a wrong guess here
+    # fails in the browser rather than at startup, and a default that "almost
+    # works" in production is worse than an obvious blank.
+    cors_origins: str = ""
+
+    # Local development is matched by pattern instead of by list. Vite does not
+    # own a fixed port — it walks 5173, 5174, 5175… whenever the previous one is
+    # still held by an earlier `npm run dev`, and `localhost` and `127.0.0.1` are
+    # distinct origins to a browser even though they reach the same process. An
+    # explicit list therefore breaks silently the moment either changes: plain
+    # GETs are simple requests, so the server still logs 200 while the browser
+    # discards every response for a missing `Access-Control-Allow-Origin`, and
+    # the panels read "Could not reach the API" against a healthy backend.
+    #
+    # Scoped to loopback http only. It widens nothing a deployment cares about:
+    # a remote page cannot forge `Origin`, so matching here still requires a
+    # page actually served from the developer's own machine. Set
+    # `CORS_ORIGIN_REGEX=` (empty) in production to switch it off entirely.
+    cors_origin_regex: str | None = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
 
     @property
     def cors_origins_list(self) -> list[str]:
         return [
             origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
         ]
+
+    @property
+    def cors_origin_regex_or_none(self) -> str | None:
+        """The regex, with an env-supplied empty string normalised to None.
+
+        Starlette treats `""` as a pattern that matches every origin's empty
+        prefix — i.e. allow-all — so an operator disabling this with
+        `CORS_ORIGIN_REGEX=` would get the exact opposite of what they asked
+        for. Collapsing blank to None makes the off switch mean off.
+        """
+        if self.cors_origin_regex is None or not self.cors_origin_regex.strip():
+            return None
+        return self.cors_origin_regex.strip()
 
     # --- Seed corpus ---
     # The corpus is fixture data that ships outside the package (backend/data/ is
