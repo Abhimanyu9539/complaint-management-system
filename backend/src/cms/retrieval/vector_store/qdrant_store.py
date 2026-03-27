@@ -153,20 +153,31 @@ def collection_stats(name: str) -> dict:
 
 
 @lru_cache
-def get_vector_store(collection_name: str) -> QdrantVectorStore:
-    """The hybrid (dense + sparse) vector store for one collection.
+def get_vector_store(
+    collection_name: str, mode: RetrievalMode = RetrievalMode.HYBRID
+) -> QdrantVectorStore:
+    """The vector store for one collection, opened in one retrieval mode.
 
     Takes the collection name explicitly — there are two collections (cases,
-    policies) and no single default. `@lru_cache` still applies: it now caches
-    one store per collection instead of one per process, since `collection_name`
-    is hashable.
+    policies) and no single default. `@lru_cache` now keys on
+    `(collection_name, mode)`, so each combination gets its own store, e.g. a
+    HYBRID store for writes and separate DENSE/SPARSE stores for the retriever
+    legs that want to run one side in isolation (see `retrieval.retrievers`).
 
     `validate_collection_config` is deliberately left on: it turns this
     constructor into a cross-check that the collection was built with the vector
     names and dimensions `create_qdrant_collections.py` declares, failing loudly
-    here instead of silently writing mismatched vectors. That costs one throwaway
-    embeddings API call to learn the dense dimension, which is why this is
-    cached — once per collection per process, not once per document.
+    here instead of silently writing mismatched vectors. What that costs depends
+    on the mode:
+
+    - DENSE / HYBRID: one throwaway embeddings API call to learn the dense
+      dimension — cheap, and why this is cached per collection per process
+      rather than per call.
+    - SPARSE: no API call at all — only the sparse vector name is checked.
+
+    The default stays HYBRID so the ingestion write path (`ingestion.load.
+    vector_loader`), which needs both vectors produced together, is unaffected
+    by this parameter's addition.
 
     Requires the collection to exist — run scripts/create_qdrant_collection.py first.
     """
@@ -174,18 +185,19 @@ def get_vector_store(collection_name: str) -> QdrantVectorStore:
         store = QdrantVectorStore(
             client=get_qdrant_client(),
             collection_name=collection_name,
-            embedding=get_dense_embeddings(),
-            sparse_embedding=get_sparse_embeddings(),
-            retrieval_mode=RetrievalMode.HYBRID,
+            embedding=get_dense_embeddings() if mode != RetrievalMode.SPARSE else None,
+            sparse_embedding=get_sparse_embeddings() if mode != RetrievalMode.DENSE else None,
+            retrieval_mode=mode,
             vector_name=DENSE_VECTOR_NAME,
             sparse_vector_name=SPARSE_VECTOR_NAME,
         )
     except Exception:
         logger.exception(
-            "Failed to open vector store for collection '%s' — "
+            "Failed to open vector store for collection '%s' in mode %s — "
             "run scripts/create_qdrant_collection.py if it does not exist yet",
             collection_name,
+            mode,
         )
         raise
-    logger.info("Vector store ready on collection '%s'", collection_name)
+    logger.info("Vector store ready on collection '%s' (mode=%s)", collection_name, mode)
     return store
