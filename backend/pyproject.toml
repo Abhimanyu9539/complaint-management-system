@@ -37,6 +37,8 @@ cms-seed = "cms.cli.seed:main"
 cms-create-collections = "cms.cli.create_collections:main"
 cms-retrieve = "cms.cli.retrieve:main"
 cms-analyze = "cms.cli.analyze:main"
+cms-evalset = "cms.cli.evalset:main"
+cms-deepeval = "cms.cli.deepeval_launcher:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -57,6 +59,7 @@ native-tls = true
 
 [dependency-groups]
 dev = [
+    "deepeval>=4.1.8",
     "pytest>=8.4.2",
     "ruff>=0.14.4",
 ]
