@@ -19,7 +19,7 @@ reads `OPENAI_API_KEY` from the process environment and knows nothing about
 pydantic-settings, so without this the key has to be exported by hand before
 every run.
 
-    cms-deepeval generate --method contexts --contexts-file ./tests/evals/contexts.json ...
+    cms-deepeval generate --method contexts --contexts-file ./tests/evals/data/contexts.json ...
 """
 
 import logging

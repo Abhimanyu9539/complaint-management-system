@@ -66,6 +66,10 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The eval suite is LLM-judged and costs money per run, so a bare `pytest` must
+# not sweep it up. Explicit paths still collect, which is how
+# `cms-deepeval test run tests/evals/retriever/` reaches it.
+norecursedirs = ["evals", "*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["cms"]
