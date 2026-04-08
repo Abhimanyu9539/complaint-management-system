@@ -16,3 +16,7 @@ docs/
 
 # Environment
 .env
+
+# deepeval run artifacts: local cache and the last test run, rewritten every run
+.deepeval/
+.deepeval-cache.json
