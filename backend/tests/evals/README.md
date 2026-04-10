@@ -1,23 +1,34 @@
-# Eval dataset
+# Evals
 
-`.dataset.json` is the golden set for the complaint-drafting pipeline: one entry per question,
-with the answer we expect and the corpus text it must be grounded in. It is generated from the
-seed corpus by [deepeval](https://deepeval.com)'s golden synthesizer, then committed.
+Two things live here, and they are deliberately separate directories:
 
-**deepeval is used here as a dataset generator only.** It is not the eval runner and provides no
-metrics in this project — `backend/docs/steps.md` Step 6 specifies LangSmith `evaluate()` for
-that, and it will read this file.
+- **`data/`** — the golden set, built once by [deepeval](https://deepeval.com)'s synthesizer and
+  committed. One entry per question, with the answer we expect and the corpus text it must be
+  grounded in.
+- **`retriever/`** — an eval suite that scores retrieval against that golden set. See
+  [Retriever evals](#retriever-evals).
 
-## Files
+```
+tests/evals/
+├── README.md
+├── conftest.py          # truststore + OPENAI_API_KEY, applies to every suite here
+├── data/
+│   ├── contexts.json    # corpus slices fed to the generator
+│   ├── generated.json   # raw synthesizer output
+│   └── .dataset.json    # the dataset: generated.json + ground-truth metadata
+└── retriever/
+    ├── adapters.py      # dense / sparse / hybrid -> retrieved chunk texts
+    ├── metrics.py       # the shared judge and thresholds
+    ├── test_dense.py
+    ├── test_sparse.py
+    └── test_hybrid.py
+```
 
-| File | What it is | Committed |
-| --- | --- | --- |
-| `contexts.json` | The corpus slices fed to the generator, built by `cms-evalset export-contexts` | yes |
-| `generated.json` | Raw synthesizer output. Overwritten by every generation run | yes |
-| `.dataset.json` | **The dataset.** `generated.json` + ground-truth metadata | yes |
+The rest of this file is about `data/` — how it was generated and how to regenerate it. Everything
+under "Regenerating" through "The committed run" concerns that build step only.
 
-All three are committed on purpose. Regenerating costs real OpenAI tokens, and a dataset that
-changes should show up as a reviewable diff rather than appearing out of nowhere on someone's
+All three JSON files are committed on purpose. Regenerating costs real OpenAI tokens, and a dataset
+that changes should show up as a reviewable diff rather than appearing out of nowhere on someone's
 machine.
 
 ## Schema
@@ -60,7 +71,7 @@ uv run cms-evalset export-contexts
 #    dataset-authoring choice, not the app's serving model, and they need not match.
 uv run cms-deepeval generate \
   --method contexts --variation single-turn \
-  --contexts-file ./tests/evals/contexts.json \
+  --contexts-file ./tests/evals/data/contexts.json \
   --max-goldens-per-context 1 \
   --max-concurrent 3 \
   --scenario "Customers of an Indian D2C appliance brand raising complaints by email and chat, and support agents checking what they are allowed to approve before replying" \
@@ -68,7 +79,7 @@ uv run cms-deepeval generate \
   --input-format "A complaint or an agent question in plain English, mentioning order numbers, products (X200 Cordless Vacuum, AV-450, ProBlend 300, SmartHub Pro), payment methods (UPI, card, COD) and Rupee amounts where relevant" \
   --expected-output-format "A grounded answer that cites the governing clause (for example 'warranty 2.3') and states Rupee amounts and turnaround times exactly as the policy defines them" \
   --model gpt-4.1-mini --cost-tracking \
-  --output-dir ./tests/evals --file-name generated
+  --output-dir ./tests/evals/data --file-name generated
 
 # 3. generated.json -> .dataset.json, attaching ground truth. Offline and free.
 uv run cms-evalset annotate
@@ -87,8 +98,7 @@ Then read a handful of the new goldens before committing. See "Reviewing a run" 
   it cannot write `.dataset.json` itself. That is why step 2 writes `generated` and step 3 produces
   the dotted final name.
 - **`--num-goldens` does nothing here.** It only applies to `--method scratch`. The count is
-  `contexts × --max-goldens-per-context`, so the size is set by `cms-evalset export-contexts
-  --policies N --cases N` (default 26 + 14 = 40).
+  `contexts × --max-goldens-per-context`, so the size is set by `cms-evalset export-contexts --policies N --cases N` (default 26 + 14 = 40).
 - **Rate limits will kill the run, and you pay for it anyway.** Nothing is written to disk until
   the whole run finishes, so a 429 storm at golden 38 costs you all 37 before it. deepeval retries
   a 429 only ~4 times before the run dies with `RetryError[... RateLimitError]`. Two settings keep
@@ -157,7 +167,7 @@ Generated goldens are not automatically good. Before committing a regenerated da
 
 ```bash
 # Size and coverage
-uv run python -c "import json,collections; g=json.load(open('tests/evals/.dataset.json',encoding='utf-8')); print(len(g),'goldens'); print(collections.Counter(x['additional_metadata']['corpus'] for x in g)); print(sorted({str(x['additional_metadata']['expected_department']) for x in g}))"
+uv run python -c "import json,collections; g=json.load(open('tests/evals/data/.dataset.json',encoding='utf-8')); print(len(g),'goldens'); print(collections.Counter(x['additional_metadata']['corpus'] for x in g)); print(sorted({str(x['additional_metadata']['expected_department']) for x in g}))"
 
 # Is the source actually retrievable? This is the point of the dataset.
 uv run cms-retrieve "<paste a golden input>" --json
@@ -179,3 +189,63 @@ zero rate-limit retries.
 - Ground truth was retrievable in the top-k for **8 of 8** spot-checked goldens, using the same
   `retrieve()` the app calls — so a retrieval metric built on this dataset starts from a corpus
   it can actually find.
+
+## Retriever evals
+
+`retriever/` scores retrieval — and only retrieval — against the golden set in `data/`. There is
+no `generate` node in the graph yet, so retrieval is the only stage that can be evaluated
+end-to-end today, and none of the three metrics need an `actual_output`:
+
+
+| Metric                      | What it asks                                                    | Threshold |
+| ----------------------------- | ----------------------------------------------------------------- | ----------- |
+| `ContextualPrecisionMetric` | Are the relevant chunks ranked*above* the irrelevant ones?      | 0.7       |
+| `ContextualRecallMetric`    | Does the retrieved set cover everything`expected_output` needs? | 0.7       |
+| `ContextualRelevancyMetric` | How much of what came back is actually on topic?                | 0.5       |
+
+Relevancy sits lower on purpose: it penalises every irrelevant *sentence* inside an
+otherwise-correct chunk, and `chunk_policy` cuts policies at 800 tokens. A 0.7 bar there would
+fail retrievals that are in fact correct.
+
+### Three files, three retrievers
+
+One file per retriever, because the comparison *is* the result:
+
+- `test_dense.py` — the semantic leg alone (OpenAI embeddings, cosine)
+- `test_sparse.py` — the lexical leg alone (local BM25, exact terms)
+- `test_hybrid.py` — what production uses: both legs, both collections, RRF-fused
+
+All three are driven by the raw `golden.input`. No query rewriting, no department filter — the
+scores describe the retriever and nothing upstream of it. All three return the same 10-chunk budget
+(6 cases + 4 policies), which is what makes the numbers comparable. If hybrid is not beating
+`max(dense, sparse)` on recall, `RRF_K` and `FETCH_K` in `hybrid_retriever.py` are the first knobs.
+
+### Running them
+
+Qdrant must be up and both collections populated — `uv run cms-retrieve "warranty claim" --json`
+should return non-empty `cases` *and* `policies` first.
+
+```bash
+cd backend
+uv run cms-deepeval test run tests/evals/retriever/test_dense.py  --num-processes 4 --ignore-errors --identifier retriever-dense-round-1
+uv run cms-deepeval test run tests/evals/retriever/test_sparse.py --num-processes 4 --ignore-errors --identifier retriever-sparse-round-1
+uv run cms-deepeval test run tests/evals/retriever/test_hybrid.py --num-processes 4 --ignore-errors --identifier retriever-hybrid-round-1
+```
+
+Three things worth knowing before you start:
+
+- **Budget ~$1.70 and 20-25 minutes per file.** 40 goldens × 3 LLM-judged metrics, measured at
+  ~$0.042 per golden on `gpt-5.4-mini`. Cost is printed at the end of every run; `--cost-tracking`
+  is a `generate` flag and pytest will reject it here.
+- **`pytest` alone will not run these.** `norecursedirs` in `pyproject.toml` keeps the whole
+  `evals/` tree out of the ordinary suite, so nobody spends money by running `uv run pytest`.
+  Explicit paths — like the commands above — still collect.
+- **Keep `--num-processes` around 4.** This account is capped at 30k TPM and each judge call
+  carries ten chunks of policy text.
+
+### The judge
+
+`gpt-5.4-mini`, pinned in `retriever/metrics.py`. deepeval has that id in its model registry, which
+buys three things a newer or dated id would not: it forces `temperature=1` instead of the `0.0` the
+gpt-5 reasoning endpoint rejects, it uses native structured outputs for the verdicts rather than
+reparsing JSON, and its prices are registered so the cost line at the end of a run is real.
