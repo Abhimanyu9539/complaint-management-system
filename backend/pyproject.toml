@@ -59,6 +59,10 @@ native-tls = true
 
 [dependency-groups]
 dev = [
+    # chromadb is not a direct import here: deepeval's document synthesis path
+    # (`generate_goldens_from_docs`, which `cms-evalset build` calls) requires
+    # it to dedupe candidate contexts, and fails at `get_chromadb()` without it.
+    "chromadb>=1.4.0",
     "deepeval>=4.1.8",
     "pytest>=8.4.2",
     "ruff>=0.14.4",
