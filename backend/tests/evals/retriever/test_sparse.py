@@ -18,7 +18,7 @@ from metrics import RETRIEVER_METRICS
 
 dataset = EvaluationDataset()
 dataset.add_goldens_from_json_file(
-    file_path=str(Path(__file__).parents[1] / "data" / ".dataset.json")
+    file_path=str(Path(__file__).parents[1] / "data" / "goldens.json")
 )
 
 
