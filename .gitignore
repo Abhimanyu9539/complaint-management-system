@@ -9,8 +9,10 @@ wheels/
 # Virtual environments
 .venv
 .claude/
+CLAUDE.md
 .agents/
 skills-lock.json
+.deepeval/
 
 # Local environment files (secrets / machine-specific config)
 .env
