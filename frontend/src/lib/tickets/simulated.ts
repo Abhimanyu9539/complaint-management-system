@@ -1,8 +1,8 @@
 /**
  * Deterministic fixtures for the workbench's Draft and Evidence panes.
  *
- * `rag/`, `retrieval/retrievers/` and `guardrails/` (backend) are empty
- * packages — there is no classifier, no retriever, no drafter. These panes
+ * The backend has no classifier, no retriever and no drafter yet — `rag/` holds
+ * only the query-analysis node and `guardrails/` is an empty package. These panes
  * render a labelled simulation instead of an empty state so the intended shape
  * of the finished product is visible. Three containment rules make that safe:
  *

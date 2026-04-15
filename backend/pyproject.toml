@@ -29,16 +29,12 @@ dependencies = [
     "uvicorn[standard]>=0.51.0",
 ]
 
-# The API server is `uvicorn cms.main:app`; these are the operational one-shots
-# plus the read-only retrieval probe. All are safe to re-run — see each module's
-# docstring.
+# The API server is `uvicorn cms.main:app`; these are the operational one-shots.
+# All are safe to re-run — see each module's docstring.
 [project.scripts]
 cms-seed = "cms.cli.seed:main"
 cms-create-collections = "cms.cli.create_collections:main"
-cms-retrieve = "cms.cli.retrieve:main"
 cms-analyze = "cms.cli.analyze:main"
-cms-evalset = "cms.cli.evalset:main"
-cms-deepeval = "cms.cli.deepeval_launcher:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -59,21 +55,12 @@ native-tls = true
 
 [dependency-groups]
 dev = [
-    # chromadb is not a direct import here: deepeval's document synthesis path
-    # (`generate_goldens_from_docs`, which `cms-evalset build` calls) requires
-    # it to dedupe candidate contexts, and fails at `get_chromadb()` without it.
-    "chromadb>=1.4.0",
-    "deepeval>=4.1.8",
     "pytest>=8.4.2",
     "ruff>=0.14.4",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# The eval suite is LLM-judged and costs money per run, so a bare `pytest` must
-# not sweep it up. Explicit paths still collect, which is how
-# `cms-deepeval test run tests/evals/retriever/` reaches it.
-norecursedirs = ["evals", "*.egg", ".*", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["cms"]

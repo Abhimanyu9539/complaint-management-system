@@ -1,1 +1,1 @@
-"""Read path: vector stores and the retrievers built on top of them."""
+"""Read path: the vector stores, and the retrievers to be built on top of them."""

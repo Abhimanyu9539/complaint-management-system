@@ -87,9 +87,9 @@ an error state until the migration is applied.
 
 ### The workbench's Draft and Evidence panes are simulated
 
-There is no classifier, retriever or drafter — `backend/src/cms/rag/` and
-`retrieval/retrievers/` are empty packages, and `drafts`/`dept_responses` have
-no writer. Rather than an empty state, those two panes render a deterministic,
+There is no classifier, retriever or drafter — `backend/src/cms/rag/` holds only
+the query-analysis node, no retriever exists yet, and `drafts`/`dept_responses`
+have no writer. Rather than an empty state, those two panes render a deterministic,
 per-ticket fixture (`lib/tickets/simulated.ts`) behind a **Simulated** banner,
 so the intended shape of the finished product is visible today.
 

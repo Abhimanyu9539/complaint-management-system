@@ -15,7 +15,7 @@ backend/
 ├── tests/
 └── src/cms/
     ├── main.py           # FastAPI app factory -> cms.main:app
-    ├── cli/              # console entrypoints (cms-seed, cms-create-collections)
+    ├── cli/              # console entrypoints (cms-seed, cms-create-collections, cms-analyze)
     ├── config/           # settings + process bootstrap (trust store, LangSmith env)
     ├── api/              # routers
     ├── db/               # Supabase session + repositories

@@ -101,10 +101,6 @@ class Settings(BaseSettings):
     def supabase_jwks_url(self) -> str:
         return f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
 
-    # --- Retrieval / routing tunables (env-tunable so eval-driven changes don't need a release) ---
-    dept_confidence_threshold: float = 0.60
-    max_retrieval_attempts: int = 2
-
     # --- CORS: comma-separated origins, e.g. "https://cms.example.com,https://admin.example.com" ---
     # Deployments set this. It is empty by default because a wrong guess here
     # fails in the browser rather than at startup, and a default that "almost

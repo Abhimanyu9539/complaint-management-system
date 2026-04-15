@@ -161,8 +161,8 @@ def get_vector_store(
     Takes the collection name explicitly — there are two collections (cases,
     policies) and no single default. `@lru_cache` now keys on
     `(collection_name, mode)`, so each combination gets its own store, e.g. a
-    HYBRID store for writes and separate DENSE/SPARSE stores for the retriever
-    legs that want to run one side in isolation (see `retrieval.retrievers`).
+    HYBRID store for writes and separate DENSE/SPARSE stores for retriever
+    legs that want to run one side in isolation.
 
     `validate_collection_config` is deliberately left on: it turns this
     constructor into a cross-check that the collection was built with the vector

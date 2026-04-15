@@ -2,8 +2,7 @@
 
 steps.md's rationale for building nodes behind a CLI first: "every prompt
 tweak is a 5-second re-run." This calls `analyze_query_core` directly — no
-`GraphState`, no graph — exactly like `cli/retrieve.py` calls the hybrid
-retriever directly. The node logic lives in `cms.rag.nodes.analyze_query`;
+`GraphState`, no graph. The node logic lives in `cms.rag.nodes.analyze_query`;
 this file only parses arguments, prints results, and turns the outcome into
 an exit code.
 
@@ -32,7 +31,7 @@ def main() -> int:
 
     # Seeded/uploaded text and model output are arbitrary UTF-8; Windows
     # terminals default stdout to the system codepage, which cannot encode
-    # most of it — see the identical fix in cli/retrieve.py.
+    # most of it.
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

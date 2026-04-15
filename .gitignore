@@ -12,7 +12,6 @@ wheels/
 CLAUDE.md
 .agents/
 skills-lock.json
-.deepeval/
 
 # Local environment files (secrets / machine-specific config)
 .env
