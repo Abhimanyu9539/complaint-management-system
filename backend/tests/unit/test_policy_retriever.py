@@ -1,7 +1,18 @@
+import pytest
 from langchain_core.documents import Document
 from langchain_qdrant import RetrievalMode
 
 from cms.retrieval import policy_retriever
+
+# Every assertion below holds for both legs — only the mode the store is opened
+# in differs.
+BOTH_LEGS = pytest.mark.parametrize(
+    ("retrieve", "expected_mode"),
+    [
+        (policy_retriever.retrieve_policies_dense, RetrievalMode.DENSE),
+        (policy_retriever.retrieve_policies_sparse, RetrievalMode.SPARSE),
+    ],
+)
 
 
 class _StubStore:
@@ -42,39 +53,47 @@ def _canned_hits() -> list[tuple[Document, float]]:
     ]
 
 
-def test_retrieve_policies_opens_the_policies_collection_in_dense_mode(monkeypatch) -> None:
+@BOTH_LEGS
+def test_opens_the_policies_collection_in_its_own_mode(
+    monkeypatch, retrieve, expected_mode
+) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    policy_retriever.retrieve_policies("warranty period")
+    retrieve("warranty period")
 
     assert store.opened == [
-        {"collection_name": "policies_test", "mode": RetrievalMode.DENSE}
+        {"collection_name": "policies_test", "mode": expected_mode}
     ]
 
 
-def test_retrieve_policies_passes_query_and_k_through(monkeypatch) -> None:
+@BOTH_LEGS
+def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    policy_retriever.retrieve_policies("warranty period", k=8)
+    retrieve("warranty period", k=8)
 
     assert store.calls[0]["query"] == "warranty period"
     assert store.calls[0]["k"] == 8
 
 
-def test_retrieve_policies_defaults_k(monkeypatch) -> None:
+@BOTH_LEGS
+def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    policy_retriever.retrieve_policies("warranty period")
+    retrieve("warranty period")
 
     assert store.calls[0]["k"] == policy_retriever.DEFAULT_K
 
 
-def test_retrieve_policies_filters_published_on_the_dotted_metadata_path(monkeypatch) -> None:
+@BOTH_LEGS
+def test_filters_published_on_the_dotted_metadata_path(
+    monkeypatch, retrieve, expected_mode
+) -> None:
     # The one mistake here that fails silently: a filter on the bare name
     # `lifecycle` matches zero points instead of raising.
     store = _install_stub(monkeypatch, _canned_hits())
 
-    policy_retriever.retrieve_policies("warranty period")
+    retrieve("warranty period")
 
     conditions = store.calls[0]["filter"].must
     assert len(conditions) == 1
@@ -82,8 +101,9 @@ def test_retrieve_policies_filters_published_on_the_dotted_metadata_path(monkeyp
     assert conditions[0].match.value == "published"
 
 
-def test_retrieve_policies_returns_hits_unchanged_and_in_order(monkeypatch) -> None:
+@BOTH_LEGS
+def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expected_mode) -> None:
     hits = _canned_hits()
     _install_stub(monkeypatch, hits)
 
-    assert policy_retriever.retrieve_policies("warranty period") == hits
+    assert retrieve("warranty period") == hits

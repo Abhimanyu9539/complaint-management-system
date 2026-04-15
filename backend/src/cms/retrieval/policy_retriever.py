@@ -1,4 +1,4 @@
-"""Dense retrieval over the policies collection.
+"""Dense and sparse retrieval over the policies collection.
 """
 
 import logging
@@ -26,22 +26,36 @@ PUBLISHED_FILTER = models.Filter(
 )
 
 
-def retrieve_policies(query: str, k: int = DEFAULT_K) -> list[tuple[Document, float]]:
-    """Top-`k` published policy chunks for `query`, most similar first."""
+def _search(query: str, k: int, mode: RetrievalMode) -> list[tuple[Document, float]]:
+    """Top-`k` published policy chunks for `query` from one retrieval leg."""
     collection = get_settings().qdrant_policies_collection
-    store = get_vector_store(collection, mode=RetrievalMode.DENSE)
+    store = get_vector_store(collection, mode=mode)
 
     try:
         hits = store.similarity_search_with_score(query, k=k, filter=PUBLISHED_FILTER)
     except Exception:
         logger.exception(
-            "Dense policy search failed on '%s' for query %r", collection, query
+            "Policy search failed on '%s' (mode=%s) for query %r", collection, mode, query
         )
         raise
 
     # An empty result is a plausible-looking answer, so say so out loud: it means
     # either nothing is indexed yet or no chunk is `published`.
     logger.info(
-        "Retrieved %d policy chunk(s) from '%s' for query %r", len(hits), collection, query
+        "Retrieved %d policy chunk(s) from '%s' (mode=%s) for query %r",
+        len(hits),
+        collection,
+        mode,
+        query,
     )
     return hits
+
+
+def retrieve_policies_dense(query: str, k: int = DEFAULT_K) -> list[tuple[Document, float]]:
+    """Semantic leg: cosine over OpenAI embeddings."""
+    return _search(query, k, RetrievalMode.DENSE)
+
+
+def retrieve_policies_sparse(query: str, k: int = DEFAULT_K) -> list[tuple[Document, float]]:
+    """Lexical leg: BM25 via local fastembed — no API cost."""
+    return _search(query, k, RetrievalMode.SPARSE)

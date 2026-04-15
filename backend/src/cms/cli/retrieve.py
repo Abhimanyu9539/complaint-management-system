@@ -3,6 +3,7 @@ Usage (from anywhere, once the project is installed):
 
     cms-retrieve "how long is the warranty period on a replacement unit"
     cms-retrieve "refund for a delayed order" -k 8 --json
+    cms-retrieve "CarePlan+" --mode sparse
 """
 
 import argparse
@@ -11,9 +12,15 @@ import logging
 import sys
 
 from cms.config.logging_config import setup_logging
-from cms.retrieval.policy_retriever import DEFAULT_K, retrieve_policies
+from cms.retrieval.policy_retriever import (
+    DEFAULT_K,
+    retrieve_policies_dense,
+    retrieve_policies_sparse,
+)
 
 logger = logging.getLogger("cms.cli.retrieve")
+
+RETRIEVERS = {"dense": retrieve_policies_dense, "sparse": retrieve_policies_sparse}
 
 # Enough of a chunk to recognise it, short enough to keep one hit on a few lines.
 SNIPPET_CHARS = 220
@@ -34,8 +41,8 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="Standalone policy retrieval probe: dense top-k search over the "
-        "published policy chunks — no graph, no generation."
+        description="Standalone policy retrieval probe: dense or sparse top-k search "
+        "over the published policy chunks — no graph, no generation."
     )
     parser.add_argument("query", help="The question to retrieve policy chunks for.")
     parser.add_argument(
@@ -45,6 +52,12 @@ def main() -> int:
         default=DEFAULT_K,
         help=f"How many chunks to return (default: {DEFAULT_K}).",
     )
+    parser.add_argument(
+        "--mode",
+        choices=sorted(RETRIEVERS),
+        default="dense",
+        help="Which leg to run: dense (cosine) or sparse (BM25). Default: dense.",
+    )
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args()
 
@@ -53,7 +66,7 @@ def main() -> int:
         parser.error("--top-k must be at least 1")
 
     try:
-        hits = retrieve_policies(args.query, k=args.top_k)
+        hits = RETRIEVERS[args.mode](args.query, k=args.top_k)
     except Exception:
         logger.exception("Policy retrieval probe failed")
         return 1
@@ -70,7 +83,7 @@ def main() -> int:
         )
         return 0
 
-    print(f"query={args.query!r}")
+    print(f"query={args.query!r} mode={args.mode}")
     print(f"{len(hits)} hit(s)")
     for rank, (document, score) in enumerate(hits, start=1):
         metadata = document.metadata
