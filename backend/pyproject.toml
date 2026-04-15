@@ -29,12 +29,13 @@ dependencies = [
     "uvicorn[standard]>=0.51.0",
 ]
 
-# The API server is `uvicorn cms.main:app`; these are the operational one-shots.
-# All are safe to re-run — see each module's docstring.
+# The API server is `uvicorn cms.main:app`; these are the operational one-shots
+# plus the read-only probes. All are safe to re-run — see each module's docstring.
 [project.scripts]
 cms-seed = "cms.cli.seed:main"
 cms-create-collections = "cms.cli.create_collections:main"
 cms-analyze = "cms.cli.analyze:main"
+cms-retrieve = "cms.cli.retrieve:main"
 
 [build-system]
 requires = ["hatchling"]
