@@ -1,4 +1,4 @@
-"""Dense and sparse retrieval over the policies collection.
+"""Dense, sparse and hybrid retrieval over the policies collection.
 """
 
 import logging
@@ -59,3 +59,12 @@ def retrieve_policies_dense(query: str, k: int = DEFAULT_K) -> list[tuple[Docume
 def retrieve_policies_sparse(query: str, k: int = DEFAULT_K) -> list[tuple[Document, float]]:
     """Lexical leg: BM25 via local fastembed — no API cost."""
     return _search(query, k, RetrievalMode.SPARSE)
+
+
+def retrieve_policies_hybrid(query: str, k: int = DEFAULT_K) -> list[tuple[Document, float]]:
+    """Both legs, fused by Qdrant server-side (RRF).
+
+    Scores are RRF values — a third scale again, comparable neither to the dense
+    leg's cosine nor the sparse leg's BM25.
+    """
+    return _search(query, k, RetrievalMode.HYBRID)

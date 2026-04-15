@@ -4,6 +4,7 @@ Usage (from anywhere, once the project is installed):
     cms-retrieve "how long is the warranty period on a replacement unit"
     cms-retrieve "refund for a delayed order" -k 8 --json
     cms-retrieve "CarePlan+" --mode sparse
+    cms-retrieve "why was my order cancelled" --mode dense
 """
 
 import argparse
@@ -15,12 +16,18 @@ from cms.config.logging_config import setup_logging
 from cms.retrieval.policy_retriever import (
     DEFAULT_K,
     retrieve_policies_dense,
+    retrieve_policies_hybrid,
     retrieve_policies_sparse,
 )
 
 logger = logging.getLogger("cms.cli.retrieve")
 
-RETRIEVERS = {"dense": retrieve_policies_dense, "sparse": retrieve_policies_sparse}
+RETRIEVERS = {
+    "dense": retrieve_policies_dense,
+    "sparse": retrieve_policies_sparse,
+    "hybrid": retrieve_policies_hybrid,
+}
+DEFAULT_MODE = "hybrid"
 
 # Enough of a chunk to recognise it, short enough to keep one hit on a few lines.
 SNIPPET_CHARS = 220
@@ -41,8 +48,8 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="Standalone policy retrieval probe: dense or sparse top-k search "
-        "over the published policy chunks — no graph, no generation."
+        description="Standalone policy retrieval probe: dense, sparse or hybrid top-k "
+        "search over the published policy chunks — no graph, no generation."
     )
     parser.add_argument("query", help="The question to retrieve policy chunks for.")
     parser.add_argument(
@@ -55,8 +62,9 @@ def main() -> int:
     parser.add_argument(
         "--mode",
         choices=sorted(RETRIEVERS),
-        default="dense",
-        help="Which leg to run: dense (cosine) or sparse (BM25). Default: dense.",
+        default=DEFAULT_MODE,
+        help="Which leg to run: dense (cosine), sparse (BM25), or hybrid (both, fused "
+        f"by Qdrant). Default: {DEFAULT_MODE}.",
     )
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
     args = parser.parse_args()

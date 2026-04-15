@@ -4,13 +4,14 @@ from langchain_qdrant import RetrievalMode
 
 from cms.retrieval import policy_retriever
 
-# Every assertion below holds for both legs — only the mode the store is opened
-# in differs.
-BOTH_LEGS = pytest.mark.parametrize(
+# Every assertion below holds for all three legs — only the mode the store is
+# opened in differs.
+ALL_MODES = pytest.mark.parametrize(
     ("retrieve", "expected_mode"),
     [
         (policy_retriever.retrieve_policies_dense, RetrievalMode.DENSE),
         (policy_retriever.retrieve_policies_sparse, RetrievalMode.SPARSE),
+        (policy_retriever.retrieve_policies_hybrid, RetrievalMode.HYBRID),
     ],
 )
 
@@ -53,7 +54,7 @@ def _canned_hits() -> list[tuple[Document, float]]:
     ]
 
 
-@BOTH_LEGS
+@ALL_MODES
 def test_opens_the_policies_collection_in_its_own_mode(
     monkeypatch, retrieve, expected_mode
 ) -> None:
@@ -66,7 +67,7 @@ def test_opens_the_policies_collection_in_its_own_mode(
     ]
 
 
-@BOTH_LEGS
+@ALL_MODES
 def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
@@ -76,7 +77,7 @@ def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> Non
     assert store.calls[0]["k"] == 8
 
 
-@BOTH_LEGS
+@ALL_MODES
 def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
@@ -85,7 +86,7 @@ def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
     assert store.calls[0]["k"] == policy_retriever.DEFAULT_K
 
 
-@BOTH_LEGS
+@ALL_MODES
 def test_filters_published_on_the_dotted_metadata_path(
     monkeypatch, retrieve, expected_mode
 ) -> None:
@@ -101,7 +102,7 @@ def test_filters_published_on_the_dotted_metadata_path(
     assert conditions[0].match.value == "published"
 
 
-@BOTH_LEGS
+@ALL_MODES
 def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expected_mode) -> None:
     hits = _canned_hits()
     _install_stub(monkeypatch, hits)
