@@ -47,11 +47,11 @@ unchanged documents (content hashes short-circuit, and point ids are `uuid5`-der
 `cases` and `policies` are deliberately separate tables backed by separate Qdrant
 collections, because they differ in origin, governance and chunking:
 
-|              | `cases`                          | `policies`                              |
-| ------------ | -------------------------------- | --------------------------------------- |
-| origin       | seed corpus, or a resolved ticket | authored and uploaded                   |
-| chunking     | 1 case = 1 chunk                 | header split, then ~800 tok / 100 overlap |
-| governance   | none — a record of what happened | lifecycle: draft → published → superseded |
+|            | `cases`                         | `policies`                                |
+| ---------- | --------------------------------- | ------------------------------------------- |
+| origin     | seed corpus, or a resolved ticket | authored and uploaded                       |
+| chunking   | 1 case = 1 chunk                  | header split, then ~800 tok / 100 overlap   |
+| governance | none — a record of what happened | lifecycle: draft → published → superseded |
 
 The consequence worth knowing before writing retrieval: **the collection is the
 discriminator**, and BM25 IDF is computed per collection — so scores from the two are not

@@ -4,7 +4,7 @@ Usage (from anywhere, once the project is installed):
     cms-retrieve "how long is the warranty period on a replacement unit"
     cms-retrieve "refund for a delayed order" -k 8 --json
     cms-retrieve "CarePlan+" --mode sparse
-    cms-retrieve "why was my order cancelled" --mode dense
+    cms-retrieve "my X200 vacuum stopped charging" --corpus cases
 """
 
 import argparse
@@ -13,6 +13,11 @@ import logging
 import sys
 
 from cms.config.logging_config import setup_logging
+from cms.retrieval.case_retriever import (
+    retrieve_cases_dense,
+    retrieve_cases_hybrid,
+    retrieve_cases_sparse,
+)
 from cms.retrieval.policy_retriever import (
     DEFAULT_K,
     retrieve_policies_dense,
@@ -23,10 +28,18 @@ from cms.retrieval.policy_retriever import (
 logger = logging.getLogger("cms.cli.retrieve")
 
 RETRIEVERS = {
-    "dense": retrieve_policies_dense,
-    "sparse": retrieve_policies_sparse,
-    "hybrid": retrieve_policies_hybrid,
+    "policies": {
+        "dense": retrieve_policies_dense,
+        "sparse": retrieve_policies_sparse,
+        "hybrid": retrieve_policies_hybrid,
+    },
+    "cases": {
+        "dense": retrieve_cases_dense,
+        "sparse": retrieve_cases_sparse,
+        "hybrid": retrieve_cases_hybrid,
+    },
 }
+DEFAULT_CORPUS = "policies"
 DEFAULT_MODE = "hybrid"
 
 # Enough of a chunk to recognise it, short enough to keep one hit on a few lines.
@@ -48,10 +61,10 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="Standalone policy retrieval probe: dense, sparse or hybrid top-k "
-        "search over the published policy chunks — no graph, no generation."
+        description="Standalone retrieval probe: dense, sparse or hybrid top-k search "
+        "over the policy or case chunks — no graph, no generation."
     )
-    parser.add_argument("query", help="The question to retrieve policy chunks for.")
+    parser.add_argument("query", help="The question to retrieve chunks for.")
     parser.add_argument(
         "-k",
         "--top-k",
@@ -60,8 +73,15 @@ def main() -> int:
         help=f"How many chunks to return (default: {DEFAULT_K}).",
     )
     parser.add_argument(
-        "--mode",
+        "--corpus",
         choices=sorted(RETRIEVERS),
+        default=DEFAULT_CORPUS,
+        help=f"Which collection to search. Default: {DEFAULT_CORPUS}.",
+    )
+    parser.add_argument(
+        "--mode",
+        # Both corpora expose the same three legs, so derive the choices from one.
+        choices=sorted(RETRIEVERS[DEFAULT_CORPUS]),
         default=DEFAULT_MODE,
         help="Which leg to run: dense (cosine), sparse (BM25), or hybrid (both, fused "
         f"by Qdrant). Default: {DEFAULT_MODE}.",
@@ -74,9 +94,9 @@ def main() -> int:
         parser.error("--top-k must be at least 1")
 
     try:
-        hits = RETRIEVERS[args.mode](args.query, k=args.top_k)
+        hits = RETRIEVERS[args.corpus][args.mode](args.query, k=args.top_k)
     except Exception:
-        logger.exception("Policy retrieval probe failed")
+        logger.exception("Retrieval probe failed")
         return 1
 
     if args.json:
@@ -91,7 +111,7 @@ def main() -> int:
         )
         return 0
 
-    print(f"query={args.query!r} mode={args.mode}")
+    print(f"query={args.query!r} corpus={args.corpus} mode={args.mode}")
     print(f"{len(hits)} hit(s)")
     for rank, (document, score) in enumerate(hits, start=1):
         metadata = document.metadata
