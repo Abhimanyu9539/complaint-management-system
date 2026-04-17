@@ -23,7 +23,7 @@ class _StubStore:
         self.hits = hits
         self.calls: list[dict] = []
 
-    def similarity_search_with_score(self, query, k, filter):
+    async def asimilarity_search_with_score(self, query, k, filter):
         self.calls.append({"query": query, "k": k, "filter": filter})
         return self.hits
 
@@ -55,12 +55,12 @@ def _canned_hits() -> list[tuple[Document, float]]:
 
 
 @ALL_MODES
-def test_opens_the_policies_collection_in_its_own_mode(
+async def test_opens_the_policies_collection_in_its_own_mode(
     monkeypatch, retrieve, expected_mode
 ) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("warranty period")
+    await retrieve("warranty period")
 
     assert store.opened == [
         {"collection_name": "policies_test", "mode": expected_mode}
@@ -68,33 +68,33 @@ def test_opens_the_policies_collection_in_its_own_mode(
 
 
 @ALL_MODES
-def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> None:
+async def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("warranty period", k=8)
+    await retrieve("warranty period", k=8)
 
     assert store.calls[0]["query"] == "warranty period"
     assert store.calls[0]["k"] == 8
 
 
 @ALL_MODES
-def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
+async def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("warranty period")
+    await retrieve("warranty period")
 
     assert store.calls[0]["k"] == policy_retriever.DEFAULT_K
 
 
 @ALL_MODES
-def test_filters_published_on_the_dotted_metadata_path(
+async def test_filters_published_on_the_dotted_metadata_path(
     monkeypatch, retrieve, expected_mode
 ) -> None:
     # The one mistake here that fails silently: a filter on the bare name
     # `lifecycle` matches zero points instead of raising.
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("warranty period")
+    await retrieve("warranty period")
 
     conditions = store.calls[0]["filter"].must
     assert len(conditions) == 1
@@ -103,8 +103,8 @@ def test_filters_published_on_the_dotted_metadata_path(
 
 
 @ALL_MODES
-def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expected_mode) -> None:
+async def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expected_mode) -> None:
     hits = _canned_hits()
     _install_stub(monkeypatch, hits)
 
-    assert retrieve("warranty period") == hits
+    assert await retrieve("warranty period") == hits

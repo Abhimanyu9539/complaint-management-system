@@ -23,7 +23,7 @@ class _StubStore:
         self.hits = hits
         self.calls: list[dict] = []
 
-    def similarity_search_with_score(self, query, k, filter=None):
+    async def asimilarity_search_with_score(self, query, k, filter=None):
         self.calls.append({"query": query, "k": k, "filter": filter})
         return self.hits
 
@@ -55,49 +55,49 @@ def _canned_hits() -> list[tuple[Document, float]]:
 
 
 @ALL_MODES
-def test_opens_the_cases_collection_in_its_own_mode(
+async def test_opens_the_cases_collection_in_its_own_mode(
     monkeypatch, retrieve, expected_mode
 ) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("vacuum stopped charging")
+    await retrieve("vacuum stopped charging")
 
     assert store.opened == [{"collection_name": "cases_test", "mode": expected_mode}]
 
 
 @ALL_MODES
-def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> None:
+async def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("vacuum stopped charging", k=8)
+    await retrieve("vacuum stopped charging", k=8)
 
     assert store.calls[0]["query"] == "vacuum stopped charging"
     assert store.calls[0]["k"] == 8
 
 
 @ALL_MODES
-def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
+async def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("vacuum stopped charging")
+    await retrieve("vacuum stopped charging")
 
     assert store.calls[0]["k"] == case_retriever.DEFAULT_K
 
 
 @ALL_MODES
-def test_searches_unfiltered(monkeypatch, retrieve, expected_mode) -> None:
+async def test_searches_unfiltered(monkeypatch, retrieve, expected_mode) -> None:
     # Unlike policies, cases have no `lifecycle` to gate on — every point in the
     # collection is already a resolved case.
     store = _install_stub(monkeypatch, _canned_hits())
 
-    retrieve("vacuum stopped charging")
+    await retrieve("vacuum stopped charging")
 
     assert store.calls[0]["filter"] is None
 
 
 @ALL_MODES
-def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expected_mode) -> None:
+async def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expected_mode) -> None:
     hits = _canned_hits()
     _install_stub(monkeypatch, hits)
 
-    assert retrieve("vacuum stopped charging") == hits
+    assert await retrieve("vacuum stopped charging") == hits
