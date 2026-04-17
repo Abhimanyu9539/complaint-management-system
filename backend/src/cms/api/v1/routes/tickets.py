@@ -1,8 +1,8 @@
 """Ticket intake and lifecycle — the API's first write endpoints.
 
-Same dispatch rule as `admin.py`: every handler is sync `def`. The supabase
-client is blocking, and a blocking call inside `async def` stalls the event loop
-for every concurrent request.
+Same dispatch rule as `admin.py`: every handler is `async def` over an awaited
+supabase `AsyncClient`, so concurrent requests share the event loop instead of
+occupying a threadpool worker each.
 
 Error shape is FastAPI's `{"detail": ...}`, matching the rest of the API. This
 is the moment `admin.py`'s `TODO(lld.md §4)` anticipated — problem+json was to
@@ -65,7 +65,7 @@ CREATE_FAILED = (
 
 
 @router.post("", response_model=TicketCreated, status_code=201)
-def create_ticket(payload: CreateTicketRequest) -> TicketCreated:
+async def create_ticket(payload: CreateTicketRequest) -> TicketCreated:
     """Open a ticket from the customer-facing form.
 
     201, not 200: this creates a resource and returns its identity. The customer
@@ -78,7 +78,7 @@ def create_ticket(payload: CreateTicketRequest) -> TicketCreated:
     at `new` is a complete, valid ticket.
     """
     try:
-        return ticket_service.create_ticket(
+        return await ticket_service.create_ticket(
             subject=payload.subject.strip(),
             body=payload.body.strip(),
             customer_email=payload.customer_email.strip().lower(),
@@ -90,7 +90,7 @@ def create_ticket(payload: CreateTicketRequest) -> TicketCreated:
 
 
 @router.get("", response_model=TicketPage)
-def list_tickets(
+async def list_tickets(
     status: Literal[
         "new",
         "processing",
@@ -109,7 +109,7 @@ def list_tickets(
 ) -> TicketPage:
     """A page of the ticket queue, newest first."""
     try:
-        return ticket_service.build_ticket_page(
+        return await ticket_service.build_ticket_page(
             status=status, severity=severity, search=search, limit=limit, offset=offset
         )
     except Exception:
@@ -118,10 +118,10 @@ def list_tickets(
 
 
 @router.get("/{ticket_id}", response_model=TicketDetail)
-def get_ticket(ticket_id: str) -> TicketDetail:
+async def get_ticket(ticket_id: str) -> TicketDetail:
     """One ticket plus its audit trail."""
     try:
-        return ticket_service.get_ticket(ticket_id)
+        return await ticket_service.get_ticket(ticket_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket.") from None
     except Exception:
@@ -130,7 +130,7 @@ def get_ticket(ticket_id: str) -> TicketDetail:
 
 
 @router.post("/{ticket_id}/escalate", response_model=Ticket)
-def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Ticket:
+async def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Ticket:
     """Hand a ticket to a specialist department (Path B).
 
     409 on an illegal transition, per lld.md §2. Not 400: the request is
@@ -138,7 +138,7 @@ def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Ticket:
     the conflict is with the resource, not the payload.
     """
     try:
-        return ticket_service.escalate_ticket(ticket_id, payload.department_id, payload.note)
+        return await ticket_service.escalate_ticket(ticket_id, payload.department_id, payload.note)
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket.") from None
     except UnknownDepartment as exc:
@@ -151,7 +151,7 @@ def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Ticket:
 
 
 @router.post("/{ticket_id}/resolve", response_model=Ticket)
-def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticket:
+async def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticket:
     """Close a ticket, stamping `resolution_path`.
 
     The path is derived from the ticket's own history, not from the request —
@@ -159,7 +159,7 @@ def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticket:
     escalation-rate metric, which is why it does not accept the value.
     """
     try:
-        return ticket_service.resolve_ticket(ticket_id, payload.note)
+        return await ticket_service.resolve_ticket(ticket_id, payload.note)
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket.") from None
     except IllegalTransition as exc:

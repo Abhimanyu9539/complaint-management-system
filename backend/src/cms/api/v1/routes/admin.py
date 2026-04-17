@@ -1,11 +1,14 @@
 """Read-only admin endpoints, backing the frontend's admin panel.
 
-Every handler is deliberately sync `def`, not `async def`. `health.py` is async
-because it uses `httpx.AsyncClient`; the supabase client and the Qdrant client
-used here are both *blocking*. A blocking call inside `async def` stalls the
-whole event loop for every concurrent request, which is the easiest way to make
-an API mysteriously slow. Sync handlers are dispatched to FastAPI's threadpool,
-which is correct for this.
+Every handler is `async def`, and everything below them is awaited: the
+supabase client is `AsyncClient` (see `db/session.py`) and Qdrant is reached
+through `AsyncQdrantClient`. Concurrency here is bounded by the event loop
+rather than by FastAPI's threadpool, which is all the sync handlers these
+replaced could use.
+
+The one call that is *not* natively async is the vector-store embed/upsert on
+the ingestion path; it is thread-offloaded rather than awaited inline. See
+`ingestion/load/vector_loader.py`.
 
 Error shape: FastAPI's `{"detail": ...}`. lld.md §4 specifies RFC 7807
 `application/problem+json`, and nothing in the codebase implements it yet;
@@ -63,17 +66,17 @@ SEED_CORPUS_UNAVAILABLE = (
 
 
 @router.get("/overview", response_model=OverviewResponse)
-def get_overview() -> OverviewResponse:
+async def get_overview() -> OverviewResponse:
     """Document counts, job counts, the live queue and stuck documents."""
     try:
-        return admin_stats.build_overview()
+        return await admin_stats.build_overview()
     except Exception:
         logger.exception("Failed to build the admin overview")
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
 @router.get("/storage", response_model=StorageResponse)
-def get_storage() -> StorageResponse:
+async def get_storage() -> StorageResponse:
     """Qdrant collection stats, chunk-row counts and stored policy files.
 
     Reaching Qdrant is the slow part, and an unreachable vector store does not
@@ -81,14 +84,14 @@ def get_storage() -> StorageResponse:
     so the Supabase half still renders.
     """
     try:
-        return admin_stats.build_storage()
+        return await admin_stats.build_storage()
     except Exception:
         logger.exception("Failed to build the admin storage view")
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
 @router.get("/ingestion/jobs", response_model=JobPage)
-def list_ingestion_jobs(
+async def list_ingestion_jobs(
     status: Literal["queued", "running", "done", "failed"] | None = Query(None),
     doc_type: Literal["case", "policy"] | None = Query(None),
     search: str | None = Query(None, max_length=200),
@@ -97,7 +100,7 @@ def list_ingestion_jobs(
 ) -> JobPage:
     """A page of the append-only ingestion ops log, newest first."""
     try:
-        return admin_stats.build_job_page(
+        return await admin_stats.build_job_page(
             status=status, doc_type=doc_type, search=search, limit=limit, offset=offset
         )
     except Exception:
@@ -106,12 +109,12 @@ def list_ingestion_jobs(
 
 
 @router.post("/ingestion/jobs", response_model=TriggerIngestionResponse, status_code=202)
-def trigger_ingestion_job(
+async def trigger_ingestion_job(
     payload: TriggerIngestionRequest, background_tasks: BackgroundTasks
 ) -> TriggerIngestionResponse:
     """Queue a manual ingest. Returns before the embedding run finishes — see admin-api.md §4."""
     try:
-        return admin_ingest.trigger_ingestion(payload, background_tasks)
+        return await admin_ingest.trigger_ingestion(payload, background_tasks)
     except admin_ingest.UnknownDocument as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except FileNotFoundError:
@@ -125,10 +128,10 @@ def trigger_ingestion_job(
 @router.post(
     "/ingestion/jobs/{job_id}/retry", response_model=TriggerIngestionResponse, status_code=202
 )
-def retry_ingestion_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestionResponse:
+async def retry_ingestion_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestionResponse:
     """Re-ingest the document a finished/failed job referenced — see admin-api.md §5."""
     try:
-        return admin_ingest.retry_job(job_id, background_tasks)
+        return await admin_ingest.retry_job(job_id, background_tasks)
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ingestion job.") from None
     except Exception:
@@ -141,7 +144,7 @@ def retry_ingestion_job(job_id: str, background_tasks: BackgroundTasks) -> Trigg
     response_model=TriggerIngestionResponse,
     status_code=202,
 )
-def rerun_stuck_document(
+async def rerun_stuck_document(
     doc_type: Literal["case", "policy"], document_id: str, background_tasks: BackgroundTasks
 ) -> TriggerIngestionResponse:
     """Re-run a document stuck at `processing` — the dashboard queue panel's action.
@@ -152,7 +155,7 @@ def rerun_stuck_document(
     the queue panel's `queue.stuck[].id` already is — see admin-api.md §4a.
     """
     try:
-        return admin_ingest.rerun_stuck_document(doc_type, document_id, background_tasks)
+        return await admin_ingest.rerun_stuck_document(doc_type, document_id, background_tasks)
     except admin_ingest.UnknownDocument as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception:
@@ -161,27 +164,27 @@ def rerun_stuck_document(
 
 
 @router.get("/ingestion/summary", response_model=IngestionSummaryResponse)
-def get_ingestion_summary(days: int = Query(30, ge=1, le=90)) -> IngestionSummaryResponse:
+async def get_ingestion_summary(days: int = Query(30, ge=1, le=90)) -> IngestionSummaryResponse:
     """Per-day job counts, duration percentiles and success rate over a window.
 
     Capped at 90 days: the window is aggregated in memory, and the repository
     read behind it is a single unpaged select.
     """
     try:
-        return admin_stats.build_ingestion_summary(days)
+        return await admin_stats.build_ingestion_summary(days)
     except Exception:
         logger.exception("Failed to build the ingestion summary for %d days", days)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
 @router.get("/documents", response_model=DocumentOptionPage)
-def list_documents(
+async def list_documents(
     doc_type: Literal["case", "policy"] = Query(...),
     limit: int = Query(200, ge=1, le=500),
 ) -> DocumentOptionPage:
     """Seed-corpus entries and their index status, for the single-document ingest picker."""
     try:
-        return DocumentOptionPage(items=admin_stats.build_document_options(doc_type, limit))
+        return DocumentOptionPage(items=await admin_stats.build_document_options(doc_type, limit))
     except FileNotFoundError:
         logger.exception("Seed corpus directory not readable while listing %s documents", doc_type)
         raise HTTPException(status_code=503, detail=SEED_CORPUS_UNAVAILABLE) from None
@@ -191,7 +194,7 @@ def list_documents(
 
 
 @router.get("/escalation", response_model=EscalationSummaryResponse)
-def get_escalation_summary(days: int = Query(30, ge=1, le=90)) -> EscalationSummaryResponse:
+async def get_escalation_summary(days: int = Query(30, ge=1, le=90)) -> EscalationSummaryResponse:
     """The escalation rate, the ticket funnel and the per-department split.
 
     cms.md §2's north-star metric. Note that `escalation_rate` is null rather
@@ -199,17 +202,17 @@ def get_escalation_summary(days: int = Query(30, ge=1, le=90)) -> EscalationSumm
     that as "no data", never as 0%.
     """
     try:
-        return admin_stats.build_escalation_summary(days)
+        return await admin_stats.build_escalation_summary(days)
     except Exception:
         logger.exception("Failed to build the escalation summary for %d days", days)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
 @router.get("/departments", response_model=DepartmentOptionPage)
-def list_departments() -> DepartmentOptionPage:
+async def list_departments() -> DepartmentOptionPage:
     """The closed set of twelve routing targets, for the escalate picker."""
     try:
-        return DepartmentOptionPage(items=admin_stats.build_departments())
+        return DepartmentOptionPage(items=await admin_stats.build_departments())
     except Exception:
         logger.exception("Failed to list departments")
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
