@@ -36,7 +36,7 @@ EVENTS: tuple[str, ...] = (
 )
 
 
-def append_event(
+async def append_event(
     ticket_id: str,
     event: str,
     payload: dict | None = None,
@@ -58,7 +58,7 @@ def append_event(
         logger.warning("Unrecognised ticket event %r for ticket %s", event, ticket_id)
 
     try:
-        get_supabase().table(TABLE).insert(
+        await get_supabase().table(TABLE).insert(
             {
                 "ticket_id": ticket_id,
                 "event": event,
@@ -74,14 +74,14 @@ def append_event(
         )
 
 
-def list_events(ticket_id: str, limit: int = 200) -> list[dict]:
+async def list_events(ticket_id: str, limit: int = 200) -> list[dict]:
     """A ticket's history, oldest first — the drawer's timeline.
 
     Oldest first because a timeline is read forwards; the index on
     `(ticket_id, created_at)` serves this order directly.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select(EVENT_COLUMNS)

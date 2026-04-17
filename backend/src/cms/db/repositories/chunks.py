@@ -12,13 +12,13 @@ from cms.db.session import get_supabase
 logger = logging.getLogger(__name__)
 
 
-def upsert_chunks(chunk_table: str, fk_column: str, rows: list[dict]) -> list[dict]:
+async def upsert_chunks(chunk_table: str, fk_column: str, rows: list[dict]) -> list[dict]:
     """Upsert chunk rows, returning them (with ids) in chunk_index order.
 
     Conflicting on `(fk_column, chunk_index)` is what makes a re-ingest update
     rows in place instead of appending a second copy of the document.
     """
-    response = (
+    response = await (
         get_supabase()
         .table(chunk_table)
         .upsert(rows, on_conflict=f"{fk_column},chunk_index")
@@ -27,7 +27,7 @@ def upsert_chunks(chunk_table: str, fk_column: str, rows: list[dict]) -> list[di
     return sorted(response.data, key=lambda row: row["chunk_index"])
 
 
-def count_chunks(chunk_table: str) -> int:
+async def count_chunks(chunk_table: str) -> int:
     """Total rows in a chunk table, for the admin storage panel.
 
     Compared against the Qdrant point count to surface drift: Postgres is
@@ -38,7 +38,7 @@ def count_chunks(chunk_table: str) -> int:
     "nothing indexed" when it actually means "we could not ask".
     """
     try:
-        response = (
+        response = await (
             get_supabase().table(chunk_table).select("id", count="exact", head=True).execute()
         )
     except Exception:
@@ -47,7 +47,7 @@ def count_chunks(chunk_table: str) -> int:
     return response.count or 0
 
 
-def delete_chunks_from(
+async def delete_chunks_from(
     chunk_table: str, fk_column: str, document_id: str, start_index: int
 ) -> None:
     """Delete this document's chunks at or beyond `start_index`.
@@ -56,6 +56,6 @@ def delete_chunks_from(
     previous version survives as orphaned rows pointing at content that no
     longer exists.
     """
-    get_supabase().table(chunk_table).delete().eq(fk_column, document_id).gte(
+    await get_supabase().table(chunk_table).delete().eq(fk_column, document_id).gte(
         "chunk_index", start_index
     ).execute()

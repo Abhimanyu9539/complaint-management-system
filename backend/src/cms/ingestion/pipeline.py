@@ -30,7 +30,7 @@ Idempotency has three layers, so re-running a seed or a retry is free and safe:
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from langsmith import traceable
@@ -42,7 +42,12 @@ from cms.db.repositories.cases import (
     mark_case_indexed,
     mark_case_processing,
 )
-from cms.db.repositories.ingestion_jobs import claim_job, fail_job, finish_job, start_job
+from cms.db.repositories.ingestion_jobs import (
+    claim_job,
+    fail_job,
+    finish_job,
+    start_job,
+)
 from cms.db.repositories.policies import (
     fetch_policy,
     mark_policy_failed,
@@ -76,8 +81,8 @@ class IngestResult:
     point_count: int
 
 
-def _record_failure(
-    mark_document_failed: Callable[[str, str], None],
+async def _record_failure(
+    mark_document_failed: Callable[[str, str], Awaitable[None]],
     document_id: str,
     job_id: str | None,
     error: str,
@@ -88,15 +93,15 @@ def _record_failure(
     and it must not replace the original exception with a confusing second one.
     """
     try:
-        mark_document_failed(document_id, error)
+        await mark_document_failed(document_id, error)
         if job_id:
-            fail_job(job_id, error)
+            await fail_job(job_id, error)
     except Exception:
         logger.exception("Could not record failure state for document %s", document_id)
 
 
 @traceable(name="ingest_case", project_name=INGEST_PROJECT)
-def ingest_case(
+async def ingest_case(
     case_id: str, raw_text: str, *, force: bool = False, job_id: str | None = None
 ) -> IngestResult:
     """Ingest one case end to end. Returns what happened; raises on failure.
@@ -110,7 +115,7 @@ def ingest_case(
     """
     collection = get_settings().qdrant_cases_collection
 
-    case = fetch_case(case_id)
+    case = await fetch_case(case_id)
     content_hash = compute_content_hash(raw_text)
 
     if not force and case["status"] == "indexed" and case["content_hash"] == content_hash:
@@ -120,31 +125,33 @@ def ingest_case(
             case["title"],
         )
         if job_id:
-            finish_job(job_id, 0, 0)
+            await finish_job(job_id, 0, 0)
         return IngestResult(case_id, "skipped", 0, 0)
 
     try:
         if job_id:
-            claim_job(job_id)
+            await claim_job(job_id)
         else:
-            job_id = start_job("case", case_id)
-        mark_case_processing(case_id)
+            job_id = await start_job("case", case_id)
+        await mark_case_processing(case_id)
 
         chunk_texts = chunk_case(raw_text)
-        chunk_rows = write_chunks("case_chunks", "case_id", case_id, chunk_texts)
+        chunk_rows = await write_chunks("case_chunks", "case_id", case_id, chunk_texts)
 
         # Snapshot before writing, so the diff afterwards is exactly the points
         # the previous version left behind.
-        previous_point_ids = existing_point_ids(collection, case_id)
-        point_ids = upsert_points(collection, case_id, chunk_rows, case_metadata(case))
-        delete_stale_points(collection, case_id, previous_point_ids - set(point_ids))
+        previous_point_ids = await existing_point_ids(collection, case_id)
+        point_ids = await upsert_points(
+            collection, case_id, chunk_rows, case_metadata(case)
+        )
+        await delete_stale_points(collection, case_id, previous_point_ids - set(point_ids))
 
-        mark_case_indexed(case_id, content_hash, len(chunk_rows))
-        finish_job(job_id, len(chunk_rows), len(point_ids))
+        await mark_case_indexed(case_id, content_hash, len(chunk_rows))
+        await finish_job(job_id, len(chunk_rows), len(point_ids))
 
     except Exception as exc:
         logger.exception("Ingest failed for case %s ('%s')", case_id, case["title"])
-        _record_failure(
+        await _record_failure(
             mark_case_failed, case_id, job_id, f"{type(exc).__name__}: {exc}"
         )
         raise
@@ -159,7 +166,7 @@ def ingest_case(
 
 
 @traceable(name="ingest_policy", project_name=INGEST_PROJECT)
-def ingest_policy(
+async def ingest_policy(
     policy_id: str, raw_text: str, *, force: bool = False, job_id: str | None = None
 ) -> IngestResult:
     """Ingest one policy end to end. Returns what happened; raises on failure.
@@ -169,7 +176,7 @@ def ingest_policy(
     """
     collection = get_settings().qdrant_policies_collection
 
-    policy = fetch_policy(policy_id)
+    policy = await fetch_policy(policy_id)
     content_hash = compute_content_hash(raw_text)
 
     if not force and policy["status"] == "indexed" and policy["content_hash"] == content_hash:
@@ -179,33 +186,35 @@ def ingest_policy(
             policy["title"],
         )
         if job_id:
-            finish_job(job_id, 0, 0)
+            await finish_job(job_id, 0, 0)
         return IngestResult(policy_id, "skipped", 0, 0)
 
     try:
         if job_id:
-            claim_job(job_id)
+            await claim_job(job_id)
         else:
-            job_id = start_job("policy", policy_id)
-        mark_policy_processing(policy_id)
+            job_id = await start_job("policy", policy_id)
+        await mark_policy_processing(policy_id)
 
         chunk_texts = chunk_policy(raw_text)
-        chunk_rows = write_chunks("policy_chunks", "policy_id", policy_id, chunk_texts)
+        chunk_rows = await write_chunks("policy_chunks", "policy_id", policy_id, chunk_texts)
 
-        previous_point_ids = existing_point_ids(collection, policy_id)
-        point_ids = upsert_points(
+        previous_point_ids = await existing_point_ids(collection, policy_id)
+        point_ids = await upsert_points(
             collection, policy_id, chunk_rows, policy_metadata(policy)
         )
-        delete_stale_points(collection, policy_id, previous_point_ids - set(point_ids))
+        await delete_stale_points(
+            collection, policy_id, previous_point_ids - set(point_ids)
+        )
 
-        mark_policy_indexed(policy_id, content_hash, len(chunk_rows))
-        finish_job(job_id, len(chunk_rows), len(point_ids))
+        await mark_policy_indexed(policy_id, content_hash, len(chunk_rows))
+        await finish_job(job_id, len(chunk_rows), len(point_ids))
 
     except Exception as exc:
         logger.exception(
             "Ingest failed for policy %s ('%s')", policy_id, policy["title"]
         )
-        _record_failure(
+        await _record_failure(
             mark_policy_failed, policy_id, job_id, f"{type(exc).__name__}: {exc}"
         )
         raise

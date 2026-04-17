@@ -9,6 +9,7 @@ It is null until the ticket is resolved, and that null is meaningful: it means
 "not yet decided", not "direct". Every read here preserves it.
 """
 
+import asyncio
 import logging
 
 from cms.db.repositories import utc_now_iso
@@ -49,7 +50,7 @@ OPEN_ESCALATED_STATUSES: tuple[str, ...] = ("escalated", "dept_responded")
 RESOLUTION_PATHS: tuple[str, ...] = ("direct", "escalated")
 
 
-def create_ticket(row: dict) -> dict:
+async def create_ticket(row: dict) -> dict:
     """Insert one ticket and return the created row.
 
     Returns the whole row rather than just the id, because `ticket_no` is
@@ -57,7 +58,7 @@ def create_ticket(row: dict) -> dict:
     reference number without reading back what the database assigned.
     """
     try:
-        response = get_supabase().table(TABLE).insert(row).execute()
+        response = await get_supabase().table(TABLE).insert(row).execute()
     except Exception:
         logger.exception("Failed to insert a %s row", TABLE)
         raise
@@ -67,14 +68,14 @@ def create_ticket(row: dict) -> dict:
     return response.data[0]
 
 
-def fetch_ticket(ticket_id: str) -> dict:
+async def fetch_ticket(ticket_id: str) -> dict:
     """One ticket by id.
 
     Raises `LookupError` when it does not exist, matching `cases.fetch_case`, so
     the route layer can map a missing ticket to 404 without inspecting shapes.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select(TICKET_COLUMNS)
@@ -92,7 +93,7 @@ def fetch_ticket(ticket_id: str) -> dict:
     return rows[0]
 
 
-def update_ticket(ticket_id: str, patch: dict) -> dict:
+async def update_ticket(ticket_id: str, patch: dict) -> dict:
     """Apply a partial update and return the updated row.
 
     No status validation here on purpose — `ticket_service.transition` owns the
@@ -100,7 +101,7 @@ def update_ticket(ticket_id: str, patch: dict) -> dict:
     copies drift apart.
     """
     try:
-        response = get_supabase().table(TABLE).update(patch).eq("id", ticket_id).execute()
+        response = await get_supabase().table(TABLE).update(patch).eq("id", ticket_id).execute()
     except Exception:
         logger.exception("Failed to update %s row %s", TABLE, ticket_id)
         raise
@@ -110,13 +111,13 @@ def update_ticket(ticket_id: str, patch: dict) -> dict:
     return response.data[0]
 
 
-def mark_resolved(ticket_id: str, resolution_path: str) -> dict:
+async def mark_resolved(ticket_id: str, resolution_path: str) -> dict:
     """Close a ticket, stamping the path it took to get there.
 
     `resolved_at` is written here rather than by a trigger so that resolving is
     one round trip and the timestamp matches the row the caller gets back.
     """
-    return update_ticket(
+    return await update_ticket(
         ticket_id,
         {
             "status": "resolved",
@@ -135,7 +136,7 @@ def mark_resolved(ticket_id: str, resolution_path: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def list_tickets(
+async def list_tickets(
     *,
     status: str | None = None,
     severity: str | None = None,
@@ -164,7 +165,7 @@ def list_tickets(
             pattern = f"%{search.replace(',', ' ')}%"
             query = query.or_(f"subject.ilike.{pattern},customer_email.ilike.{pattern}")
 
-        response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
+        response = await query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
     except Exception:
         logger.exception("Failed to list %s rows", TABLE)
         raise
@@ -172,31 +173,34 @@ def list_tickets(
     return response.data or [], response.count or 0
 
 
-def count_tickets_by_status() -> dict[str, int]:
+async def count_tickets_by_status() -> dict[str, int]:
     """How many tickets sit in each status — the funnel.
 
     One `count="exact", head=True` per status, for the reason spelled out in
     `ingestion_jobs.count_jobs_by_status`: a bare select caps at 1000 rows and
-    would under-count silently.
+    would under-count silently. The eight probes are independent, so they go out
+    as one wave rather than eight sequential round-trips.
     """
-    counts: dict[str, int] = {}
+
+    async def count_one(status: str) -> int:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select("id", count="exact", head=True)
+            .eq("status", status)
+            .execute()
+        )
+        return response.count or 0
+
     try:
-        for status in TICKET_STATUSES:
-            response = (
-                get_supabase()
-                .table(TABLE)
-                .select("id", count="exact", head=True)
-                .eq("status", status)
-                .execute()
-            )
-            counts[status] = response.count or 0
+        counts = await asyncio.gather(*(count_one(s) for s in TICKET_STATUSES))
     except Exception:
         logger.exception("Failed to count %s rows by status", TABLE)
         raise
-    return counts
+    return dict(zip(TICKET_STATUSES, counts, strict=True))
 
 
-def count_by_resolution_path() -> dict[str, int]:
+async def count_by_resolution_path() -> dict[str, int]:
     """Resolved tickets split by the path they took — the escalation numerator
     and denominator.
 
@@ -205,27 +209,29 @@ def count_by_resolution_path() -> dict[str, int]:
     yet and must not be counted as either: it has not finished, and guessing
     would move the metric before the outcome is known.
     """
-    counts: dict[str, int] = {}
+
+    async def count_one(path: str) -> int:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select("id", count="exact", head=True)
+            .eq("resolution_path", path)
+            .execute()
+        )
+        return response.count or 0
+
     try:
-        for path in RESOLUTION_PATHS:
-            response = (
-                get_supabase()
-                .table(TABLE)
-                .select("id", count="exact", head=True)
-                .eq("resolution_path", path)
-                .execute()
-            )
-            counts[path] = response.count or 0
+        counts = await asyncio.gather(*(count_one(p) for p in RESOLUTION_PATHS))
     except Exception:
         logger.exception("Failed to count %s rows by resolution path", TABLE)
         raise
-    return counts
+    return dict(zip(RESOLUTION_PATHS, counts, strict=True))
 
 
-def count_open_escalated() -> int:
+async def count_open_escalated() -> int:
     """Tickets escalated to a department and still waiting on one."""
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select("id", count="exact", head=True)
@@ -238,7 +244,7 @@ def count_open_escalated() -> int:
     return response.count or 0
 
 
-def count_escalations_by_department() -> dict[str, int]:
+async def count_escalations_by_department() -> dict[str, int]:
     """Escalation counts keyed by `escalated_dept`.
 
     Reads the rows rather than issuing one count per department: the department
@@ -248,7 +254,7 @@ def count_escalations_by_department() -> dict[str, int]:
     which is the direction that matters.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select("escalated_dept")
@@ -275,7 +281,7 @@ def count_escalations_by_department() -> dict[str, int]:
     return counts
 
 
-def list_tickets_since(since_iso: str, limit: int = 5000) -> list[dict]:
+async def list_tickets_since(since_iso: str, limit: int = 5000) -> list[dict]:
     """Every ticket created at or after `since_iso`, for the per-day charts.
 
     Same safety-valve reasoning as `ingestion_jobs.list_jobs_since`: the caller
@@ -283,7 +289,7 @@ def list_tickets_since(since_iso: str, limit: int = 5000) -> list[dict]:
     chart rather than shorten it.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select("id,status,resolution_path,created_at,resolved_at")

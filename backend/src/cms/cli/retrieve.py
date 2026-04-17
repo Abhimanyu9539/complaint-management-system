@@ -8,6 +8,7 @@ Usage (from anywhere, once the project is installed):
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
@@ -53,6 +54,15 @@ def _snippet(text: str) -> str:
 
 
 def main() -> int:
+    """Sync shell for the `[project.scripts]` entry point.
+
+    Exactly one `asyncio.run` per process: the cached supabase and Qdrant
+    clients bind their connection pools to the loop it creates.
+    """
+    return asyncio.run(_main())
+
+
+async def _main() -> int:
     setup_logging()
 
     # Seeded policy text is arbitrary UTF-8; Windows terminals default stdout to
@@ -94,7 +104,7 @@ def main() -> int:
         parser.error("--top-k must be at least 1")
 
     try:
-        hits = RETRIEVERS[args.corpus][args.mode](args.query, k=args.top_k)
+        hits = await RETRIEVERS[args.corpus][args.mode](args.query, k=args.top_k)
     except Exception:
         logger.exception("Retrieval probe failed")
         return 1

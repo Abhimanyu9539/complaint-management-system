@@ -38,7 +38,7 @@ _CONTENT_TYPES: dict[str, str] = {
 _DEFAULT_CONTENT_TYPE = "application/octet-stream"
 
 
-def upload_policy_file(path: Path) -> tuple[str, str]:
+async def upload_policy_file(path: Path) -> tuple[str, str]:
     """Upload one policy file to the policy bucket, upserting by key.
 
     Returns `(storage_path, mime_type)`: `storage_path` is the key the client
@@ -57,7 +57,7 @@ def upload_policy_file(path: Path) -> tuple[str, str]:
     bucket = get_settings().supabase_policy_bucket
 
     try:
-        response = (
+        response = await (
             get_supabase()
             .storage.from_(bucket)
             .upload(

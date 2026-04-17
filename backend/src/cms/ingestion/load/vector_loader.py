@@ -16,7 +16,10 @@ import uuid
 from langchain_core.documents import Document
 from qdrant_client import models
 
-from cms.retrieval.vector_store.qdrant_store import get_qdrant_client, get_vector_store
+from cms.retrieval.vector_store.qdrant_store import (
+    get_async_qdrant_client,
+    get_vector_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +36,9 @@ def build_point_id(document_id: str, chunk_index: int, chunk_hash: str) -> str:
     return str(uuid.uuid5(POINT_ID_NAMESPACE, f"{document_id}:{chunk_index}:{chunk_hash}"))
 
 
-def existing_point_ids(collection_name: str, document_id: str) -> set[str]:
+async def existing_point_ids(collection_name: str, document_id: str) -> set[str]:
     """All point ids currently stored for this document in this collection."""
-    client = get_qdrant_client()
+    client = get_async_qdrant_client()
 
     point_filter = models.Filter(
         must=[
@@ -49,7 +52,7 @@ def existing_point_ids(collection_name: str, document_id: str) -> set[str]:
     ids: set[str] = set()
     offset = None
     while True:
-        points, offset = client.scroll(
+        points, offset = await client.scroll(
             collection_name=collection_name,
             scroll_filter=point_filter,
             limit=_SCROLL_PAGE,
@@ -64,7 +67,7 @@ def existing_point_ids(collection_name: str, document_id: str) -> set[str]:
     return ids
 
 
-def upsert_points(
+async def upsert_points(
     collection_name: str,
     document_id: str,
     chunk_rows: list[dict],
@@ -78,6 +81,11 @@ def upsert_points(
     `add_documents` batches the embedding calls internally, so a document costs
     one OpenAI round-trip rather than one per chunk — the silent cost/latency
     trap called out in steps.md §4.
+
+    Called as `aadd_documents`: `QdrantVectorStore` implements no async methods,
+    so this is the LangChain base class's thread offload. That is the point —
+    it is a blocking embed-and-upsert of several seconds, and this runs inside
+    a background task on the event loop.
     """
     documents: list[Document] = []
     point_ids: list[str] = []
@@ -97,19 +105,21 @@ def upsert_points(
             )
         )
 
-    get_vector_store(collection_name).add_documents(documents=documents, ids=point_ids)
+    await get_vector_store(collection_name).aadd_documents(
+        documents=documents, ids=point_ids
+    )
     return point_ids
 
 
-def delete_stale_points(
+async def delete_stale_points(
     collection_name: str, document_id: str, stale_ids: set[str]
 ) -> None:
     """Remove the points a previous version of this document left behind."""
     if not stale_ids:
         return
 
-    client = get_qdrant_client()
-    client.delete(
+    client = get_async_qdrant_client()
+    await client.delete(
         collection_name=collection_name,
         points_selector=models.PointIdsList(points=sorted(stale_ids)),
     )

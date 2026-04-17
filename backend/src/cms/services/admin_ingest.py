@@ -1,11 +1,15 @@
 """Service logic behind the admin ingestion trigger/retry routes.
 
 The route layer must return before the embedding run finishes (admin-api.md
-§4: a synchronous call would hold a worker for the length of an embedding run
-and the request would time out at the proxy long before it finishes). Every
-path here queues a job row synchronously, then hands the actual
-`ingest_case`/`ingest_policy` call to a `BackgroundTasks` callback — FastAPI
-runs it in the threadpool after the response is sent.
+§4: an inline call would hold the request for the length of an embedding run
+and time out at the proxy long before it finishes). Every path here queues a
+job row, then hands the actual `ingest_case`/`ingest_policy` call to a
+`BackgroundTasks` callback that FastAPI runs after the response is sent.
+
+Those callbacks are `async def`, so FastAPI awaits them on the event loop
+rather than dispatching them to the threadpool. Everything they reach is
+either awaited I/O or thread-offloaded — see `ingestion/load/vector_loader.py`,
+where the embed-and-upsert step is the one call long enough to matter.
 
 Two distinct background paths exist, over two distinct identifiers:
 
@@ -21,7 +25,6 @@ Two distinct background paths exist, over two distinct identifiers:
 """
 
 import logging
-import threading
 from uuid import uuid4
 
 from fastapi import BackgroundTasks
@@ -41,37 +44,42 @@ class UnknownDocument(Exception):
     """`source_ref` names no file in the seed corpus. Maps to 422."""
 
 
+BUSY = "Another ingestion job for this corpus is already running."
+
 # One ingest run at a time per corpus: two concurrent runs would race on the
 # same Qdrant points and chunk rows (both key on document id, not job id). A
-# lock, not a queue — the admin panel is operated by one person, and a second
+# guard, not a queue — the admin panel is operated by one person, and a second
 # click should fail loudly rather than queue silently behind the first and
 # leave the operator staring at "queued" with no explanation.
-_locks: dict[str, threading.Lock] = {"case": threading.Lock(), "policy": threading.Lock()}
+#
+# A plain set rather than a lock: these callbacks are coroutines on a single
+# event loop, so the membership test and the `add` below cannot be interleaved
+# — there is no `await` between them. A `threading.Lock` would guard against a
+# concurrency that no longer exists here.
+_running: set[str] = set()
 
 
-def _run_document(doc_type: str, document_id: str, job_id: str) -> None:
-    lock = _locks[doc_type]
-    if not lock.acquire(blocking=False):
-        ingestion_jobs.fail_job(
-            job_id, "Another ingestion job for this corpus is already running."
-        )
+async def _run_document(doc_type: str, document_id: str, job_id: str) -> None:
+    if doc_type in _running:
+        await ingestion_jobs.fail_job(job_id, BUSY)
         return
+    _running.add(doc_type)
     try:
-        text = (
+        text = await (
             reingest.case_text(document_id)
             if doc_type == "case"
             else reingest.policy_text(document_id)
         )
         ingest = ingest_case if doc_type == "case" else ingest_policy
-        ingest(document_id, text, job_id=job_id)
+        await ingest(document_id, text, job_id=job_id)
     except Exception as exc:
         logger.exception("Background ingest failed for %s %s", doc_type, document_id)
-        ingestion_jobs.fail_job(job_id, f"{type(exc).__name__}: {exc}")
+        await ingestion_jobs.fail_job(job_id, f"{type(exc).__name__}: {exc}")
     finally:
-        lock.release()
+        _running.discard(doc_type)
 
 
-def _run_seed_document(doc_type: str, source_ref: str, job_id: str) -> None:
+async def _run_seed_document(doc_type: str, source_ref: str, job_id: str) -> None:
     """Register one seed-corpus file (by `source_ref`) and ingest it.
 
     The job row was queued with a placeholder document id — a real one does
@@ -80,31 +88,29 @@ def _run_seed_document(doc_type: str, source_ref: str, job_id: str) -> None:
     if the ingest then fails, the row still points at a real document and
     `retry_job` can act on it, rather than being stuck pointing at nothing.
     """
-    lock = _locks[doc_type]
-    if not lock.acquire(blocking=False):
-        ingestion_jobs.fail_job(
-            job_id, "Another ingestion job for this corpus is already running."
-        )
+    if doc_type in _running:
+        await ingestion_jobs.fail_job(job_id, BUSY)
         return
+    _running.add(doc_type)
     try:
         if doc_type == "case":
             case = seed_module.find_seed_case(source_ref)
-            document_id, text = seed_module.register_seed_case(case)
-            ingestion_jobs.set_job_document(job_id, document_id)
-            ingest_case(document_id, text, job_id=job_id)
+            document_id, text = await seed_module.register_seed_case(case)
+            await ingestion_jobs.set_job_document(job_id, document_id)
+            await ingest_case(document_id, text, job_id=job_id)
         else:
             path = seed_module.find_seed_policy(source_ref)
-            document_id, body, _storage_path = seed_module.register_seed_policy(path)
-            ingestion_jobs.set_job_document(job_id, document_id)
-            ingest_policy(document_id, body, job_id=job_id)
+            document_id, body, _storage_path = await seed_module.register_seed_policy(path)
+            await ingestion_jobs.set_job_document(job_id, document_id)
+            await ingest_policy(document_id, body, job_id=job_id)
     except Exception as exc:
         logger.exception("Background seed ingest failed for %s %s", doc_type, source_ref)
-        ingestion_jobs.fail_job(job_id, f"{type(exc).__name__}: {exc}")
+        await ingestion_jobs.fail_job(job_id, f"{type(exc).__name__}: {exc}")
     finally:
-        lock.release()
+        _running.discard(doc_type)
 
 
-def _run_corpus(doc_type: str, batch_job_id: str) -> None:
+async def _run_corpus(doc_type: str, batch_job_id: str) -> None:
     """Re-seed a whole corpus, summarised onto one placeholder job row.
 
     Each document ingested along the way still gets its own normal job row —
@@ -112,31 +118,29 @@ def _run_corpus(doc_type: str, batch_job_id: str) -> None:
     passes a `job_id` down. `batch_job_id` exists only so the 202 response and
     the UI have a single row to point at and poll while that fans out.
     """
-    lock = _locks[doc_type]
-    if not lock.acquire(blocking=False):
-        ingestion_jobs.fail_job(
-            batch_job_id, "Another ingestion job for this corpus is already running."
-        )
+    if doc_type in _running:
+        await ingestion_jobs.fail_job(batch_job_id, BUSY)
         return
+    _running.add(doc_type)
     try:
-        ingestion_jobs.claim_job(batch_job_id)
-        summary = seed_module.run_seed_one_type(doc_type)
+        await ingestion_jobs.claim_job(batch_job_id)
+        summary = await seed_module.run_seed_one_type(doc_type)
         total = summary.failed + summary.indexed + summary.skipped
         if summary.failed:
-            ingestion_jobs.fail_job(
+            await ingestion_jobs.fail_job(
                 batch_job_id,
                 f"{summary.failed} of {total} document(s) failed — see their own job rows.",
             )
         else:
-            ingestion_jobs.finish_job(batch_job_id, summary.indexed, summary.indexed)
+            await ingestion_jobs.finish_job(batch_job_id, summary.indexed, summary.indexed)
     except Exception as exc:
         logger.exception("Corpus re-seed failed for doc_type=%s", doc_type)
-        ingestion_jobs.fail_job(batch_job_id, f"{type(exc).__name__}: {exc}")
+        await ingestion_jobs.fail_job(batch_job_id, f"{type(exc).__name__}: {exc}")
     finally:
-        lock.release()
+        _running.discard(doc_type)
 
 
-def trigger_ingestion(
+async def trigger_ingestion(
     payload: TriggerIngestionRequest, background_tasks: BackgroundTasks
 ) -> TriggerIngestionResponse:
     """Queue a job row synchronously, then hand the embedding work to a background task.
@@ -166,7 +170,7 @@ def trigger_ingestion(
         # register step inside `_run_seed_document`, which patches this row
         # via `set_job_document` before ingesting. See that function's
         # docstring, and `ingestion_jobs.document_id`'s NOT NULL constraint.
-        job_id = ingestion_jobs.queue_job(payload.doc_type, str(uuid4()))
+        job_id = await ingestion_jobs.queue_job(payload.doc_type, str(uuid4()))
         background_tasks.add_task(_run_seed_document, payload.doc_type, source_ref, job_id)
         return TriggerIngestionResponse(
             job_id=job_id,
@@ -180,7 +184,7 @@ def trigger_ingestion(
     # docstring — rows already outlive documents that get deleted), so a
     # summary row whose id never matched anything is an expected shape, not a
     # dangling reference.
-    batch_job_id = ingestion_jobs.queue_job(payload.doc_type, str(uuid4()))
+    batch_job_id = await ingestion_jobs.queue_job(payload.doc_type, str(uuid4()))
     background_tasks.add_task(_run_corpus, payload.doc_type, batch_job_id)
     corpus_label = "cases" if payload.doc_type == "case" else "policies"
     return TriggerIngestionResponse(
@@ -190,7 +194,7 @@ def trigger_ingestion(
     )
 
 
-def retry_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestionResponse:
+async def retry_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestionResponse:
     """Re-ingest the document a finished/failed job referenced.
 
     Raises LookupError (→ 404, mapped by the route) when the job id itself is
@@ -198,14 +202,14 @@ def retry_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestio
     has since been deleted: `ingestion_jobs.document_id` has no FK by design,
     so an orphaned reference is an expected outcome, not an exceptional one.
     """
-    job = ingestion_jobs.fetch_job(job_id)
+    job = await ingestion_jobs.fetch_job(job_id)
     doc_type, document_id = job["doc_type"], job["document_id"]
 
     try:
         if doc_type == "case":
-            fetch_case_for_reingest(document_id)
+            await fetch_case_for_reingest(document_id)
         else:
-            fetch_policy_for_reingest(document_id)
+            await fetch_policy_for_reingest(document_id)
     except LookupError:
         return TriggerIngestionResponse(
             job_id=job_id,
@@ -213,7 +217,7 @@ def retry_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestio
             message="The document this job referenced no longer exists.",
         )
 
-    new_job_id = ingestion_jobs.queue_job(doc_type, document_id)
+    new_job_id = await ingestion_jobs.queue_job(doc_type, document_id)
     background_tasks.add_task(_run_document, doc_type, document_id, new_job_id)
     return TriggerIngestionResponse(
         job_id=new_job_id,
@@ -222,7 +226,7 @@ def retry_job(job_id: str, background_tasks: BackgroundTasks) -> TriggerIngestio
     )
 
 
-def rerun_stuck_document(
+async def rerun_stuck_document(
     doc_type: str, document_id: str, background_tasks: BackgroundTasks
 ) -> TriggerIngestionResponse:
     """Re-run a document stuck at `processing` — the dashboard queue panel's action.
@@ -240,13 +244,13 @@ def rerun_stuck_document(
     """
     try:
         if doc_type == "case":
-            fetch_case_for_reingest(document_id)
+            await fetch_case_for_reingest(document_id)
         else:
-            fetch_policy_for_reingest(document_id)
+            await fetch_policy_for_reingest(document_id)
     except LookupError as exc:
         raise UnknownDocument(str(exc)) from None
 
-    job_id = ingestion_jobs.queue_job(doc_type, document_id)
+    job_id = await ingestion_jobs.queue_job(doc_type, document_id)
     background_tasks.add_task(_run_document, doc_type, document_id, job_id)
     return TriggerIngestionResponse(
         job_id=job_id,

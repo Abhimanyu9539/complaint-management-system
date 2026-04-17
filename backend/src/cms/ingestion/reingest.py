@@ -27,16 +27,16 @@ class DocumentTextUnavailable(Exception):
     """A document's raw body cannot be recovered by any known route."""
 
 
-def case_text(case_id: str) -> str:
+async def case_text(case_id: str) -> str:
     """Rebuild a case's embedded text from its own row.
 
     Cases are self-contained in Postgres (`complaint_text`, `dept_guidance`,
     `resolution_text`), so this is a straight read, not a search.
     """
-    return build_case_text(fetch_case_for_reingest(case_id))
+    return build_case_text(await fetch_case_for_reingest(case_id))
 
 
-def policy_text(policy_id: str) -> str:
+async def policy_text(policy_id: str) -> str:
     """Recover a policy's body: Supabase Storage first, the seed file second.
 
     Policies have no body column (`db/repositories/policies.py`'s module
@@ -46,12 +46,12 @@ def policy_text(policy_id: str) -> str:
     route; the seed directory is the fallback for a policy seeded before that
     migration ran, or if the object was since deleted from the bucket.
     """
-    row = fetch_policy_for_reingest(policy_id)
+    row = await fetch_policy_for_reingest(policy_id)
 
     storage_path = row.get("storage_path")
     if storage_path:
         try:
-            raw = _download_from_storage(storage_path)
+            raw = await _download_from_storage(storage_path)
         except Exception:
             logger.exception(
                 "Storage download failed for policy %s at %s; trying the seed file",
@@ -77,7 +77,7 @@ def policy_text(policy_id: str) -> str:
     )
 
 
-def _download_from_storage(storage_path: str) -> str:
+async def _download_from_storage(storage_path: str) -> str:
     bucket = get_settings().supabase_policy_bucket
-    data = get_supabase().storage.from_(bucket).download(storage_path)
+    data = await get_supabase().storage.from_(bucket).download(storage_path)
     return data.decode("utf-8")

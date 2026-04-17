@@ -12,6 +12,7 @@ ever touches a string key. Filtering, ordering and pagination are expressed as
 repository *arguments*, never as `.eq()` / `.order()` calls in this file.
 """
 
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -117,21 +118,22 @@ def _to_stuck_document(row: dict, doc_type: str) -> StuckDocument:
     )
 
 
-def _resolve_titles(rows: list[dict]) -> dict[str, str]:
+async def _resolve_titles(rows: list[dict]) -> dict[str, str]:
     """Look up document titles for a batch of job rows, both corpora at once.
 
     Two queries rather than one per row, and split by `doc_type` because the ids
     live in different tables — `ingestion_jobs.document_id` points at `cases` or
     `policies` depending on the row, which is exactly what Postgres cannot
-    express as a foreign key.
+    express as a foreign key. The two hit different tables, so they go together.
     """
     case_ids = [row["document_id"] for row in rows if row["doc_type"] == "case"]
     policy_ids = [row["document_id"] for row in rows if row["doc_type"] == "policy"]
 
-    titles: dict[str, str] = {}
-    titles.update(cases.titles_for_ids(case_ids))
-    titles.update(policies.titles_for_ids(policy_ids))
-    return titles
+    case_titles, policy_titles = await asyncio.gather(
+        cases.titles_for_ids(case_ids),
+        policies.titles_for_ids(policy_ids),
+    )
+    return {**case_titles, **policy_titles}
 
 
 def _to_document_counts(by_status: dict[str, int]) -> DocumentCounts:
@@ -143,18 +145,38 @@ def _to_document_counts(by_status: dict[str, int]) -> DocumentCounts:
 # ---------------------------------------------------------------------------
 
 
-def build_overview() -> OverviewResponse:
-    """Document counts, job counts, the live queue and stuck documents."""
-    case_counts = cases.count_cases_by_status()
-    policy_counts = policies.count_policies_by_status()
-    job_counts = ingestion_jobs.count_jobs_by_status()
+async def build_overview() -> OverviewResponse:
+    """Document counts, job counts, the live queue and stuck documents.
 
-    active_rows = ingestion_jobs.list_active_jobs()
-    active = [_to_job_summary(row, _resolve_titles(active_rows)) for row in active_rows]
+    The seven reads below are independent of one another, so they are issued as
+    one wave; only the title lookup has to wait, since it needs the job rows.
+    """
+    (
+        case_counts,
+        policy_counts,
+        job_counts,
+        active_rows,
+        processing_cases,
+        processing_policies,
+        last_ingest_at,
+    ) = await asyncio.gather(
+        cases.count_cases_by_status(),
+        policies.count_policies_by_status(),
+        ingestion_jobs.count_jobs_by_status(),
+        ingestion_jobs.list_active_jobs(),
+        cases.list_processing_cases(),
+        policies.list_processing_policies(),
+        ingestion_jobs.latest_finished_at(),
+    )
 
-    stuck = [
-        _to_stuck_document(row, "case") for row in cases.list_processing_cases()
-    ] + [_to_stuck_document(row, "policy") for row in policies.list_processing_policies()]
+    # Resolved once for the whole batch. This used to sit inside the
+    # comprehension, which re-queried both title tables per active job.
+    titles = await _resolve_titles(active_rows)
+    active = [_to_job_summary(row, titles) for row in active_rows]
+
+    stuck = [_to_stuck_document(row, "case") for row in processing_cases] + [
+        _to_stuck_document(row, "policy") for row in processing_policies
+    ]
 
     return OverviewResponse(
         documents=DocumentCountsByType(
@@ -168,13 +190,18 @@ def build_overview() -> OverviewResponse:
             queued_count=sum(1 for job in active if job.status == "queued"),
             running_count=sum(1 for job in active if job.status == "running"),
         ),
-        last_ingest_at=ingestion_jobs.latest_finished_at(),
+        last_ingest_at=last_ingest_at,
         generated_at=datetime.now(UTC).isoformat(),
     )
 
 
-def build_storage() -> StorageResponse:
-    """Qdrant collection stats, chunk-row counts and stored policy files."""
+async def build_storage() -> StorageResponse:
+    """Qdrant collection stats, chunk-row counts and stored policy files.
+
+    The two Qdrant probes and the three Supabase counts are independent, so all
+    five go out together — this panel spans both stores and used to pay for them
+    one after another.
+    """
     settings = get_settings()
     dims = settings.embedding_dims
 
@@ -183,36 +210,43 @@ def build_storage() -> StorageResponse:
         (settings.qdrant_policies_collection, "policy"),
     )
 
-    collections = []
-    for name, doc_type in specs:
-        # `collection_stats` never raises — an unreachable vector store still
-        # produces a row, so the Supabase half of this response survives it.
-        stats = qdrant_store.collection_stats(name)
-        collections.append(
-            CollectionStorage(
-                name=stats["name"],
-                doc_type=doc_type,
-                status=stats["status"],
-                reachable=stats["reachable"],
-                point_count=stats["points_count"],
-                indexed_vector_count=stats["indexed_vectors_count"],
-                segment_count=stats["segments_count"],
-                estimated_vector_bytes=stats["points_count"] * dims * BYTES_PER_DIMENSION,
-            )
+    # `collection_stats` never raises — an unreachable vector store still
+    # produces a row, so the Supabase half of this response survives it.
+    *collection_stats, case_chunk_count, policy_chunk_count, stored_files = (
+        await asyncio.gather(
+            *(qdrant_store.collection_stats(name) for name, _ in specs),
+            chunks.count_chunks("case_chunks"),
+            chunks.count_chunks("policy_chunks"),
+            policies.count_policies_with_storage(),
         )
+    )
+
+    collections = [
+        CollectionStorage(
+            name=stats["name"],
+            doc_type=doc_type,
+            status=stats["status"],
+            reachable=stats["reachable"],
+            point_count=stats["points_count"],
+            indexed_vector_count=stats["indexed_vectors_count"],
+            segment_count=stats["segments_count"],
+            estimated_vector_bytes=stats["points_count"] * dims * BYTES_PER_DIMENSION,
+        )
+        for stats, (_, doc_type) in zip(collection_stats, specs, strict=True)
+    ]
 
     return StorageResponse(
         collections=collections,
         chunk_rows=ChunkRowCounts(
-            case_chunks=chunks.count_chunks("case_chunks"),
-            policy_chunks=chunks.count_chunks("policy_chunks"),
+            case_chunks=case_chunk_count,
+            policy_chunks=policy_chunk_count,
         ),
-        stored_policy_files=policies.count_policies_with_storage(),
+        stored_policy_files=stored_files,
         embedding_dims=dims,
     )
 
 
-def build_job_page(
+async def build_job_page(
     *,
     status: str | None,
     doc_type: str | None,
@@ -221,10 +255,10 @@ def build_job_page(
     offset: int,
 ) -> JobPage:
     """One page of the ingestion ops log, with document titles resolved."""
-    rows, total = ingestion_jobs.list_jobs(
+    rows, total = await ingestion_jobs.list_jobs(
         status=status, doc_type=doc_type, search=search, limit=limit, offset=offset
     )
-    titles = _resolve_titles(rows)
+    titles = await _resolve_titles(rows)
 
     return JobPage(
         items=[_to_job_summary(row, titles) for row in rows],
@@ -234,10 +268,13 @@ def build_job_page(
     )
 
 
-def build_ingestion_summary(days: int) -> IngestionSummaryResponse:
+async def build_ingestion_summary(days: int) -> IngestionSummaryResponse:
     """Per-day buckets, duration percentiles and success rate over a window."""
     since = datetime.now(UTC) - timedelta(days=days)
-    rows = ingestion_jobs.list_jobs_since(since.isoformat())
+    rows, by_department = await asyncio.gather(
+        ingestion_jobs.list_jobs_since(since.isoformat()),
+        _department_counts(),
+    )
 
     return IngestionSummaryResponse(
         range_days=days,
@@ -248,11 +285,11 @@ def build_ingestion_summary(days: int) -> IngestionSummaryResponse:
             "case": sum(1 for row in rows if row["doc_type"] == "case"),
             "policy": sum(1 for row in rows if row["doc_type"] == "policy"),
         },
-        by_department=_department_counts(),
+        by_department=by_department,
     )
 
 
-def build_document_options(doc_type: str, limit: int) -> list[DocumentOption]:
+async def build_document_options(doc_type: str, limit: int) -> list[DocumentOption]:
     """The single-document ingest picker's contents.
 
     Enumerates the seed corpus on disk rather than the `cases`/`policies`
@@ -264,7 +301,7 @@ def build_document_options(doc_type: str, limit: int) -> list[DocumentOption]:
     """
     entries = seed_module.list_seed_entries(doc_type)[:limit]
     source_refs = [entry.source_ref for entry in entries]
-    statuses = (
+    statuses = await (
         cases.statuses_for_source_refs(source_refs)
         if doc_type == "case"
         else policies.statuses_for_source_refs(source_refs)
@@ -347,15 +384,17 @@ def _success_rate(rows: list[dict]) -> float | None:
     return done / total if total else None
 
 
-def _department_counts() -> list[DepartmentCount]:
+async def _department_counts() -> list[DepartmentCount]:
     """Indexed cases per department, labelled, including departments at zero.
 
     Zero-count departments are kept: an absent bar is ambiguous between "no
     cases" and "department not tracked", and the twelve routing targets are a
     fixed set worth showing in full.
     """
-    counts = cases.count_cases_by_department()
-    rows = departments.list_departments()
+    counts, rows = await asyncio.gather(
+        cases.count_cases_by_department(),
+        departments.list_departments(),
+    )
 
     return [
         DepartmentCount(
@@ -367,11 +406,11 @@ def _department_counts() -> list[DepartmentCount]:
     ]
 
 
-def build_departments() -> list[DepartmentOption]:
+async def build_departments() -> list[DepartmentOption]:
     """The twelve routing targets, for the escalate picker."""
     return [
         DepartmentOption(id=row["id"], name=row.get("name") or row["id"])
-        for row in departments.list_departments()
+        for row in await departments.list_departments()
     ]
 
 
@@ -440,36 +479,48 @@ def _escalation_rate(direct: int, escalated: int) -> float | None:
     return escalated / total if total else None
 
 
-def build_escalation_summary(days: int) -> EscalationSummaryResponse:
+async def build_escalation_summary(days: int) -> EscalationSummaryResponse:
     """The escalation metric: rate, funnel, trend and per-department split.
 
     cms.md §2 calls this the north star — "the % of complaints where retrieval +
     draft was not enough and a department had to be contacted. Every improvement
     should push it down." lld.md:257 names the column it reads.
+
+    All seven reads are independent, so this panel costs one wave rather than
+    seven sequential round-trips.
     """
     since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
-    by_status = tickets.count_tickets_by_status()
-    by_path = tickets.count_by_resolution_path()
-    dept_counts = tickets.count_escalations_by_department()
-    recent = tickets.list_tickets_since(since)
+    (
+        by_status,
+        by_path,
+        dept_counts,
+        recent,
+        # Zero-count departments are kept, matching `_department_counts`: a
+        # missing bar cannot be distinguished from a department nobody
+        # escalates to, and the second is the interesting one.
+        department_rows,
+        corpus,
+        open_escalated,
+    ) = await asyncio.gather(
+        tickets.count_tickets_by_status(),
+        tickets.count_by_resolution_path(),
+        tickets.count_escalations_by_department(),
+        tickets.list_tickets_since(since),
+        departments.list_departments(),
+        cases.count_by_resolution_path(),
+        tickets.count_open_escalated(),
+    )
 
     direct = by_path.get("direct", 0)
     escalated = by_path.get("escalated", 0)
-
-    # Zero-count departments are kept, matching `_department_counts`: a missing
-    # bar cannot be distinguished from a department nobody escalates to, and the
-    # second is the interesting one.
-    department_rows = departments.list_departments()
-
-    corpus = cases.count_by_resolution_path()
 
     return EscalationSummaryResponse(
         range_days=days,
         escalation_rate=_escalation_rate(direct, escalated),
         resolved_direct=direct,
         resolved_escalated=escalated,
-        open_escalated=tickets.count_open_escalated(),
+        open_escalated=open_escalated,
         total_tickets=sum(by_status.values()),
         by_status=by_status,
         per_day=_bucket_tickets_by_day(recent, days),

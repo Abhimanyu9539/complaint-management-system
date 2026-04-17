@@ -16,6 +16,7 @@ Layering is the same as `admin_stats`: repositories return raw dicts, the
 downstream of an adapter handles Pydantic models.
 """
 
+import asyncio
 import logging
 
 from cms.db.repositories import departments, ticket_events, tickets
@@ -130,7 +131,7 @@ def _to_event(row: dict) -> TicketEvent:
 # ---------------------------------------------------------------------------
 
 
-def create_ticket(
+async def create_ticket(
     *,
     subject: str,
     body: str,
@@ -143,7 +144,7 @@ def create_ticket(
     `status` is left to the column default (`new`) rather than sent explicitly,
     so the database stays the single definition of where a ticket starts.
     """
-    row = tickets.create_ticket(
+    row = await tickets.create_ticket(
         {
             "subject": subject,
             "body": body,
@@ -155,7 +156,7 @@ def create_ticket(
 
     # After the insert commits, never before: an audit row for a ticket that
     # failed to insert would describe something that did not happen.
-    ticket_events.append_event(row["id"], "created", {"source": source, "severity": severity})
+    await ticket_events.append_event(row["id"], "created", {"source": source, "severity": severity})
 
     logger.info("Ticket %s created (T-%s) from %s", row["id"], row["ticket_no"], source)
     return TicketCreated(
@@ -166,25 +167,25 @@ def create_ticket(
     )
 
 
-def escalate_ticket(ticket_id: str, department_id: str, note: str | None = None) -> Ticket:
+async def escalate_ticket(ticket_id: str, department_id: str, note: str | None = None) -> Ticket:
     """Hand a ticket to a specialist department (Path B).
 
     The department is validated against the closed set before the write. The FK
     would reject a bad value anyway, but as a PostgREST error surfacing as a 500
     — checking first turns that into a 422 that names the problem.
     """
-    valid = {row["id"] for row in departments.list_departments()}
+    valid = {row["id"] for row in await departments.list_departments()}
     if department_id not in valid:
         raise UnknownDepartment(f"'{department_id}' is not one of the {len(valid)} departments.")
 
-    current = tickets.fetch_ticket(ticket_id)
+    current = await tickets.fetch_ticket(ticket_id)
     _assert_transition(current["status"], "escalated")
 
-    row = tickets.update_ticket(
+    row = await tickets.update_ticket(
         ticket_id,
         {"status": "escalated", "escalated_dept": department_id},
     )
-    ticket_events.append_event(
+    await ticket_events.append_event(
         ticket_id,
         "escalated",
         {"department_id": department_id, "note": note, "from_status": current["status"]},
@@ -194,19 +195,19 @@ def escalate_ticket(ticket_id: str, department_id: str, note: str | None = None)
     return _to_ticket(row)
 
 
-def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
+async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
     """Close a ticket and stamp the path it took.
 
     The path is read off the ticket, not off the request — see
     `_resolution_path_for`. A client that could assert its own path could set
     the north-star metric by hand.
     """
-    current = tickets.fetch_ticket(ticket_id)
+    current = await tickets.fetch_ticket(ticket_id)
     _assert_transition(current["status"], "resolved")
 
     path = _resolution_path_for(current)
-    row = tickets.mark_resolved(ticket_id, path)
-    ticket_events.append_event(
+    row = await tickets.mark_resolved(ticket_id, path)
+    await ticket_events.append_event(
         ticket_id,
         "resolved",
         {"resolution_path": path, "note": note, "from_status": current["status"]},
@@ -221,17 +222,24 @@ def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
 # ---------------------------------------------------------------------------
 
 
-def get_ticket(ticket_id: str) -> TicketDetail:
-    """One ticket and its whole audit trail — the drawer's single request."""
-    row = tickets.fetch_ticket(ticket_id)
-    events = ticket_events.list_events(ticket_id)
+async def get_ticket(ticket_id: str) -> TicketDetail:
+    """One ticket and its whole audit trail — the drawer's single request.
+
+    The two reads are independent, so they go out together. `fetch_ticket` still
+    raises `LookupError` for a missing id and `gather` propagates it unchanged,
+    so the route's 404 mapping is unaffected.
+    """
+    row, events = await asyncio.gather(
+        tickets.fetch_ticket(ticket_id),
+        ticket_events.list_events(ticket_id),
+    )
     return TicketDetail(
         ticket=_to_ticket(row),
         events=[_to_event(event) for event in events],
     )
 
 
-def build_ticket_page(
+async def build_ticket_page(
     *,
     status: str | None,
     severity: str | None,
@@ -240,7 +248,7 @@ def build_ticket_page(
     offset: int,
 ) -> TicketPage:
     """A filtered, paged slice of the queue."""
-    rows, total = tickets.list_tickets(
+    rows, total = await tickets.list_tickets(
         status=status,
         severity=severity,
         search=search,

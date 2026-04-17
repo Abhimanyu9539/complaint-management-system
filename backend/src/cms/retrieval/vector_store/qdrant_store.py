@@ -20,7 +20,7 @@ import logging
 from functools import lru_cache
 
 from langchain_qdrant import FastEmbedSparse, QdrantVectorStore, RetrievalMode
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from cms.config.settings import get_settings
@@ -45,11 +45,12 @@ QDRANT_TIMEOUT_SECONDS = 30
 
 @lru_cache
 def get_qdrant_client() -> QdrantClient:
-    """Sync Qdrant client.
+    """Sync Qdrant client, for `QdrantVectorStore` only.
 
-    Sync rather than async because both callers are sync — the collection
-    entrypoint and the ingestion pipeline — and `QdrantVectorStore` requires a
-    sync client. The `/health/deps` endpoint keeps its own `AsyncQdrantClient`.
+    `QdrantVectorStore` accepts no async client and implements no async methods,
+    so the store must be built on this one. Everything that talks to Qdrant
+    *directly* — the collection entrypoint, and the ingestion pipeline's scroll
+    and delete — uses `get_async_qdrant_client` instead.
     """
     settings = get_settings()
     try:
@@ -62,6 +63,29 @@ def get_qdrant_client() -> QdrantClient:
         logger.exception("Failed to construct Qdrant client for %s", settings.qdrant_url)
         raise
     logger.debug("Qdrant client constructed for %s", settings.qdrant_url)
+    return client
+
+
+@lru_cache
+def get_async_qdrant_client() -> AsyncQdrantClient:
+    """Async Qdrant client, for direct point and collection operations.
+
+    Same url/key/timeout as the sync client above. Like the Supabase client this
+    binds to the event loop that first uses it, so one loop per process.
+    """
+    settings = get_settings()
+    try:
+        client = AsyncQdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+            timeout=QDRANT_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to construct async Qdrant client for %s", settings.qdrant_url
+        )
+        raise
+    logger.debug("Async Qdrant client constructed for %s", settings.qdrant_url)
     return client
 
 
@@ -85,7 +109,7 @@ def get_sparse_embeddings() -> FastEmbedSparse:
     return embeddings
 
 
-def collection_stats(name: str) -> dict:
+async def collection_stats(name: str) -> dict:
     """Point and vector counts for one collection.
 
     Uniquely in this module, this never raises. The admin dashboard has to be
@@ -114,7 +138,7 @@ def collection_stats(name: str) -> dict:
     }
 
     try:
-        info = get_qdrant_client().get_collection(name)
+        info = await get_async_qdrant_client().get_collection(name)
     except UnexpectedResponse as exc:
         # The server answered, so it is up — it just has no such collection.
         if exc.status_code == 404:

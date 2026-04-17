@@ -13,7 +13,6 @@ the LLM call is mockable without touching LangChain internals:
 """
 
 import logging
-from functools import lru_cache
 
 from langsmith import traceable
 
@@ -27,23 +26,38 @@ from cms.schemas.query_analysis import QueryAnalysis
 logger = logging.getLogger(__name__)
 
 
-@lru_cache
-def _department_prompt_block() -> str:
-    """'- warranty (Warranty): Warranty coverage, claims...' per department.
+# Memoised for the process lifetime: `departments.py`'s own docstring notes the
+# taxonomy "change[s] through a migration, not through the API," so a process
+# never needs to see it change underneath a running server. A module global
+# rather than `@lru_cache` because the loader is now a coroutine, and caching a
+# coroutine hands every caller after the first an already-awaited object.
+_department_block: str | None = None
 
-    Cached for the process lifetime: `departments.py`'s own docstring notes
-    the taxonomy "change[s] through a migration, not through the API," so a
-    process never needs to see it change underneath a running server.
-    """
+
+def reset_department_prompt_block() -> None:
+    """Drop the memoised taxonomy — the `cache_clear()` equivalent, for tests."""
+    global _department_block
+    _department_block = None
+
+
+async def _department_prompt_block() -> str:
+    """'- warranty (Warranty): Warranty coverage, claims...' per department."""
+    global _department_block
+    if _department_block is not None:
+        return _department_block
+
     try:
-        departments = list_department_descriptions()
+        departments = await list_department_descriptions()
     except Exception:
         logger.exception("Failed to load department descriptions for the classifier prompt")
         raise
-    return "\n".join(f"- {d['id']} ({d['name']}): {d['description']}" for d in departments)
+    _department_block = "\n".join(
+        f"- {d['id']} ({d['name']}): {d['description']}" for d in departments
+    )
+    return _department_block
 
 
-def analyze_query_core(query: str) -> QueryAnalysis:
+async def analyze_query_core(query: str) -> QueryAnalysis:
     """Classify `query` into a `QueryAnalysis` — the codebase's first
     `.with_structured_output()` call.
     """
@@ -61,21 +75,23 @@ def analyze_query_core(query: str) -> QueryAnalysis:
     chain = prompt | model
 
     try:
-        return chain.invoke({"query": query, "departments": _department_prompt_block()})
+        return await chain.ainvoke(
+            {"query": query, "departments": await _department_prompt_block()}
+        )
     except Exception:
         logger.exception("analyze_query failed for query %r", query)
         raise
 
 
 @traceable(name="analyze_query")
-def analyze_query(state: GraphState) -> dict:
+async def analyze_query(state: GraphState) -> dict:
     """The graph node: `analyze_query_core` plus the `GraphState` mapping.
 
     `department`/`dept_confidence` are copied out of `QueryAnalysis` as a
     convenience view of `department_candidates[0]` — see that schema's
     docstring for why they aren't derived from state directly.
     """
-    analysis = analyze_query_core(state["query"])
+    analysis = await analyze_query_core(state["query"])
     return {
         "intent": analysis.intent,
         "department_candidates": [c.model_dump() for c in analysis.department_candidates],

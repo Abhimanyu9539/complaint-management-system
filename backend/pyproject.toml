@@ -57,11 +57,16 @@ native-tls = true
 [dependency-groups]
 dev = [
     "pytest>=8.4.2",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.14.4",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The suite is async end to end (the repositories are async, so anything that
+# reaches them is too). "auto" treats every `async def test_*` as a coroutine
+# test without a per-test marker.
+asyncio_mode = "auto"
 
 [tool.ruff.lint.isort]
 known-first-party = ["cms"]

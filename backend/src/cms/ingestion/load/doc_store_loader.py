@@ -16,7 +16,7 @@ from cms.ingestion.transform.cleaner import compute_content_hash
 logger = logging.getLogger(__name__)
 
 
-def write_chunks(
+async def write_chunks(
     chunk_table: str, fk_column: str, document_id: str, chunk_texts: list[str]
 ) -> list[dict]:
     """Upsert the chunk rows and return them (with ids) in chunk_index order."""
@@ -31,7 +31,7 @@ def write_chunks(
         for index, text in enumerate(chunk_texts)
     ]
 
-    written = upsert_chunks(chunk_table, fk_column, rows)
+    written = await upsert_chunks(chunk_table, fk_column, rows)
 
     if len(written) != len(rows):
         raise RuntimeError(
@@ -39,7 +39,7 @@ def write_chunks(
         )
 
     # Drop the tail a shorter re-ingest left behind — see the repository.
-    delete_chunks_from(chunk_table, fk_column, document_id, len(rows))
+    await delete_chunks_from(chunk_table, fk_column, document_id, len(rows))
 
     logger.debug(
         "Wrote %d chunk row(s) to %s for document %s",

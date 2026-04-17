@@ -18,14 +18,14 @@ DEPARTMENT_COLUMNS = "id,name"
 DEPARTMENT_DESCRIPTION_COLUMNS = "id,name,description"
 
 
-def list_departments() -> list[dict]:
+async def list_departments() -> list[dict]:
     """Every department, id and display name, ordered by name.
 
     Used to turn the `department_id` slugs stored on cases into labels, so ids
     never reach the UI.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select(DEPARTMENT_COLUMNS)
@@ -38,7 +38,7 @@ def list_departments() -> list[dict]:
     return response.data or []
 
 
-def list_department_descriptions() -> list[dict]:
+async def list_department_descriptions() -> list[dict]:
     """Every department with its classifier description, ordered by name.
 
     Migration 0003's own comment: `description` "is fed verbatim into the
@@ -48,7 +48,7 @@ def list_department_descriptions() -> list[dict]:
     `analyze_query` node's prompt-building step.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select(DEPARTMENT_DESCRIPTION_COLUMNS)

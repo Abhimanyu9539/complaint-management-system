@@ -5,6 +5,7 @@ produced, and — if it broke — what the error was. Separate from the document
 own `status` because a document has one current state but many attempts.
 """
 
+import asyncio
 import logging
 
 from cms.db.repositories import ERROR_MAX_CHARS, utc_now_iso
@@ -27,9 +28,9 @@ JOB_STATUSES: tuple[str, ...] = ("queued", "running", "done", "failed")
 ACTIVE_STATUSES: tuple[str, ...] = ("queued", "running")
 
 
-def start_job(doc_type: str, document_id: str) -> str:
+async def start_job(doc_type: str, document_id: str) -> str:
     """Open a running job row and return its id."""
-    response = (
+    response = await (
         get_supabase()
         .table(TABLE)
         .insert(
@@ -45,7 +46,7 @@ def start_job(doc_type: str, document_id: str) -> str:
     return response.data[0]["id"]
 
 
-def queue_job(doc_type: str, document_id: str) -> str:
+async def queue_job(doc_type: str, document_id: str) -> str:
     """Open a job row in `queued` state and return its id.
 
     Exists for the HTTP trigger path (`services/admin_ingest.py`): the request
@@ -54,7 +55,7 @@ def queue_job(doc_type: str, document_id: str) -> str:
     `start_job`'s moment would normally come. The CLI path never calls this —
     `run_seed` still goes straight to `start_job`, which has no such gap.
     """
-    response = (
+    response = await (
         get_supabase()
         .table(TABLE)
         .insert({"doc_type": doc_type, "document_id": document_id, "status": "queued"})
@@ -63,14 +64,14 @@ def queue_job(doc_type: str, document_id: str) -> str:
     return response.data[0]["id"]
 
 
-def claim_job(job_id: str) -> None:
+async def claim_job(job_id: str) -> None:
     """Move a queued job row to running, right before the pipeline starts work on it."""
-    get_supabase().table(TABLE).update(
+    await get_supabase().table(TABLE).update(
         {"status": "running", "started_at": utc_now_iso()}
     ).eq("id", job_id).execute()
 
 
-def set_job_document(job_id: str, document_id: str) -> None:
+async def set_job_document(job_id: str, document_id: str) -> None:
     """Point a queued job row at the document its run just resolved.
 
     `document_id` is `UUID NOT NULL` (migration 0012), but the admin's
@@ -80,14 +81,14 @@ def set_job_document(job_id: str, document_id: str) -> None:
     work starts, so a run that then fails still leaves a row pointing at a real
     document for `retry_job` to act on.
     """
-    get_supabase().table(TABLE).update({"document_id": document_id}).eq(
+    await get_supabase().table(TABLE).update({"document_id": document_id}).eq(
         "id", job_id
     ).execute()
 
 
-def fetch_job(job_id: str) -> dict:
+async def fetch_job(job_id: str) -> dict:
     """Read one job row. Raises LookupError if the id does not exist."""
-    response = (
+    response = await (
         get_supabase()
         .table(TABLE)
         .select("id,doc_type,document_id")
@@ -99,8 +100,8 @@ def fetch_job(job_id: str) -> dict:
     return response.data[0]
 
 
-def finish_job(job_id: str, chunk_count: int, point_count: int) -> None:
-    get_supabase().table(TABLE).update(
+async def finish_job(job_id: str, chunk_count: int, point_count: int) -> None:
+    await get_supabase().table(TABLE).update(
         {
             "status": "done",
             "chunk_count": chunk_count,
@@ -110,8 +111,8 @@ def finish_job(job_id: str, chunk_count: int, point_count: int) -> None:
     ).eq("id", job_id).execute()
 
 
-def fail_job(job_id: str, error: str) -> None:
-    get_supabase().table(TABLE).update(
+async def fail_job(job_id: str, error: str) -> None:
+    await get_supabase().table(TABLE).update(
         {
             "status": "failed",
             "error": error[:ERROR_MAX_CHARS],
@@ -129,33 +130,37 @@ def fail_job(job_id: str, error: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def count_jobs_by_status() -> dict[str, int]:
+async def count_jobs_by_status() -> dict[str, int]:
     """How many jobs sit in each status.
 
     One `count="exact", head=True` request per status — four tiny round trips
-    that transfer no rows. Deliberately not `select("status")` plus a Counter:
-    PostgREST caps a bare select at 1000 rows, so that version would silently
-    under-count the moment the append-only ops log outgrew a demo, and
-    under-counting a *failure* metric is the worst way for this to break.
+    that transfer no rows, issued as one wave. Deliberately not
+    `select("status")` plus a Counter: PostgREST caps a bare select at 1000
+    rows, so that version would silently under-count the moment the append-only
+    ops log outgrew a demo, and under-counting a *failure* metric is the worst
+    way for this to break.
     """
-    counts: dict[str, int] = {}
+
+    async def count_one(status: str) -> int:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select("id", count="exact", head=True)
+            .eq("status", status)
+            .execute()
+        )
+        return response.count or 0
+
     try:
-        for status in JOB_STATUSES:
-            response = (
-                get_supabase()
-                .table(TABLE)
-                .select("id", count="exact", head=True)
-                .eq("status", status)
-                .execute()
-            )
-            counts[status] = response.count or 0
+        results = await asyncio.gather(*(count_one(s) for s in JOB_STATUSES))
+        counts = dict(zip(JOB_STATUSES, results, strict=True))
     except Exception:
         logger.exception("Failed to count %s rows by status", TABLE)
         raise
     return counts
 
 
-def list_jobs(
+async def list_jobs(
     *,
     status: str | None = None,
     doc_type: str | None = None,
@@ -183,7 +188,7 @@ def list_jobs(
         if search:
             query = query.ilike("document_id", f"%{search}%")
 
-        response = (
+        response = await (
             query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
         )
     except Exception:
@@ -193,14 +198,14 @@ def list_jobs(
     return response.data or [], response.count or 0
 
 
-def list_active_jobs(limit: int = 20) -> list[dict]:
+async def list_active_jobs(limit: int = 20) -> list[dict]:
     """Queued and running jobs, oldest first — what the queue panel renders.
 
     Oldest first on purpose: the job that has been waiting longest is the one an
     operator needs to see, and newest-first would bury it under fresh arrivals.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select(JOB_COLUMNS)
@@ -215,7 +220,7 @@ def list_active_jobs(limit: int = 20) -> list[dict]:
     return response.data or []
 
 
-def list_jobs_since(since_iso: str, limit: int = 5000) -> list[dict]:
+async def list_jobs_since(since_iso: str, limit: int = 5000) -> list[dict]:
     """Every job created at or after `since_iso`, for the per-day charts.
 
     The limit is a safety valve, not a page: the summary endpoint aggregates
@@ -223,7 +228,7 @@ def list_jobs_since(since_iso: str, limit: int = 5000) -> list[dict]:
     set well above any plausible window and logged if it is ever reached.
     """
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select(JOB_COLUMNS)
@@ -245,10 +250,10 @@ def list_jobs_since(since_iso: str, limit: int = 5000) -> list[dict]:
     return rows
 
 
-def latest_finished_at() -> str | None:
+async def latest_finished_at() -> str | None:
     """When the most recent job finished, or None if none ever has."""
     try:
-        response = (
+        response = await (
             get_supabase()
             .table(TABLE)
             .select("finished_at")

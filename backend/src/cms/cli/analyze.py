@@ -13,6 +13,7 @@ Usage (from anywhere, once the project is installed):
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
@@ -27,6 +28,15 @@ logger = logging.getLogger("cms.cli.analyze")
 
 
 def main() -> int:
+    """Sync shell for the `[project.scripts]` entry point.
+
+    Exactly one `asyncio.run` per process: the cached supabase and Qdrant
+    clients bind their connection pools to the loop it creates.
+    """
+    return asyncio.run(_main())
+
+
+async def _main() -> int:
     setup_logging()
 
     # Seeded/uploaded text and model output are arbitrary UTF-8; Windows
@@ -44,7 +54,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        analysis = analyze_query_core(args.query)
+        analysis = await analyze_query_core(args.query)
     except Exception:
         logger.exception("analyze_query probe failed")
         return 1

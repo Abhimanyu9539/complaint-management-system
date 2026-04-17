@@ -15,6 +15,7 @@ cwd-independent — see `cms.ingestion.seed.resolve_seed_dir` and
 """
 
 import argparse
+import asyncio
 import logging
 import sys
 
@@ -28,6 +29,15 @@ logger = logging.getLogger("cms.cli.seed")
 
 
 def main() -> int:
+    """Sync shell for the `[project.scripts]` entry point.
+
+    Exactly one `asyncio.run` per process: the cached supabase and Qdrant
+    clients bind their connection pools to the loop it creates.
+    """
+    return asyncio.run(_main())
+
+
+async def _main() -> int:
     setup_logging()
 
     parser = argparse.ArgumentParser(description="Ingest the synthetic seed corpus.")
@@ -44,7 +54,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        summary = run_seed(one=args.one, one_policy=args.one_policy)
+        summary = await run_seed(one=args.one, one_policy=args.one_policy)
     except Exception:
         logger.exception("Seed run failed")
         return 1

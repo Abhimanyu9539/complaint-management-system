@@ -137,14 +137,14 @@ class SeedSummary:
         setattr(self, status, getattr(self, status) + 1)
 
 
-def register_seed_case(case: dict) -> tuple[str, str]:
+async def register_seed_case(case: dict) -> tuple[str, str]:
     """Upsert one seed case row, returning its id and the text to embed.
 
     Split out of `seed_case` so a caller that needs the row's id *before*
     kicking off the (possibly failing) embedding run — the admin trigger's
     background task, which must patch a pre-queued job row first — can do so.
     """
-    document_id = upsert_case(
+    document_id = await upsert_case(
         {
             "source_ref": case["id"],
             "title": case_title(case),
@@ -160,13 +160,13 @@ def register_seed_case(case: dict) -> tuple[str, str]:
     return document_id, build_case_text(case)
 
 
-def seed_case(case: dict, *, force: bool = False) -> IngestResult:
+async def seed_case(case: dict, *, force: bool = False) -> IngestResult:
     """Register one seed case, then ingest it."""
-    document_id, text = register_seed_case(case)
-    return ingest_case(document_id, text, force=force)
+    document_id, text = await register_seed_case(case)
+    return await ingest_case(document_id, text, force=force)
 
 
-def register_seed_policy(path: Path) -> tuple[str, str, str | None]:
+async def register_seed_policy(path: Path) -> tuple[str, str, str | None]:
     """Upload + upsert one seed policy file, returning its id, body and storage path.
 
     Split out of `seed_policy` for the same reason as `register_seed_case`.
@@ -205,7 +205,7 @@ def register_seed_policy(path: Path) -> tuple[str, str, str | None]:
 
     storage_path: str | None = None
     try:
-        storage_path, mime_type = upload_policy_file(path)
+        storage_path, mime_type = await upload_policy_file(path)
         row["storage_path"] = storage_path
         row["mime_type"] = mime_type
     except Exception:
@@ -214,14 +214,14 @@ def register_seed_policy(path: Path) -> tuple[str, str, str | None]:
             path.name,
         )
 
-    document_id = upsert_policy(row)
+    document_id = await upsert_policy(row)
     return document_id, body, storage_path
 
 
-def seed_policy(path: Path, *, force: bool = False) -> tuple[IngestResult, str | None]:
+async def seed_policy(path: Path, *, force: bool = False) -> tuple[IngestResult, str | None]:
     """Register one seed policy file, then ingest its body."""
-    document_id, body, storage_path = register_seed_policy(path)
-    return ingest_policy(document_id, body, force=force), storage_path
+    document_id, body, storage_path = await register_seed_policy(path)
+    return await ingest_policy(document_id, body, force=force), storage_path
 
 
 def list_seed_entries(doc_type: Literal["case", "policy"]) -> list[SeedEntry]:
@@ -280,7 +280,7 @@ def find_seed_case(source_ref: str) -> dict:
     raise LookupError(f"No seed case with id {source_ref!r}")
 
 
-def run_seed(one: bool = False, one_policy: bool = False) -> SeedSummary:
+async def run_seed(one: bool = False, one_policy: bool = False) -> SeedSummary:
     """Ingest the corpus. `one` and `one_policy` are independent walking-skeleton
     gates, one per corpus: each narrows its own corpus to its first document and
     skips the *other* corpus entirely unless that corpus's flag is also given.
@@ -308,14 +308,14 @@ def run_seed(one: bool = False, one_policy: bool = False) -> SeedSummary:
 
     for case in cases:
         try:
-            summary.record(seed_case(case).status)
+            summary.record((await seed_case(case)).status)
         except Exception:
             logger.exception("Case %s failed to ingest", case.get("id"))
             summary.failed += 1
 
     for path in policies:
         try:
-            result, storage_path = seed_policy(path)
+            result, storage_path = await seed_policy(path)
             summary.record(result.status)
             if storage_path is not None:
                 summary.stored += 1
@@ -337,7 +337,9 @@ def run_seed(one: bool = False, one_policy: bool = False) -> SeedSummary:
     return summary
 
 
-def run_seed_one_type(doc_type: Literal["case", "policy"], *, force: bool = False) -> SeedSummary:
+async def run_seed_one_type(
+    doc_type: Literal["case", "policy"], *, force: bool = False
+) -> SeedSummary:
     """Re-run the seed corpus for a single doc_type — the admin panel's 'seed' mode.
 
     Same per-document behaviour as `run_seed`, restricted to one corpus, so an
@@ -351,14 +353,14 @@ def run_seed_one_type(doc_type: Literal["case", "policy"], *, force: bool = Fals
     if doc_type == "case":
         for case in load_seed_cases(seed_dir / "cases.json"):
             try:
-                summary.record(seed_case(case, force=force).status)
+                summary.record((await seed_case(case, force=force)).status)
             except Exception:
                 logger.exception("Case %s failed to ingest", case.get("id"))
                 summary.failed += 1
     else:
         for path in find_seed_policies(seed_dir / "policies"):
             try:
-                result, storage_path = seed_policy(path, force=force)
+                result, storage_path = await seed_policy(path, force=force)
                 summary.record(result.status)
                 if storage_path is not None:
                     summary.stored += 1
