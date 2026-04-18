@@ -14,12 +14,12 @@ import logging
 import sys
 
 from cms.config.logging_config import setup_logging
-from cms.retrieval.case_retriever import (
+from cms.retrieval.retrievers.case_retriever import (
     retrieve_cases_dense,
     retrieve_cases_hybrid,
     retrieve_cases_sparse,
 )
-from cms.retrieval.policy_retriever import (
+from cms.retrieval.retrievers.policy_retriever import (
     DEFAULT_K,
     retrieve_policies_dense,
     retrieve_policies_hybrid,

@@ -37,5 +37,5 @@ except Exception:
 RETRIEVER_METRICS = [
     ContextualPrecisionMetric(threshold=PRECISION_THRESHOLD, model=_judge, include_reason=True),
     ContextualRecallMetric(threshold=RECALL_THRESHOLD, model=_judge, include_reason=True),
-    ContextualRelevancyMetric(threshold=RELEVANCY_THRESHOLD, model=_judge, include_reason=True),
+    #ContextualRelevancyMetric(threshold=RELEVANCY_THRESHOLD, model=_judge, include_reason=True),
 ]
