@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 
 from langchain_core.documents import Document
 
-from cms.retrieval.policy_retriever import (
+from cms.retrieval.retrievers.policy_retriever import (
     DEFAULT_K,
     retrieve_policies_dense,
     retrieve_policies_hybrid,

@@ -16,7 +16,7 @@ from cms.retrieval.vector_store.qdrant_store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_K = 4
+DEFAULT_K = 5
 PUBLISHED = "published"
 
 # One shared filter
