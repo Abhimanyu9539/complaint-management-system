@@ -16,3 +16,9 @@ docs/
 
 # Environment
 .env
+
+# DeepEval local state
+.deepeval/
+.deepeval-cache.json
+.temp_test_run_data/
+.pytest-tmp/

@@ -1,0 +1,16 @@
+[
+    {
+        "input": "My X200 vacuum cleaner has stopped charging completely after about three months. The indicator light doesn't come on at all when I put it on the dock. I bought it with the 12-month warranty — what do I need to do to get it replaced?",
+        "actual_output": null,
+        "expected_output": "A prior complaint reported an X200 Cordless Vacuum that stopped charging completely after about three months of normal use, with the indicator light no longer turning on when docked, bought on the 12-month warranty plan with the customer asking for repair or replacement. The unit was confirmed to be within the 12-month warranty period and the fault, a charging circuit failure, was covered under warranty §2.3 for manufacturing defects. A free replacement unit was issued and a prepaid reverse pickup was arranged for the faulty vacuum, at no cost to the customer.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "My X200 vacuum cleaner's battery got really hot and started smoking a bit while it was sitting on the dock charging overnight. I unplugged it straight away. I don't want another one of the same thing — can I just get my money back?",
+        "actual_output": null,
+        "expected_output": "A prior complaint reported an X200 Cordless Vacuum battery pack that became noticeably hot and started smoking while charging on the dock overnight, which the customer unplugged immediately; the customer asked whether it was part of a recall and asked for a refund rather than a replacement of the same battery. The serial number fell within batch prefix X200-2025Q1, which was under internal safety review for a suspected charging-circuit overheating defect. Because that batch was not yet subject to a public recall, the word 'recall' was not used with the customer and the batch was described as under internal review instead. Per product_safety §4 on immediate remedies for safety concerns, a reported overheating or smoke incident authorizes an immediate full refund regardless of the standard remedy hierarchy, and the case must be logged for the quality escalation queue. A full refund was issued immediately, safe battery disposal instructions were provided via the e-waste take-back route rather than household trash, the customer was told the batch was under internal safety review rather than a confirmed public recall and would be notified directly if that changed, and the case was flagged internally for QA batch investigation.",
+        "context": null,
+        "source_file": "cases.json"
+    }
+]
