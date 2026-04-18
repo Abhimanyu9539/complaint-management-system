@@ -21,12 +21,11 @@ evaluated end to end today — and none of the three metrics need an `actual_out
 
 ## The metrics
 
-
-| Metric                      | What it asks                                                    | Threshold |
-| ----------------------------- | ----------------------------------------------------------------- | ----------- |
+| Metric                        | What it asks                                                      | Threshold |
+| ----------------------------- | ----------------------------------------------------------------- | --------- |
 | `ContextualPrecisionMetric` | Are the relevant chunks ranked*above* the irrelevant ones?      | 0.7       |
 | `ContextualRecallMetric`    | Does the retrieved set cover everything`expected_output` needs? | 0.7       |
-| `ContextualRelevancyMetric` | How much of what came back is actually on topic?                | 0.5       |
+| `ContextualRelevancyMetric` | How much of what came back is actually on topic?                  | 0.5       |
 
 Relevancy sits lower on purpose: it penalises every irrelevant *sentence* inside an
 otherwise-correct chunk, and `chunk_policy` cuts policies at 800 tokens. A 0.7 bar there would
@@ -82,12 +81,11 @@ rather than reparsing JSON, and its prices are registered so the cost line is re
 
 2026-08-27, `gpt-5.4-mini`, `k=4`, 2 goldens per leg. ~$0.03 and ~25s per leg.
 
-
-| Leg    | Precision | Recall   | Relevancy | Passed |
-| -------- | ----------- | ---------- | ----------- | -------- |
-| dense  | **1.00**  | **0.72** | **0.73**  | 1/2    |
-| sparse | 0.67      | 0.35     | 0.38      | 0/2    |
-| hybrid | 0.75      | 0.72     | 0.53      | 1/2    |
+| Leg    | Precision      | Recall         | Relevancy      | Passed |
+| ------ | -------------- | -------------- | -------------- | ------ |
+| dense  | **1.00** | **0.72** | **0.73** | 1/2    |
+| sparse | 0.67           | 0.35           | 0.38           | 0/2    |
+| hybrid | 0.75           | 0.72           | 0.53           | 1/2    |
 
 **Dense beats hybrid on every metric.** Hybrid matches dense on recall but loses precision and
 relevancy, which is what it looks like when RRF pulls sparse's noise into the top 4 without

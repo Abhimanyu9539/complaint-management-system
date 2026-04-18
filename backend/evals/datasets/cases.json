@@ -12,5 +12,61 @@
         "expected_output": "A prior complaint reported an X200 Cordless Vacuum battery pack that became noticeably hot and started smoking while charging on the dock overnight, which the customer unplugged immediately; the customer asked whether it was part of a recall and asked for a refund rather than a replacement of the same battery. The serial number fell within batch prefix X200-2025Q1, which was under internal safety review for a suspected charging-circuit overheating defect. Because that batch was not yet subject to a public recall, the word 'recall' was not used with the customer and the batch was described as under internal review instead. Per product_safety §4 on immediate remedies for safety concerns, a reported overheating or smoke incident authorizes an immediate full refund regardless of the standard remedy hierarchy, and the case must be logged for the quality escalation queue. A full refund was issued immediately, safe battery disposal instructions were provided via the e-waste take-back route rather than household trash, the customer was told the batch was under internal safety review rather than a confirmed public recall and would be notified directly if that changed, and the case was flagged internally for QA batch investigation.",
         "context": null,
         "source_file": "cases.json"
+    },
+    {
+        "input": "I've just been through my card statement and there are two charges of ₹7,499 for the same SmartHub Pro order — one on the 3rd and another on the 5th. I only ever placed one order. Can you get the second one back to me?",
+        "actual_output": null,
+        "expected_output": "A prior complaint reported being charged twice for the same SmartHub Pro order on a card, once on the 3rd and again on the 5th, both for ₹7,499, when only one order had been placed. The payment gateway was checked and confirmed that a retry-on-timeout bug had caused a second authorization to settle. The duplicate ₹7,499 charge was refunded to the original card, and the customer was told to expect it within 5–7 working days in line with the refund timelines in billing §4.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "Tracking says my order was delivered yesterday but nothing has arrived. My building has a security desk that logs every single parcel that comes in and there's nothing in their register for me. Can someone actually look into this?",
+        "actual_output": null,
+        "expected_output": "A prior complaint reported that tracking for a ProBlend 300 mixer order showed the parcel as delivered the previous day, but nothing had arrived, and the customer's building had a security desk logging all packages with no corresponding entry. A lost-package claim was filed with the carrier under shipping §2 on lost package claims, on the basis that a building with passive package logging combined with a delivered-but-not-received scan is treated as presumptive carrier loss. A replacement mixer was reshipped at no cost via standard shipping without waiting for the outcome of the carrier investigation.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I'd like to send back a blender I bought — it's still sealed, never been opened. I know I'm past the 30 days, it's been about 34, but I was travelling for work the whole time. I've ordered from you plenty of times before. Is there anything you can do?",
+        "actual_output": null,
+        "expected_output": "A prior complaint asked to return an unopened AV-450 Blender 34 days after purchase, acknowledging that the 30-day window had passed but explaining that the customer had been travelling for work, and noting a history of previous orders. The return window had been exceeded by 4 days, and the request was approved as a one-time courtesy exception given the customer's order history and the unopened condition of the item, under returns §3 on exceptions and courtesy extensions. A reverse pickup was scheduled and a full refund to the original payment method was to follow on receipt of the unopened item.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "This is the third time I've written in about the app pairing on my X200 vacuum. It fails at exactly the same step every time. The last agent told me to reinstall the app and I've now done that twice. I'm honestly losing patience with this.",
+        "actual_output": null,
+        "expected_output": "A prior complaint came from a customer contacting support for the third time about X200 Cordless Vacuum app pairing, which failed at the same step every attempt, after they had already reinstalled the app twice on a previous agent's advice. The symptom matched an open bug ticket: pairing failed on Android 14 specifically, because of a Bluetooth permissions regression introduced by the operating system update, and it was not a device defect; a fix was scheduled for app version 4.2. The workaround given was manual Bluetooth pairing through the phone's settings rather than in-app auto-discovery, which the customer confirmed worked. Because this was a third contact on the same unresolved issue, a ₹1,200 account credit was applied for the repeated contacts, and the customer was told that app version 4.2 would resolve the underlying pairing bug when it shipped.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I made a smoothie in my new ProBlend 300 this morning and found a sliver of plastic in it. I didn't swallow it, thankfully, but I'm quite shaken. Has anyone else reported this? I really don't want another one of the same machine.",
+        "actual_output": null,
+        "expected_output": "A prior complaint reported finding a small plastic shaving in a smoothie blended with a new ProBlend 300 mixer; the customer had not drunk it but was unsettled, asked whether it was a known issue, and asked for a refund rather than another unit from the same batch. It was treated as a food-safety-adjacent quality defect regardless of severity. The customer was advised to stop using the unit and not to accept a same-batch replacement. A full refund was issued along with a ₹4,000 goodwill voucher towards a different product line, and the batch and lot number were collected from the customer and flagged internally for QA inspection of the blade-housing molding process.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "The lid on my AV-450 blender came off while it was running and hot liquid went across my forearm. I have a burn and I've photographed both the burn and the machine. I'm still weighing up what I want to do here, but I'd like to know what you intend to do about it.",
+        "actual_output": null,
+        "expected_output": "A prior complaint reported that a blender lid detached mid-use while blending, splashing hot liquid onto the customer's arm and causing a minor burn, with photographs of both the injury and the product, and the customer stating they were considering their options and wanting to know what the company would do. No refund, replacement or statement that could be read as an admission of fault or liability was offered, because the matter had become a potential injury claim to be handled by Legal directly. Support acknowledged receipt of the report, requested the photographs and any medical documentation the customer was willing to share, and provided the direct legal contact address for continued correspondence. No goodwill gestures, credits or apologies implying fault were issued from the support queue, and the case was handed to Legal with all correspondence attached, with the customer informed that Legal would follow up directly.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "We're a retail stockist and we've just unboxed a wholesale shipment of 50 ProBlend 300 units to put on the shelf. Twelve of them have cracked outer housings, and the cracks are all in exactly the same place along the seam — this clearly isn't shipping damage. What are you doing about these, and what do we do with the rest of the order?",
+        "actual_output": null,
+        "expected_output": "A prior complaint came from a retail partner who received a wholesale shipment of 50 ProBlend 300 mixer units and found, on unboxing for shelf display, that 12 of the 50 had visibly cracked outer housings, all cracked in the same place along the seam rather than showing shipping damage. Manufacturing confirmed the batch had an open tooling-defect investigation for exactly that seam-cracking pattern, traced to a mould alignment issue on one production line. All 12 cracked-housing units were replaced at no charge from a confirmed non-affected batch, and a 5% credit was applied to the wholesale order total for the disruption. The batch was flagged internally as quarantined, with no further units from it to ship until the tooling issue was resolved.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "The blades on my ProBlend 300 have gone blunt — nothing's broken, they've just worn down from regular use. I've had it well over a year so I know it's outside the warranty. Can I just buy the blade assembly on its own?",
+        "actual_output": null,
+        "expected_output": "A prior complaint asked to order a replacement blade assembly for a ProBlend 300 mixer purchased over a year earlier, with the customer noting it was outside warranty and that the blades had worn down through regular use rather than breaking suddenly. The unit was confirmed to be outside the 12-month warranty window, and wear and tear was confirmed not to be a covered defect, so the request was handled as a standard paid spare-parts order. A replacement blade assembly was ordered at ₹1,450 plus standard shipping, with an estimated arrival of 5–7 business days.",
+        "context": null,
+        "source_file": "cases.json"
     }
 ]
