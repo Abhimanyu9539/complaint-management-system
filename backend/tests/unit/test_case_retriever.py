@@ -2,7 +2,7 @@ import pytest
 from langchain_core.documents import Document
 from langchain_qdrant import RetrievalMode
 
-from cms.retrieval import case_retriever
+from cms.retrieval.retrievers import case_retriever
 
 # Every assertion below holds for all three legs — only the mode the store is
 # opened in differs.
