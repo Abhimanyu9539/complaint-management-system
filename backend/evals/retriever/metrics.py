@@ -9,7 +9,7 @@ import logging
 from deepeval.metrics import (
     ContextualPrecisionMetric,
     ContextualRecallMetric,
-    ContextualRelevancyMetric,
+    ContextualRelevancyMetric,  # noqa: F401 — parked; see RETRIEVER_METRICS below
 )
 from deepeval.models import OpenAIModel
 
