@@ -8,6 +8,7 @@ Usage (from anywhere, once the project is installed):
     cms-seed --one           # one case, the walking-skeleton gate
     cms-seed --one-policy    # one policy, the same gate for the policy corpus
     cms-seed                 # the full corpus
+    cms-seed --force         # the full corpus, ignoring the short-circuit
 
 Where the corpus is read from, and how `.env` is located, are both
 cwd-independent — see `cms.ingestion.seed.resolve_seed_dir` and
@@ -51,10 +52,17 @@ async def _main() -> int:
         action="store_true",
         help="Ingest only the first policy document (walking-skeleton check).",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-ingest every document, bypassing the ingest-key short-circuit.",
+    )
     args = parser.parse_args()
 
     try:
-        summary = await run_seed(one=args.one, one_policy=args.one_policy)
+        summary = await run_seed(
+            one=args.one, one_policy=args.one_policy, force=args.force
+        )
     except Exception:
         logger.exception("Seed run failed")
         return 1

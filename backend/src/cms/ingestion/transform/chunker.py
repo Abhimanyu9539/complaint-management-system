@@ -16,12 +16,9 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter,
 )
 
-logger = logging.getLogger(__name__)
+from cms.config.settings import get_settings
 
-# ~800 tokens with 100 overlap (build.md §0.4). Overlap exists so a clause that
-# straddles a chunk boundary is still fully present in at least one chunk.
-POLICY_CHUNK_TOKENS = 800
-POLICY_CHUNK_OVERLAP = 100
+logger = logging.getLogger(__name__)
 
 # Headers the policy corpus actually uses: `# Title`, `## N. Section`,
 # `### N.M Clause`. Anything deeper is left inside the chunk body.
@@ -57,7 +54,14 @@ def chunk_policy(text: str) -> list[str]:
     failures" is useless to cite, while "Product Warranty Policy > 2.
     Manufacturing Defects > 2.3 …" tells the agent which clause they are
     quoting.
+
+    Size and overlap come from settings (~800/100, build.md §0.4) — they are the
+    tunable half of the strategy, and `Settings.policy_recipe` folds them into
+    the ingest key so changing them actually re-ingests. `POLICY_HEADERS` stays
+    here: it is structural, not tunable, and a list of tuples is a poor env var.
     """
+    settings = get_settings()
+
     # strip_headers=True: the heading lines are re-added as the breadcrumb
     # below, so leaving them in place would just duplicate them in the chunk.
     header_splitter = MarkdownHeaderTextSplitter(
@@ -66,8 +70,8 @@ def chunk_policy(text: str) -> list[str]:
     )
     size_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         encoding_name=_TOKEN_ENCODING,
-        chunk_size=POLICY_CHUNK_TOKENS,
-        chunk_overlap=POLICY_CHUNK_OVERLAP,
+        chunk_size=settings.policy_chunk_tokens,
+        chunk_overlap=settings.policy_chunk_overlap,
     )
 
     chunks: list[str] = []

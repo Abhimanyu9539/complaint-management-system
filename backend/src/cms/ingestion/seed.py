@@ -280,12 +280,16 @@ def find_seed_case(source_ref: str) -> dict:
     raise LookupError(f"No seed case with id {source_ref!r}")
 
 
-async def run_seed(one: bool = False, one_policy: bool = False) -> SeedSummary:
+async def run_seed(
+    one: bool = False, one_policy: bool = False, *, force: bool = False
+) -> SeedSummary:
     """Ingest the corpus. `one` and `one_policy` are independent walking-skeleton
     gates, one per corpus: each narrows its own corpus to its first document and
     skips the *other* corpus entirely unless that corpus's flag is also given.
     Passing neither ingests everything — the default `cms-seed` run. Passing
     both narrows each corpus to one document rather than skipping either.
+
+    `force` bypasses the ingest-key short-circuit for every document in the run.
 
     Raises if the corpus itself cannot be read; individual documents are
     isolated, so one malformed document does not cost us the rest of the run.
@@ -308,14 +312,14 @@ async def run_seed(one: bool = False, one_policy: bool = False) -> SeedSummary:
 
     for case in cases:
         try:
-            summary.record((await seed_case(case)).status)
+            summary.record((await seed_case(case, force=force)).status)
         except Exception:
             logger.exception("Case %s failed to ingest", case.get("id"))
             summary.failed += 1
 
     for path in policies:
         try:
-            result, storage_path = await seed_policy(path)
+            result, storage_path = await seed_policy(path, force=force)
             summary.record(result.status)
             if storage_path is not None:
                 summary.stored += 1
@@ -344,7 +348,7 @@ async def run_seed_one_type(
 
     Same per-document behaviour as `run_seed`, restricted to one corpus, so an
     HTTP trigger can re-seed just the cases or just the policies without
-    touching the other. `force` bypasses the content-hash short-circuit for
+    touching the other. `force` bypasses the ingest-key short-circuit for
     every document in the run — the admin trigger's checkbox.
     """
     seed_dir = resolve_seed_dir()

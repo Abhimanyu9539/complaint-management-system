@@ -78,6 +78,31 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_dims: int = 1536
 
+    # --- Chunking ---
+    # Overlap exists so a clause straddling a chunk boundary is still fully
+    # present in at least one chunk. Env-tunable for retrieval experiments;
+    # changing either re-ingests the policy corpus via `policy_recipe` below.
+    policy_chunk_tokens: int = 800
+    policy_chunk_overlap: int = 100
+
+    # --- Ingest recipes ---
+    # The short-circuit key covers the source text *and* how we process it, so a
+    # strategy change re-ingests instead of silently skipping. Per corpus, so a
+    # policy chunking change does not re-embed the cases.
+    @property
+    def case_recipe(self) -> str:
+        """Ingest-key recipe for cases. Bump v1 when `build_case_text` changes."""
+        return f"case-v1|{self.embedding_model}"
+
+    @property
+    def policy_recipe(self) -> str:
+        """Ingest-key recipe for policies. Bump v1 when POLICY_HEADERS or the
+        breadcrumb format changes — those are not captured by the numbers."""
+        return (
+            f"policy-v1|{self.policy_chunk_tokens}-{self.policy_chunk_overlap}"
+            f"|{self.embedding_model}"
+        )
+
     # --- LangSmith tracing  ---
     langsmith_tracing: bool = True
     langsmith_endpoint: str = "https://api.smith.langchain.com"

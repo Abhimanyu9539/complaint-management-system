@@ -24,7 +24,8 @@ leave Qdrant points that retrieval can find but Postgres cannot explain — ghos
 chunks are the dangerous failure direction.
 
 Idempotency has three layers, so re-running a seed or a retry is free and safe:
-  1. content-hash short-circuit — unchanged documents cost zero OpenAI calls;
+  1. ingest-key short-circuit — unchanged documents cost zero OpenAI calls, and
+     a changed chunking or embedding recipe re-ingests instead of skipping;
   2. chunk-table upsert on `(fk_column, chunk_index)` — rows update in place;
   3. deterministic Qdrant point ids — points overwrite instead of duplicating.
 """
@@ -61,7 +62,7 @@ from cms.ingestion.load.vector_loader import (
     upsert_points,
 )
 from cms.ingestion.transform.chunker import chunk_case, chunk_policy
-from cms.ingestion.transform.cleaner import compute_content_hash
+from cms.ingestion.transform.cleaner import compute_ingest_key
 from cms.ingestion.transform.enricher import case_metadata, policy_metadata
 
 logger = logging.getLogger(__name__)
@@ -106,19 +107,21 @@ async def ingest_case(
 ) -> IngestResult:
     """Ingest one case end to end. Returns what happened; raises on failure.
 
-    `force` bypasses the content-hash short-circuit — the admin trigger's
-    checkbox. `job_id`, when given, is an already-`queued` row from
+    `force` bypasses the ingest-key short-circuit — the admin trigger's
+    checkbox, and the override for a strategy change no recipe can catch.
+    `job_id`, when given, is an already-`queued` row from
     `ingestion_jobs.queue_job` that this call claims instead of inserting a
     fresh one: the HTTP trigger path needs a job id to hand back before this
     function is even called. `cms-seed` never passes one and keeps the
     original insert-on-start behaviour unchanged.
     """
-    collection = get_settings().qdrant_cases_collection
+    settings = get_settings()
+    collection = settings.qdrant_cases_collection
 
     case = await fetch_case(case_id)
-    content_hash = compute_content_hash(raw_text)
+    ingest_key = compute_ingest_key(raw_text, settings.case_recipe)
 
-    if not force and case["status"] == "indexed" and case["content_hash"] == content_hash:
+    if not force and case["status"] == "indexed" and case["ingest_key"] == ingest_key:
         logger.info(
             "Case %s ('%s') unchanged — skipping (no embedding cost)",
             case_id,
@@ -146,7 +149,7 @@ async def ingest_case(
         )
         await delete_stale_points(collection, case_id, previous_point_ids - set(point_ids))
 
-        await mark_case_indexed(case_id, content_hash, len(chunk_rows))
+        await mark_case_indexed(case_id, ingest_key, len(chunk_rows))
         await finish_job(job_id, len(chunk_rows), len(point_ids))
 
     except Exception as exc:
@@ -174,12 +177,13 @@ async def ingest_policy(
     See `ingest_case` for what `force` and `job_id` are for — the two entry
     points share the same contract.
     """
-    collection = get_settings().qdrant_policies_collection
+    settings = get_settings()
+    collection = settings.qdrant_policies_collection
 
     policy = await fetch_policy(policy_id)
-    content_hash = compute_content_hash(raw_text)
+    ingest_key = compute_ingest_key(raw_text, settings.policy_recipe)
 
-    if not force and policy["status"] == "indexed" and policy["content_hash"] == content_hash:
+    if not force and policy["status"] == "indexed" and policy["ingest_key"] == ingest_key:
         logger.info(
             "Policy %s ('%s') unchanged — skipping (no embedding cost)",
             policy_id,
@@ -207,7 +211,7 @@ async def ingest_policy(
             collection, policy_id, previous_point_ids - set(point_ids)
         )
 
-        await mark_policy_indexed(policy_id, content_hash, len(chunk_rows))
+        await mark_policy_indexed(policy_id, ingest_key, len(chunk_rows))
         await finish_job(job_id, len(chunk_rows), len(point_ids))
 
     except Exception as exc:

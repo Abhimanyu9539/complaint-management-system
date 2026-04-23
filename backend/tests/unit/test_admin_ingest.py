@@ -57,7 +57,7 @@ async def test_trigger_document_mode_queues_and_schedules_a_seed_run(monkeypatch
     assert len(tasks.tasks) == 1
     task = tasks.tasks[0]
     assert task.func is admin_ingest._run_seed_document
-    assert task.args == ("policy", "warranty-policy.md", "job-1")
+    assert task.args == ("policy", "warranty-policy.md", "job-1", False)
 
 
 async def test_run_seed_document_patches_the_job_row_before_ingesting(monkeypatch) -> None:
@@ -83,7 +83,7 @@ async def test_run_seed_document_patches_the_job_row_before_ingesting(monkeypatc
 
     monkeypatch.setattr(admin_ingest.ingestion_jobs, "set_job_document", fake_set_job_document)
 
-    async def fake_ingest_policy(document_id, body, *, job_id=None):
+    async def fake_ingest_policy(document_id, body, *, force=False, job_id=None):
         events.append(("ingest", document_id, body, job_id))
 
     monkeypatch.setattr(admin_ingest, "ingest_policy", fake_ingest_policy)
@@ -146,7 +146,21 @@ async def test_trigger_seed_mode_queues_a_placeholder_batch_job(monkeypatch) -> 
     assert len(tasks.tasks) == 1
     task = tasks.tasks[0]
     assert task.func is admin_ingest._run_corpus
-    assert task.args == ("policy", "batch-job-1")
+    assert task.args == ("policy", "batch-job-1", False)
+
+
+async def test_trigger_seed_mode_passes_force_through_to_the_corpus_run(monkeypatch) -> None:
+    """`force` was plumbed to `pipeline` but never set by any caller — the
+    override for a strategy change the ingest-key recipe cannot catch."""
+    monkeypatch.setattr(
+        admin_ingest.ingestion_jobs, "queue_job", AsyncMock(return_value="batch-job-2")
+    )
+
+    payload = TriggerIngestionRequest(doc_type="case", mode="seed", force=True)
+    tasks = _tasks()
+    await admin_ingest.trigger_ingestion(payload, tasks)
+
+    assert tasks.tasks[0].args == ("case", "batch-job-2", True)
 
 
 async def test_retry_unknown_job_raises_lookup_error(monkeypatch) -> None:

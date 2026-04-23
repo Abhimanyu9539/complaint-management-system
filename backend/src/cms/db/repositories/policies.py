@@ -18,7 +18,7 @@ TABLE = "policies"
 
 # `lifecycle` takes the slot `category` occupies for cases: it is what lets
 # retrieval restrict to published clauses.
-POLICY_COLUMNS = "id,title,department_id,lifecycle,source,status,content_hash"
+POLICY_COLUMNS = "id,title,department_id,lifecycle,source,status,ingest_key"
 
 
 async def fetch_policy(policy_id: str) -> dict:
@@ -74,12 +74,12 @@ async def mark_policy_processing(policy_id: str) -> None:
     ).execute()
 
 
-async def mark_policy_indexed(policy_id: str, content_hash: str, chunk_count: int) -> None:
-    """Record the successful ingest. Writing `content_hash` arms the short-circuit."""
+async def mark_policy_indexed(policy_id: str, ingest_key: str, chunk_count: int) -> None:
+    """Record the successful ingest. Writing `ingest_key` arms the short-circuit."""
     await get_supabase().table(TABLE).update(
         {
             "status": "indexed",
-            "content_hash": content_hash,
+            "ingest_key": ingest_key,
             "chunk_count": chunk_count,
             "indexed_at": utc_now_iso(),
             "error": None,

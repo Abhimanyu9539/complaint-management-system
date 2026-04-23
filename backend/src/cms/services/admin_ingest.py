@@ -79,7 +79,9 @@ async def _run_document(doc_type: str, document_id: str, job_id: str) -> None:
         _running.discard(doc_type)
 
 
-async def _run_seed_document(doc_type: str, source_ref: str, job_id: str) -> None:
+async def _run_seed_document(
+    doc_type: str, source_ref: str, job_id: str, force: bool = False
+) -> None:
     """Register one seed-corpus file (by `source_ref`) and ingest it.
 
     The job row was queued with a placeholder document id — a real one does
@@ -97,12 +99,12 @@ async def _run_seed_document(doc_type: str, source_ref: str, job_id: str) -> Non
             case = seed_module.find_seed_case(source_ref)
             document_id, text = await seed_module.register_seed_case(case)
             await ingestion_jobs.set_job_document(job_id, document_id)
-            await ingest_case(document_id, text, job_id=job_id)
+            await ingest_case(document_id, text, force=force, job_id=job_id)
         else:
             path = seed_module.find_seed_policy(source_ref)
             document_id, body, _storage_path = await seed_module.register_seed_policy(path)
             await ingestion_jobs.set_job_document(job_id, document_id)
-            await ingest_policy(document_id, body, job_id=job_id)
+            await ingest_policy(document_id, body, force=force, job_id=job_id)
     except Exception as exc:
         logger.exception("Background seed ingest failed for %s %s", doc_type, source_ref)
         await ingestion_jobs.fail_job(job_id, f"{type(exc).__name__}: {exc}")
@@ -110,7 +112,7 @@ async def _run_seed_document(doc_type: str, source_ref: str, job_id: str) -> Non
         _running.discard(doc_type)
 
 
-async def _run_corpus(doc_type: str, batch_job_id: str) -> None:
+async def _run_corpus(doc_type: str, batch_job_id: str, force: bool = False) -> None:
     """Re-seed a whole corpus, summarised onto one placeholder job row.
 
     Each document ingested along the way still gets its own normal job row —
@@ -124,7 +126,7 @@ async def _run_corpus(doc_type: str, batch_job_id: str) -> None:
     _running.add(doc_type)
     try:
         await ingestion_jobs.claim_job(batch_job_id)
-        summary = await seed_module.run_seed_one_type(doc_type)
+        summary = await seed_module.run_seed_one_type(doc_type, force=force)
         total = summary.failed + summary.indexed + summary.skipped
         if summary.failed:
             await ingestion_jobs.fail_job(
@@ -171,7 +173,9 @@ async def trigger_ingestion(
         # via `set_job_document` before ingesting. See that function's
         # docstring, and `ingestion_jobs.document_id`'s NOT NULL constraint.
         job_id = await ingestion_jobs.queue_job(payload.doc_type, str(uuid4()))
-        background_tasks.add_task(_run_seed_document, payload.doc_type, source_ref, job_id)
+        background_tasks.add_task(
+            _run_seed_document, payload.doc_type, source_ref, job_id, payload.force
+        )
         return TriggerIngestionResponse(
             job_id=job_id,
             accepted=True,
@@ -185,7 +189,7 @@ async def trigger_ingestion(
     # summary row whose id never matched anything is an expected shape, not a
     # dangling reference.
     batch_job_id = await ingestion_jobs.queue_job(payload.doc_type, str(uuid4()))
-    background_tasks.add_task(_run_corpus, payload.doc_type, batch_job_id)
+    background_tasks.add_task(_run_corpus, payload.doc_type, batch_job_id, payload.force)
     corpus_label = "cases" if payload.doc_type == "case" else "policies"
     return TriggerIngestionResponse(
         job_id=batch_job_id,

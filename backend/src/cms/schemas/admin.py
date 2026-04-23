@@ -123,6 +123,11 @@ class TriggerIngestionRequest(_Base):
         description="Required when mode == 'document'; ignored for 'seed'. The seed "
         "corpus's natural key (a policy filename or a case id), not a Postgres id.",
     )
+    force: bool = Field(
+        default=False,
+        description="Re-ingest even if the ingest key is unchanged — the full "
+        "embedding cost. The override for a strategy change no recipe captures.",
+    )
 
     @model_validator(mode="after")
     def _source_ref_required_for_document_mode(self) -> "TriggerIngestionRequest":
