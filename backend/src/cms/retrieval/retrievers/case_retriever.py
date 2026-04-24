@@ -15,7 +15,9 @@ from cms.retrieval.vector_store.qdrant_store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_K = 4
+# Read once at import: the value is a function default below, and settings are
+# process-wide anyway. Tune it with CASE_TOP_K.
+DEFAULT_K = get_settings().case_top_k
 
 
 async def _search(query: str, k: int, mode: RetrievalMode) -> list[tuple[Document, float]]:

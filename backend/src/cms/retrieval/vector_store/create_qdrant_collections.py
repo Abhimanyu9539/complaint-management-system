@@ -83,11 +83,25 @@ def collection_specs(settings: Settings) -> list[CollectionSpec]:
     ]
 
 
-def create_collection(client: QdrantClient, name: str, embedding_dims: int) -> bool:
-    """Create the collection if absent. Returns True if it was created."""
+def create_collection(
+    client: QdrantClient, name: str, embedding_dims: int, *, recreate: bool = False
+) -> bool:
+    """Create the collection if absent. Returns True if it was created.
+
+    `recreate` drops an existing collection first — the only way to change the
+    vector size, since Qdrant cannot resize one in place. It destroys every
+    point, so callers must follow it with a forced re-ingest.
+    """
     if client.collection_exists(name):
-        logger.info("Collection '%s' already exists — skipping creation", name)
-        return False
+        if not recreate:
+            logger.info("Collection '%s' already exists — skipping creation", name)
+            return False
+
+        logger.warning(
+            "Dropping collection '%s' — every point is deleted and must be re-ingested",
+            name,
+        )
+        client.delete_collection(name)
 
     try:
         client.create_collection(
@@ -155,19 +169,22 @@ def log_collection_summary(client: QdrantClient, name: str) -> None:
 
 
 def ensure_collection(
-    client: QdrantClient, settings: Settings, spec: CollectionSpec
+    client: QdrantClient, settings: Settings, spec: CollectionSpec, *, recreate: bool = False
 ) -> None:
     """Bring one collection up to spec, then log what Qdrant stored."""
-    create_collection(client, spec.name, settings.embedding_dims)
+    create_collection(client, spec.name, settings.embedding_dims, recreate=recreate)
     create_payload_indexes(client, spec.name, spec.payload_fields)
     log_collection_summary(client, spec.name)
 
 
-def ensure_collections(client: QdrantClient, settings: Settings) -> bool:
+def ensure_collections(
+    client: QdrantClient, settings: Settings, *, recreate: bool = False
+) -> bool:
     """Bring every collection up to spec. Returns True if all of them succeeded.
 
     Safe to re-run: an existing collection is left untouched and index creation
-    is a server-side no-op when the index already matches.
+    is a server-side no-op when the index already matches. `recreate` opts out
+    of that safety to apply a new vector size — see `create_collection`.
 
     Each collection is isolated — a failure setting up one should not prevent
     the other from being attempted and reported.
@@ -175,7 +192,7 @@ def ensure_collections(client: QdrantClient, settings: Settings) -> bool:
     succeeded = True
     for spec in collection_specs(settings):
         try:
-            ensure_collection(client, settings, spec)
+            ensure_collection(client, settings, spec, recreate=recreate)
         except Exception:
             logger.exception("Collection setup failed for '%s'", spec.name)
             succeeded = False

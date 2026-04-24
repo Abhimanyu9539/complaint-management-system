@@ -16,7 +16,9 @@ from cms.retrieval.vector_store.qdrant_store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_K = 10
+# Read once at import: the value is a function default below, and settings are
+# process-wide anyway. Tune it with POLICY_TOP_K.
+DEFAULT_K = get_settings().policy_top_k
 PUBLISHED = "published"
 
 # One shared filter
