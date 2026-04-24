@@ -34,6 +34,7 @@ dependencies = [
 [project.scripts]
 cms-seed = "cms.cli.seed:main"
 cms-create-collections = "cms.cli.create_collections:main"
+cms-reindex = "cms.cli.reindex:main"
 cms-analyze = "cms.cli.analyze:main"
 cms-retrieve = "cms.cli.retrieve:main"
 

@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     openai_model_cheap: str = "gpt-5.4-nano"
 
     # --- Embeddings ---
+    # `embedding_dims` sizes the Qdrant vector *and* truncates what OpenAI
+    # returns (text-embedding-3-* only). Changing it needs `cms-reindex`, which
+    # recreates the collections at the new size before re-embedding.
     embedding_model: str = "text-embedding-3-small"
     embedding_dims: int = 1536
 
@@ -85,6 +88,12 @@ class Settings(BaseSettings):
     policy_chunk_tokens: int = 800
     policy_chunk_overlap: int = 100
 
+    # --- Retrieval ---
+    # Top-k per corpus. The evals score at these same values, so a change here
+    # moves production and the eval suite together.
+    case_top_k: int = 4
+    policy_top_k: int = 10
+
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a
     # strategy change re-ingests instead of silently skipping. Per corpus, so a
@@ -92,7 +101,7 @@ class Settings(BaseSettings):
     @property
     def case_recipe(self) -> str:
         """Ingest-key recipe for cases. Bump v1 when `build_case_text` changes."""
-        return f"case-v1|{self.embedding_model}"
+        return f"case-v1|{self.embedding_model}-{self.embedding_dims}"
 
     @property
     def policy_recipe(self) -> str:
@@ -100,7 +109,7 @@ class Settings(BaseSettings):
         breadcrumb format changes — those are not captured by the numbers."""
         return (
             f"policy-v1|{self.policy_chunk_tokens}-{self.policy_chunk_overlap}"
-            f"|{self.embedding_model}"
+            f"|{self.embedding_model}-{self.embedding_dims}"
         )
 
     # --- LangSmith tracing  ---
