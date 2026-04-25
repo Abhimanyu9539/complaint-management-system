@@ -22,3 +22,7 @@ docs/
 .deepeval-cache.json
 .temp_test_run_data/
 .pytest-tmp/
+
+# Eval output: timestamped run JSON from aggregate.py, and stdout from parallel legs
+evals/results/
+runs/

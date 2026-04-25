@@ -84,6 +84,39 @@ uv run deepeval test run evals/retriever/test_case_hybrid.py --ignore-errors --i
 
 
 
+### Aggregate scores only
+
+`deepeval test run` builds its table in the CLI process *after* pytest returns, so running the
+test files under plain `pytest` prints per-golden results and no summary. `retriever/aggregate.py`
+takes the other path — `evaluate()`, which wraps up its own run and prints the **Aggregate
+Metrics** panel (average score and pass rate per metric) plus the cost line:
+
+```bash
+uv run python evals/retriever/aggregate.py --leg policy-hybrid
+uv run python evals/retriever/aggregate.py --leg case-dense
+```
+
+Same goldens, same adapters, same judge as the six test files — one leg per invocation. It logs
+the leg, `top_k`, judge and golden set as hyperparameters, so runs stay attributable.
+
+Each run also writes a timestamped `test_run_<YYYYMMDD_HHMMSS>.json` to
+`evals/results/<leg>/` (gitignored, override with `--results-folder`) — unlike
+`.deepeval/.latest_test_run.json`, which every run overwrites. That is what makes legs
+comparable after the fact, and what stops parallel legs from clobbering each other.
+
+To run legs concurrently, give each its own stdout and lower `--max-concurrent`: the OpenAI rate
+limit is per account, so six processes at the default 20 means 120 judge calls in flight.
+
+```powershell
+$legs = "policy-dense","policy-sparse","policy-hybrid","case-dense","case-sparse","case-hybrid"
+New-Item -ItemType Directory -Force runs | Out-Null
+foreach ($leg in $legs) {
+  Start-Process -NoNewWindow uv `
+    -ArgumentList "run python evals/retriever/aggregate.py --leg $leg --max-concurrent 5" `
+    -RedirectStandardOutput "runs/$leg.txt"
+}
+```
+
 Worth knowing:
 
 - **`uv run pytest` will not run these.** `testpaths = ["tests"]` keeps `evals/` out of the
