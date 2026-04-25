@@ -1,7 +1,7 @@
 """CLI entrypoint for the standalone policy retrieval probe.
 Usage (from anywhere, once the project is installed):
 
-    cms-retrieve "how long is the warranty period on a replacement unit"
+    cms-retrieve "how long is the warranty period on a replacement unit" --corpus policies --mode dense
     cms-retrieve "refund for a delayed order" -k 8 --json
     cms-retrieve "CarePlan+" --mode sparse
     cms-retrieve "my X200 vacuum stopped charging" --corpus cases

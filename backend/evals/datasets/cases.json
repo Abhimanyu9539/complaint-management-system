@@ -68,5 +68,145 @@
         "expected_output": "A prior complaint asked to order a replacement blade assembly for a ProBlend 300 mixer purchased over a year earlier, with the customer noting it was outside warranty and that the blades had worn down through regular use rather than breaking suddenly. The unit was confirmed to be outside the 12-month warranty window, and wear and tear was confirmed not to be a covered defect, so the request was handled as a standard paid spare-parts order. A replacement blade assembly was ordered at ₹1,450 plus standard shipping, with an estimated arrival of 5–7 business days.",
         "context": null,
         "source_file": "cases.json"
+    },
+    {
+        "input": "₹18,499 left my bank account on Tuesday evening and there is no order anywhere in my account. My bank app shows the transaction went through and gives me a reference number. I've checked my email including spam and there's nothing. Where has my money gone?",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a customer charged twice on the same card for a single order when only one had been placed. What transfers is the diagnostic move: the payment gateway was checked directly and found to show a retry-on-timeout bug that had caused a second authorization to settle, establishing that gateway logs are the source of truth and are examined before responding rather than the customer being asked to demonstrate anything. The refund was returned to the original card with the applicable 5–7 working day posting window stated proactively when it was confirmed, under billing §4. That precedent covers a settled duplicate against an order that does exist; it does not address a debit with no matching order in our system at all, so the auto-reversal turnaround and the manual-refund obligation in payments §1 govern here rather than the precedent.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "My parcel arrived with the tape slit down the middle and stuck back down with a different kind of tape. The main unit is there but the accessory box inside is gone. The courier's own delivery photo actually shows the box already open at the point he handed it over. I've photographed everything before touching it further.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves an order whose tracking showed it delivered but which never arrived, where the customer's building operated a security desk logging every parcel and no entry existed. It was handled as presumptive carrier loss under shipping §2, and a replacement was reshipped at no cost by standard shipping without waiting for the outcome of the carrier investigation. What transfers directly is that structure: where the customer's own evidence contradicts the delivery record, the claim resolves in the customer's favour and the remedy is not held hostage to the carrier's timeline. The precedent concerns a shipment that never arrived rather than one that arrived opened and short, so the specific tampering provisions in delivery §4 govern the assessment, but the remedy shape and the refusal to make the customer wait on the carrier are the same.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I ordered three things together and the box turned up with only two of them in it. The packing slip inside lists all three. The box didn't look damaged or opened, it just doesn't have everything in it. Do I have to report this as a lost parcel? The whole thing did technically arrive.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a parcel whose tracking showed it delivered but which never reached the customer, handled as presumptive carrier loss with a replacement reshipped at no cost without waiting on the carrier investigation. That precedent is useful mainly for the boundary it marks rather than for direct application: it concerns an entire shipment failing to arrive, whereas a parcel that arrives intact but short one item is a fulfilment pack error. What transfers is the disposition — a shortfall attributable to us is remedied by shipping the missing goods at no cost, immediately, without the customer being made to prove the shortfall or wait for an investigation to conclude first.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I ordered a humidifier and what turned up is a bathroom scale. The packing slip inside has someone else's name and a completely different order number on it. I don't particularly want to spend my afternoon at a courier office sorting out your warehouse's mistake.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves an order that arrived with the box crushed and the unit rattling inside, where photographs were accepted as sufficient evidence and a replacement was shipped the same day by express courier at no charge, with the customer told to dispose of the damaged unit themselves and no return required. What transfers is the principle that where the failure is ours, the correct goods go out immediately rather than being held behind the return of the wrong ones, and the customer is not made to carry the administrative cost of our error. The precedent concerns transit damage rather than a fulfilment mis-pick, so the write-off reasoning that drove it does not apply directly, but the sequencing — replacement first, retrieval arranged separately and at our cost — is the same.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "My father is 82 and has a lung condition, and the air purifier in his bedroom has stopped working. His consultant was clear that he needs to keep the air clean in there. Your website is quoting me five to seven days for a replacement and I don't think he can manage that long. I don't have anything in writing from the doctor to hand.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a customer whose order arrived damaged and who stated they were moving apartments the following week and needed a working unit before then. Same-day express replacement shipping was approved at no charge under shipping §4 on expedited replacement eligibility, on the strength of the stated deadline alone, and the customer was not asked to substantiate the reason or to return the damaged unit first. What transfers is the core move: a stated time-sensitive circumstance is acted on as given, it changes the shipping service rather than merely the tone of the reply, and no proof is requested. The precedent involves a logistical deadline rather than a health dependence, so the additional severity uplift and the recording obligations in the vulnerable-customer policy apply here on top of what the precedent establishes.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I asked for my money back and instead you've dropped ₹6,200 into some store wallet I never agreed to. I don't want credit with you, I want the money returned to the card I paid with. Nobody asked me which I preferred.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a subscription that continued billing after a valid cancellation because of a sync failure between the ticketing tool and the billing platform. What transfers is the handling of the two remedies as separate things: the three erroneous charges were refunded in full to the original payment method under billing §2, and a ₹750 apology credit was added to the account separately, for use against future orders. The refund went to source and the credit sat alongside it — the credit was never offered as a substitute for the money owed. That is the distinction at issue here, and the precedent demonstrates the correct shape even though its underlying cause, a billing system fault, differs from a refund being routed to the wrong destination.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I raised a ticket nine days ago and have had precisely nothing back beyond the automatic acknowledgement. The status has said 'in review' the entire time. At this point I'd genuinely rather be told you can't help than keep being ignored.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a customer contacting support for the third time about an unresolved pairing problem, having already followed a previous agent's instructions twice without result. It was treated as a process failure on our side rather than as a difficult customer: the ticket was given a workaround that resolved the immediate problem, and a ₹1,200 account credit was applied for the repeated contacts without the customer having asked for one. What transfers is that a failure of our own process generates goodwill automatically and in the same message that explains what went wrong. The precedent concerns repeated contact rather than prolonged silence, but both are failures of the same kind under retention §3, and the remedy structure — fix the substance, then compensate the experience separately — applies directly.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "The agent I've been dealing with has told me no twice now and I don't accept it. Put me through to a manager, or give me the email address of whoever is actually in charge of this. I'm not going round in circles with someone who keeps reading me the same line.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a customer on their third contact about the same unresolved issue, openly frustrated, who had already been given advice that did not work. The resolution was not to move the ticket elsewhere: the agent identified the actual cause, provided a workaround the customer confirmed worked, applied a ₹1,200 credit for the repeated contacts, and told the customer specifically which future release would fix the underlying problem. What transfers is precisely the point at issue — an insistent or frustrated customer was answered better and faster by the person already holding the ticket rather than escalated, and the substantive answer plus automatic goodwill is what resolved it. The precedent does not involve an explicit demand for a manager, but it demonstrates the response escalation §2 directs.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "My husband died last month. He had a subscription with you that is still taking money out of the joint account. I've phoned twice and been asked both times to send a death certificate before anything can be done, and the second person tried to offer me a discount to keep it going. I would like this stopped.",
+        "actual_output": null,
+        "expected_output": "The nearest resolved case in the corpus involves a subscription cancellation where the customer objected to a price increase, and the resolution was a loyalty discount reinstating the previous rate for twelve months, which the customer accepted so that no cancellation was processed. That precedent must not be followed here, and retrieving it is not the same as applying it: it turns on a price-driven cancellation from a customer who could be retained, whereas a cancellation following a death is one where vulnerable §4 forbids a save offer of any kind and requires the subscription to be cancelled with refunds from the date of notification. The precedent is useful only as a contrast — it shows the standard retention path that this situation specifically removes.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I left a one-star review a fortnight ago describing how the unit sparked at the plug when I switched it on, and it has quietly disappeared from the listing. I'd like to know on what basis it was taken down, and whether anyone actually read the part about the sparking.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a customer who reported a burning smell from a motor after two weeks of light use, without a receipt, and who said they were more worried about fire risk than about the paperwork. It was handled under the safety exception in warranty §5.1, which authorized an immediate full refund rather than the standard repair-first remedy, together with a ₹1,500 goodwill credit, instructions to stop using the unit immediately, and safe disposal guidance. What transfers is the treatment of the safety symptom itself: a report of sparking or burning is acted on as a hazard on its own terms, regardless of the channel it arrived through or the administrative question wrapped around it. The precedent arrived as a support ticket rather than as a product review, but reviews §4 directs that the channel makes no difference to the obligation.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "Your courier has supposedly attempted to collect my return twice now. Nobody rang the bell either time and I was working from home on both days. I've now been told the pickup window has closed and I should contact you again. I'm not chasing this a fourth time.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves an unopened item returned outside the standard window, approved as a one-time courtesy under returns §3, where a reverse pickup was scheduled and a full refund to the original payment method was to follow on receipt. What transfers is limited but real: it establishes the ordinary shape of the process, a confirmed pickup slot followed by a refund to source, which is the baseline this customer has not received. The precedent contains no failed-pickup scenario and offers nothing on attempt limits, self-ship reimbursement or what happens when the courier does not arrive, so the handling here rests on reverse §2 and §3 rather than on precedent.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I've been going back and forth with your support team for six weeks with no resolution. I want the name and contact details of your Grievance Officer, and I'd like to know what happens if I take this to the consumer commission, because that is where this is heading.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a report that moved beyond the support queue entirely. Support acknowledged receipt, requested the documentation that would be needed for the file, provided the direct legal contact address for continued correspondence, and handed the case to Legal with all correspondence attached, informing the customer that Legal would follow up directly. No remedy of any kind was issued from support once the handoff was triggered. What transfers is the handoff structure: acknowledge, name who now owns it, give the customer one channel, hand over the full history, and stop replying on the old thread. The precedent was triggered by an injury report rather than by a grievance escalation, so the timelines and the published-officer obligation come from the grievance policy, but the way support narrows its own role is the same.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "Under the data protection act I want to know exactly what personal information you hold about me, and I want all of it deleted, including the old support tickets. Please confirm when this has been done.",
+        "actual_output": null,
+        "expected_output": "The closest resolved precedent involves a matter that was recognised as belonging to Legal and removed from the support queue on identification. Support acknowledged the report, requested the documentation needed for the file, gave the customer a single direct legal contact for further correspondence, and transferred the case with the full history attached, issuing no remedy or substantive position of its own. What transfers is exactly that pattern, which is what privacy §4 requires for a data-principal request: confirm receipt, name the owner and the period, hand over, and action nothing locally. The precedent was an injury report rather than a data-protection request, so the statutory rights and timelines themselves are not evidenced by it — the corpus holds no resolved data-deletion case — but the handoff discipline is the same.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "Somebody has got into my account. The email address on it has been changed to one I don't recognise and there are four orders totalling about ₹42,000 going to an address in a city I've never been to. I can't log in any more. I did not place these.",
+        "actual_output": null,
+        "expected_output": "The case corpus holds no precedent for account compromise. Nothing in it involves unauthorised access, a changed contact address, orders placed by someone other than the account holder, or the verification and order-block steps that follow. The nearest resolved case involves an unexpected duplicate charge appearing on a customer's card, but that was traced to a retry-on-timeout bug in the payment gateway and resolved as a straightforward refund to source — it turns on a system fault rather than on a third party acting on the account, and it establishes nothing about verification, liability or blocking pending orders. Retrieval should surface little here, and the handling comes from the account-security policy rather than from precedent.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I manage my mother's account for her because she finds the app difficult. Every single time I contact you I'm made to establish all over again that I'm allowed to speak for her, even though I've done it four times now and it's noted on at least two of the tickets. Can this be recorded once so we can skip it?",
+        "actual_output": null,
+        "expected_output": "The case corpus holds no precedent for a third party acting on an account holder's behalf. No resolved case involves a family member managing another person's account, a relationship being verified, or a repeated verification burden being complained about. The corpus is uniformly first-party — in every case the person writing is the person who bought the product. There is consequently no nearest case worth transferring here, and retrieval that returns confident matches on this input is matching on surface features such as the frustrated tone or the mention of repeated contacts rather than on anything substantively applicable. The handling comes from vulnerable §4 and §8.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "You took my order, confirmed it, sent me an invoice, and then eleven days later emailed to say it's out of stock and cancelled. I had already arranged for someone to be at the flat on the delivery day and turned down a similar deal elsewhere because yours was confirmed. A refund doesn't really cover it.",
+        "actual_output": null,
+        "expected_output": "The case corpus holds no oversell precedent. No resolved case involves an order confirmed and then cancelled for stock that did not exist, and none establishes the automatic inconvenience credit, the three-way choice offered to the customer, or the treatment of plans made around a confirmed delivery date. The nearest resolved cases concern orders that were fulfilled and then went wrong afterwards — a parcel lost in transit and reshipped, a unit damaged on arrival and replaced the same day — which are post-dispatch failures rather than a failure to dispatch at all, and neither speaks to a customer's reliance on a confirmation. The ₹500 automatic credit and the additional goodwill assessment come from orders §4 and retention §2, not from precedent.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "I was given a ₹5,000 gift card at Diwali and went to use it this week. The balance is showing as zero and your help page says something about inactivity. The card doesn't have an expiry date printed on it anywhere that I can find.",
+        "actual_output": null,
+        "expected_output": "The case corpus holds no precedent involving gift cards, wallet balances or stored value of any kind. Credits appear in resolved cases only as goodwill attached to another remedy — an apology credit alongside a refund for erroneous subscription charges, a credit for repeated contacts on an unresolved fault, a voucher towards a different product line after a quality defect — and in every instance the credit is being issued rather than being disputed, expired or forfeited. Nothing in the corpus addresses validity periods, inactivity, or a balance disappearing. The handling comes from stored_value §3 alone.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "The reply I received yesterday was obviously written by an AI. It addressed a problem I never described, and it told me I have a 60-day exchange window, which I now find is not a thing you actually offer. Was a human being involved in this at any point?",
+        "actual_output": null,
+        "expected_output": "The case corpus holds no precedent for a complaint about how we replied, as distinct from a complaint about a product or an order. No resolved case involves a customer challenging the content of our own correspondence, an ungrounded commitment made in a reply, or the question of who authored a message. Every case in the corpus concerns a fault in a product, a charge, a delivery or a subscription. There is no nearest case to transfer, and a confident retrieval here would be matching on the surface mention of an exchange window rather than on anything applicable — the ungrounded-window problem is itself the failure ai §2 describes. The handling comes from the AI drafting policy, with the erroneous commitment honoured under comms §5.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "This complaint is being forwarded to you through the National Consumer Helpline. The consumer states that a replacement promised on 14 August has not arrived and that two follow-up emails have gone unanswered. Please respond with the action taken.",
+        "actual_output": null,
+        "expected_output": "The case corpus holds no precedent for a complaint arriving through a third-party or regulatory channel. Every resolved case in the corpus reached us directly from the customer, and none involves a consumer helpline, a grievance convergence system, or a response owed to a body other than the complainant. The nearest resolved case involves a customer on a third contact about an unresolved fault, which does establish that our own repeated failure to resolve generates goodwill automatically under retention §3 — that much transfers to the undelivered replacement and the unanswered follow-ups. It establishes nothing about the channel itself, the 48-hour acknowledgement, or the one-month redressal obligation, which come from grievance §2 and §3.",
+        "context": null,
+        "source_file": "cases.json"
+    },
+    {
+        "input": "The listing said 5 litre capacity and brushed stainless steel. What has arrived is 3.5 litres according to the manual in the box, and the body is painted plastic with a metallic finish. I bought it specifically for the capacity. I've used it once before I noticed, so I assume you'll tell me it's not returnable.",
+        "actual_output": null,
+        "expected_output": "The case corpus holds no precedent for a listing mismatch. No resolved case involves a product differing from its stated specifications, description or images, and none addresses whether a used item remains returnable when the fault lies in what we told the customer it was. The nearest resolved case concerns a promotional price that was advertised and did not apply at checkout, which shares the underlying principle that what the customer was shown governs and that a configuration error on our side does not transfer to them — but it was resolved as a price adjustment and a refund of the difference, and it says nothing about return eligibility, used condition or reverse pickup for a mis-described item. The remedy here comes from catalog §6 and the company-error carve-out in returns §4.",
+        "context": null,
+        "source_file": "cases.json"
     }
 ]
