@@ -99,10 +99,22 @@ class Settings(BaseSettings):
     # since the judge grades ranking. So fetch wide, rerank, and keep `top_n`.
     # `rerank_enabled` is only the process-wide default — every retriever call can
     # override it, which is how the eval suite scores both legs in one run.
-    voyage_api_key: str
+    # Optional: the production rerank now goes through OpenRouter (below). This
+    # only has to be set to use `retrieval.rerank.voyage_reranker` directly.
+    voyage_api_key: str | None = None
     rerank_enabled: bool = True
     rerank_model: str = "rerank-2.5-lite"
-    policy_rerank_top_n: int = 5
+    policy_rerank_top_n: int = 15
+
+    # --- OpenRouter reranking (policies) ---
+    # Same Voyage model as `rerank_model` above, reached through the gateway
+    # instead of Voyage directly: one key, one bill, one place to swap models.
+    # The field is `open_router_api_key` because the env var is spelled
+    # OPEN_ROUTER_API_KEY — pydantic-settings derives one from the other.
+    open_router_api_key: str
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_rerank_model: str = "voyageai/rerank-2.5-lite"
+    openrouter_timeout_seconds: float = 30.0
 
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a

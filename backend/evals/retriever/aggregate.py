@@ -8,6 +8,8 @@ else. `evaluate()` wraps up its own run, so it prints the Aggregate Metrics tabl
 Same goldens, same adapters, same judge as the six test files.
 
     uv run python evals/retriever/aggregate.py --leg policy-hybrid
+    uv run python evals/retriever/aggregate.py --leg policy-dense
+    uv run python evals/retriever/aggregate.py --leg policy-hybrid-rerank
     uv run python evals/retriever/aggregate.py --leg case-dense
 
 Qdrant must be up and the collection populated first — see the README.
@@ -31,6 +33,16 @@ setup_logging()
 os.environ.setdefault("OPENAI_API_KEY", get_settings().openai_api_key)
 os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")
 
+# deepeval retries a judge call twice by default, then lets the exception kill the
+# whole run — one dropped TLS handshake to api.openai.com (this machine's
+# intercepting proxy drops them under concurrency) discards every case scored so
+# far. Four attempts with backoff absorbs a transient blip; a real outage still
+# fails, just later. Must be set before deepeval is imported: its settings object
+# reads the environment once, at import.
+os.environ.setdefault("DEEPEVAL_RETRY_MAX_ATTEMPTS", "4")
+os.environ.setdefault("DEEPEVAL_RETRY_INITIAL_SECONDS", "2")
+os.environ.setdefault("DEEPEVAL_RETRY_CAP_SECONDS", "10")
+
 from adapters import (
     CASE_K,
     POLICY_K,
@@ -46,7 +58,7 @@ from adapters import (
 )
 from deepeval import evaluate
 from deepeval.dataset import EvaluationDataset
-from deepeval.evaluate import AsyncConfig, DisplayConfig
+from deepeval.evaluate import AsyncConfig, DisplayConfig, ErrorConfig
 from deepeval.test_case import LLMTestCase
 from metrics import JUDGE_MODEL, RETRIEVER_METRICS
 
@@ -81,9 +93,11 @@ LEGS = {
     "case-hybrid": ("cases.json", hybrid_case_context, CASE_K, None),
 }
 DEFAULT_LEG = "policy-hybrid"
-# deepeval's own default. Lower it when running several legs at once — they share
-# one judge account, and the rate limit is per account, not per process.
-DEFAULT_MAX_CONCURRENT = 20
+# Half of deepeval's default of 20: that many simultaneous TLS handshakes through
+# the local intercepting proxy is where connection errors start. Lower it further
+# when running several legs at once — they share one judge account, and the rate
+# limit is per account, not per process.
+DEFAULT_MAX_CONCURRENT = 10
 
 
 def main() -> int:
@@ -101,6 +115,15 @@ def main() -> int:
         type=int,
         default=DEFAULT_MAX_CONCURRENT,
         help=f"Judge calls in flight at once (default: {DEFAULT_MAX_CONCURRENT}).",
+    )
+    parser.add_argument(
+        "--ignore-errors",
+        action="store_true",
+        help=(
+            "Finish the run when a judge call fails instead of aborting. The "
+            "aggregate then covers only the cases that scored, so treat the "
+            "numbers as partial."
+        ),
     )
     parser.add_argument(
         "--results-folder",
@@ -131,6 +154,7 @@ def main() -> int:
         metrics=RETRIEVER_METRICS,
         identifier=args.leg,
         async_config=AsyncConfig(max_concurrent=args.max_concurrent),
+        error_config=ErrorConfig(ignore_errors=args.ignore_errors),
         display_config=DisplayConfig(
             results_folder=args.results_folder,
             # One subfolder per leg, so a leg's runs sit together over time.

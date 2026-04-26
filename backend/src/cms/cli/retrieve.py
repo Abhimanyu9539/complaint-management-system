@@ -6,8 +6,8 @@ Usage (from anywhere, once the project is installed):
     cms-retrieve "CarePlan+" --mode sparse
     cms-retrieve "my X200 vacuum stopped charging" --corpus cases
 
-Policies are Voyage-reranked by default. `--no-rerank` gives the raw candidate
-pool, and `--compare` prints both so the rerank can be judged by eye:
+Policies are reranked by default (Voyage via OpenRouter). `--no-rerank` gives the
+raw candidate pool, and `--compare` prints both so the rerank can be judged by eye:
 
     cms-retrieve "how long is the warranty period" --compare
 """
@@ -148,7 +148,7 @@ async def _main() -> int:
         "--rerank",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help=f"Voyage-rerank the candidates. Policies only. Default: {RERANK_ENABLED} "
+        help=f"Rerank the candidates via OpenRouter. Policies only. Default: {RERANK_ENABLED} "
         "(RERANK_ENABLED).",
     )
     parser.add_argument(

@@ -8,7 +8,7 @@ from langchain_qdrant import RetrievalMode
 from qdrant_client import models
 
 from cms.config.settings import get_settings
-from cms.retrieval.rerank.voyage_reranker import rerank_documents
+from cms.retrieval.rerank.openrouter_reranker import rerank_documents
 from cms.retrieval.vector_store.qdrant_store import get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ async def retrieve_policies_hybrid(
     """Both legs, fused by Qdrant server-side (RRF).
 
     Unreranked the scores are RRF values — a third scale again, comparable neither
-    to the dense leg's cosine nor the sparse leg's BM25. Reranked they are Voyage
-    relevance scores, a fourth.
+    to the dense leg's cosine nor the sparse leg's BM25. Reranked they are the
+    reranker's relevance scores, a fourth.
     """
     return await _search(query, k, RetrievalMode.HYBRID, rerank, top_n)

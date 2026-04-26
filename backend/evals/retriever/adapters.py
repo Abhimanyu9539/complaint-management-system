@@ -6,7 +6,7 @@ comparable within a corpus, which is the comparison the suite exists for; it doe
 not make policy and case numbers comparable to each other.
 
 Policies come in pairs: a plain leg on the raw k=20 pool and a `reranked_` leg that
-Voyage-reranks it down to `POLICY_TOP_N`. Both pass `rerank=` explicitly rather than
+reranks it down to `POLICY_TOP_N`. Both pass `rerank=` explicitly rather than
 inheriting `RERANK_ENABLED`, so flipping that env var cannot quietly turn the
 baseline into a second copy of the reranked leg and make the comparison meaningless.
 
@@ -47,7 +47,7 @@ Retriever = Callable[..., Awaitable[list[tuple[Document, float]]]]
 def _context(retrieve: Retriever, query: str, k: int, **kwargs) -> list[str]:
     """Rank order is preserved — ContextualPrecision scores ranking, not membership.
 
-    Deliberately unguarded: a Qdrant, OpenAI or Voyage failure must error the run
+    Deliberately unguarded: a Qdrant, OpenAI or OpenRouter failure must error the run
     loudly rather than come back as an empty or unreranked context, either of which
     scores as a retriever that is not the one under test.
     """
@@ -71,14 +71,14 @@ def hybrid_policy_context(query: str) -> list[str]:
 
 
 def reranked_dense_policy_context(query: str) -> list[str]:
-    """Dense candidates, Voyage-reranked down to POLICY_TOP_N."""
+    """Dense candidates, reranked down to POLICY_TOP_N."""
     return _context(
         retrieve_policies_dense, query, POLICY_K, rerank=True, top_n=POLICY_TOP_N
     )
 
 
 def reranked_hybrid_policy_context(query: str) -> list[str]:
-    """Production path: hybrid candidates, Voyage-reranked down to POLICY_TOP_N."""
+    """Production path: hybrid candidates, reranked down to POLICY_TOP_N."""
     return _context(
         retrieve_policies_hybrid, query, POLICY_K, rerank=True, top_n=POLICY_TOP_N
     )
