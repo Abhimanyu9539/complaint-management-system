@@ -89,10 +89,20 @@ class Settings(BaseSettings):
     policy_chunk_overlap: int = 100
 
     # --- Retrieval ---
-    # Top-k per corpus. The evals score at these same values, so a change here
-    # moves production and the eval suite together.
+    # Top-k per corpus. For cases this is what the caller gets back. For policies
+    # it is now the *candidate pool* the reranker sees — see the rerank block below.
     case_top_k: int = 4
-    policy_top_k: int = 10
+    policy_top_k: int = 20
+
+    # --- Voyage reranking (policies) ---
+    # A wide `policy_top_k` is what recall needs; it is also what wrecks precision,
+    # since the judge grades ranking. So fetch wide, rerank, and keep `top_n`.
+    # `rerank_enabled` is only the process-wide default — every retriever call can
+    # override it, which is how the eval suite scores both legs in one run.
+    voyage_api_key: str
+    rerank_enabled: bool = True
+    rerank_model: str = "rerank-2.5-lite"
+    policy_rerank_top_n: int = 5
 
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a
