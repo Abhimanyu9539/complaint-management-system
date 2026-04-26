@@ -6,7 +6,7 @@ from cms.retrieval.retrievers import policy_retriever
 
 # Every assertion below holds for all three legs — only the mode the store is
 # opened in differs. They all pass `rerank=False`: these cover the Qdrant call,
-# and the default is on, which would reach the live Voyage API. The rerank path
+# and the default is on, which would reach the live OpenRouter API. The rerank path
 # gets its own stubbed group at the bottom.
 ALL_MODES = pytest.mark.parametrize(
     ("retrieve", "expected_mode"),
