@@ -5,7 +5,9 @@ from langchain_qdrant import RetrievalMode
 from cms.retrieval.retrievers import policy_retriever
 
 # Every assertion below holds for all three legs — only the mode the store is
-# opened in differs.
+# opened in differs. They all pass `rerank=False`: these cover the Qdrant call,
+# and the default is on, which would reach the live Voyage API. The rerank path
+# gets its own stubbed group at the bottom.
 ALL_MODES = pytest.mark.parametrize(
     ("retrieve", "expected_mode"),
     [
@@ -60,7 +62,7 @@ async def test_opens_the_policies_collection_in_its_own_mode(
 ) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    await retrieve("warranty period")
+    await retrieve("warranty period", rerank=False)
 
     assert store.opened == [
         {"collection_name": "policies_test", "mode": expected_mode}
@@ -71,7 +73,7 @@ async def test_opens_the_policies_collection_in_its_own_mode(
 async def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    await retrieve("warranty period", k=8)
+    await retrieve("warranty period", k=8, rerank=False)
 
     assert store.calls[0]["query"] == "warranty period"
     assert store.calls[0]["k"] == 8
@@ -81,7 +83,7 @@ async def test_passes_query_and_k_through(monkeypatch, retrieve, expected_mode) 
 async def test_defaults_k(monkeypatch, retrieve, expected_mode) -> None:
     store = _install_stub(monkeypatch, _canned_hits())
 
-    await retrieve("warranty period")
+    await retrieve("warranty period", rerank=False)
 
     assert store.calls[0]["k"] == policy_retriever.DEFAULT_K
 
@@ -94,7 +96,7 @@ async def test_filters_published_on_the_dotted_metadata_path(
     # `lifecycle` matches zero points instead of raising.
     store = _install_stub(monkeypatch, _canned_hits())
 
-    await retrieve("warranty period")
+    await retrieve("warranty period", rerank=False)
 
     conditions = store.calls[0]["filter"].must
     assert len(conditions) == 1
@@ -107,4 +109,65 @@ async def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expect
     hits = _canned_hits()
     _install_stub(monkeypatch, hits)
 
-    assert await retrieve("warranty period") == hits
+    assert await retrieve("warranty period", rerank=False) == hits
+
+
+# --- Reranking ---------------------------------------------------------------
+
+
+def _install_rerank_stub(monkeypatch) -> list[dict]:
+    """Replace the reranker with a recorder that reverses what it is given.
+
+    Reversing matters: if the retriever ever stopped using the return value, an
+    order-preserving stub would let these assertions pass anyway.
+    """
+    calls: list[dict] = []
+
+    async def fake_rerank_documents(query, hits, top_n):
+        calls.append({"query": query, "hits": hits, "top_n": top_n})
+        return hits[::-1][:top_n]
+
+    monkeypatch.setattr(policy_retriever, "rerank_documents", fake_rerank_documents)
+    return calls
+
+
+@ALL_MODES
+async def test_rerank_off_never_calls_the_reranker(monkeypatch, retrieve, expected_mode) -> None:
+    hits = _canned_hits()
+    _install_stub(monkeypatch, hits)
+    calls = _install_rerank_stub(monkeypatch)
+
+    assert await retrieve("warranty period", rerank=False) == hits
+    assert calls == []
+
+
+@ALL_MODES
+async def test_rerank_on_passes_the_whole_pool_through(
+    monkeypatch, retrieve, expected_mode
+) -> None:
+    hits = _canned_hits()
+    _install_stub(monkeypatch, hits)
+    calls = _install_rerank_stub(monkeypatch)
+
+    result = await retrieve("warranty period", rerank=True, top_n=1)
+
+    assert len(calls) == 1
+    assert calls[0]["query"] == "warranty period"
+    # The reranker sees every candidate, not a pre-truncated slice.
+    assert calls[0]["hits"] == hits
+    assert calls[0]["top_n"] == 1
+    assert result == [hits[-1]]
+
+
+@ALL_MODES
+async def test_rerank_narrows_after_the_fetch_not_instead_of_it(
+    monkeypatch, retrieve, expected_mode
+) -> None:
+    # The whole point of the two-stage split: recall comes from the wide `k`, so
+    # `top_n` must never be what reaches Qdrant.
+    store = _install_stub(monkeypatch, _canned_hits())
+    _install_rerank_stub(monkeypatch)
+
+    await retrieve("warranty period", k=20, rerank=True, top_n=5)
+
+    assert store.calls[0]["k"] == 20

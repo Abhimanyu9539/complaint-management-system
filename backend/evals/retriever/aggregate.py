@@ -34,10 +34,13 @@ os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")
 from adapters import (
     CASE_K,
     POLICY_K,
+    POLICY_TOP_N,
     dense_case_context,
     dense_policy_context,
     hybrid_case_context,
     hybrid_policy_context,
+    reranked_dense_policy_context,
+    reranked_hybrid_policy_context,
     sparse_case_context,
     sparse_policy_context,
 )
@@ -54,14 +57,28 @@ DATASETS = Path(__file__).parents[1] / "datasets"
 # legs are still there to compare afterwards — and parallel legs don't collide.
 DEFAULT_RESULTS_FOLDER = Path(__file__).parents[1] / "results"
 
-# leg -> (dataset file, context adapter, the k that adapter retrieves at)
+# leg -> (dataset file, context adapter, the k that adapter retrieves at, top_n).
+# `top_n` is None for the legs that return the raw pool; on the `-rerank` legs it
+# is what survives, and the pair is what makes the precision comparison readable.
 LEGS = {
-    "policy-dense": ("policies.json", dense_policy_context, POLICY_K),
-    "policy-sparse": ("policies.json", sparse_policy_context, POLICY_K),
-    "policy-hybrid": ("policies.json", hybrid_policy_context, POLICY_K),
-    "case-dense": ("cases.json", dense_case_context, CASE_K),
-    "case-sparse": ("cases.json", sparse_case_context, CASE_K),
-    "case-hybrid": ("cases.json", hybrid_case_context, CASE_K),
+    "policy-dense": ("policies.json", dense_policy_context, POLICY_K, None),
+    "policy-sparse": ("policies.json", sparse_policy_context, POLICY_K, None),
+    "policy-hybrid": ("policies.json", hybrid_policy_context, POLICY_K, None),
+    "policy-dense-rerank": (
+        "policies.json",
+        reranked_dense_policy_context,
+        POLICY_K,
+        POLICY_TOP_N,
+    ),
+    "policy-hybrid-rerank": (
+        "policies.json",
+        reranked_hybrid_policy_context,
+        POLICY_K,
+        POLICY_TOP_N,
+    ),
+    "case-dense": ("cases.json", dense_case_context, CASE_K, None),
+    "case-sparse": ("cases.json", sparse_case_context, CASE_K, None),
+    "case-hybrid": ("cases.json", hybrid_case_context, CASE_K, None),
 }
 DEFAULT_LEG = "policy-hybrid"
 # deepeval's own default. Lower it when running several legs at once — they share
@@ -91,7 +108,7 @@ def main() -> int:
         help="Where to write the timestamped run JSON. Default: evals/results/.",
     )
     args = parser.parse_args()
-    dataset_file, retrieve_context, k = LEGS[args.leg]
+    dataset_file, retrieve_context, k, top_n = LEGS[args.leg]
 
     dataset = EvaluationDataset()
     dataset.add_goldens_from_json_file(file_path=str(DATASETS / dataset_file))
@@ -122,6 +139,10 @@ def main() -> int:
         hyperparameters={
             "leg": args.leg,
             "top_k": k,
+            # The results folder now holds two shapes of policy run; these say
+            # which configuration produced a given file.
+            "rerank": top_n is not None,
+            "top_n": top_n,
             "judge_model": JUDGE_MODEL,
             "golden_set": dataset_file,
         },

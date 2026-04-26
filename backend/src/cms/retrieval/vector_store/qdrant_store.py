@@ -13,7 +13,9 @@ BM25 IDF is computed per collection, so the sparse half of a hybrid score is
 calibrated against whichever corpus it came from. Scores from the `cases` and
 `policies` collections are therefore not comparable — merge results with RRF,
 or take a fixed top-k from each, rather than sorting a combined list by raw
-score.
+score. Reranked results are the exception: a cross-encoder scores the query and
+chunk together, so `cms.retrieval.rerank` scores *are* comparable across
+collections.
 """
 
 import logging
