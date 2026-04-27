@@ -20,6 +20,7 @@ import sys
 
 from langchain_core.documents import Document
 
+from cms.cli.display import chunk_key, print_hits
 from cms.config.logging_config import setup_logging
 from cms.retrieval.retrievers.case_retriever import (
     retrieve_cases_dense,
@@ -54,48 +55,14 @@ DEFAULT_MODE = "hybrid"
 # Only the policy retrievers take the rerank arguments.
 RERANKABLE_CORPUS = "policies"
 
-# Enough of a chunk to recognise it, short enough to keep one hit on a few lines.
-SNIPPET_CHARS = 220
-
-
-def _snippet(text: str) -> str:
-    """One-line preview of a chunk: whitespace collapsed, then truncated."""
-    flat = " ".join(text.split())
-    return flat if len(flat) <= SNIPPET_CHARS else f"{flat[:SNIPPET_CHARS]}…"
-
-
-def _key(document: Document) -> tuple:
-    """Identity of a chunk, for matching a reranked hit back to its original rank.
-
-    Falls back to the text: `doc_id` is always set by the ingest pipeline, but a
-    hand-built Document in a probe need not have one.
-    """
-    metadata = document.metadata
-    return (metadata.get("doc_id"), metadata.get("chunk_index"), document.page_content)
-
-
 def _as_json(hits: list[tuple[Document, float]], ranks: dict | None = None) -> list[dict]:
     entries = []
     for document, score in hits:
         entry = {"score": score, "text": document.page_content, **document.metadata}
         if ranks is not None:
-            entry["was_rank"] = ranks.get(_key(document))
+            entry["was_rank"] = ranks.get(chunk_key(document))
         entries.append(entry)
     return entries
-
-
-def _print_hits(hits: list[tuple[Document, float]], ranks: dict | None = None) -> None:
-    for rank, (document, score) in enumerate(hits, start=1):
-        metadata = document.metadata
-        # Where this chunk sat before the rerank — a survivor from #14 is the
-        # clearest evidence the reranker is doing something.
-        moved = ""
-        if ranks is not None:
-            was = ranks.get(_key(document))
-            moved = f"  (was #{was})" if was else "  (new)"
-        print(f"\n{rank}. score={score:.4f}{moved}  {metadata.get('title')}")
-        print(f"   doc_id={metadata.get('doc_id')} chunk={metadata.get('chunk_index')}")
-        print(f"   {_snippet(document.page_content)}")
 
 
 def main() -> int:
@@ -202,7 +169,7 @@ async def _main() -> int:
         return 1
 
     ranks = (
-        {_key(document): rank for rank, (document, _) in enumerate(baseline, start=1)}
+        {chunk_key(document): rank for rank, (document, _) in enumerate(baseline, start=1)}
         if baseline is not None
         else None
     )
@@ -219,13 +186,13 @@ async def _main() -> int:
     print(f"query={args.query!r} corpus={args.corpus} mode={args.mode}")
     if baseline is not None:
         print(f"\n--- baseline (no rerank), {len(baseline)} hit(s) ---")
-        _print_hits(baseline)
+        print_hits(baseline)
         print(f"\n--- reranked to top {top_n}, {len(hits)} hit(s) ---")
-        _print_hits(hits, ranks)
+        print_hits(hits, ranks)
         return 0
 
     print(f"{len(hits)} hit(s)")
-    _print_hits(hits)
+    print_hits(hits)
     return 0
 
 
