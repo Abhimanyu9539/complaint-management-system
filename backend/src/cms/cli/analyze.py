@@ -1,11 +1,5 @@
 """CLI entrypoint for the standalone `analyze_query` probe.
 
-steps.md's rationale for building nodes behind a CLI first: "every prompt
-tweak is a 5-second re-run." This calls `analyze_query_core` directly — no
-`GraphState`, no graph. The node logic lives in `cms.rag.nodes.analyze_query`;
-this file only parses arguments, prints results, and turns the outcome into
-an exit code.
-
 Usage (from anywhere, once the project is installed):
 
     cms-analyze "my ProBlend 300 is showing ERR-22 and won't start"
@@ -22,7 +16,7 @@ import sys
 # which injects the OS trust store into ssl. That has to happen before any HTTPS
 # client (openai, supabase) is constructed.
 from cms.config.logging_config import setup_logging
-from cms.rag.nodes.analyze_query import analyze_query_core
+from cms.rag.nodes.analyze_query import analyze_query_core, build_policy_queries
 
 logger = logging.getLogger("cms.cli.analyze")
 
@@ -46,8 +40,8 @@ async def _main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="Standalone analyze_query probe: intent, department, entities, "
-        "rewritten search queries — no retrieval, no graph."
+        description="Standalone analyze_query probe: intent and policy queries — "
+        "no retrieval, no graph."
     )
     parser.add_argument("query", help="The question or complaint text to analyze.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
@@ -59,19 +53,18 @@ async def _main() -> int:
         logger.exception("analyze_query probe failed")
         return 1
 
+    queries = build_policy_queries(args.query, analysis)
+
     if args.json:
-        print(json.dumps(analysis.model_dump(), default=str))
+        print(json.dumps({**analysis.model_dump(), "policy_queries": queries}, default=str))
         return 0
 
     print(f"query={args.query!r}")
     print(f"intent: {analysis.intent}")
-    print("department candidates:")
-    for candidate in analysis.department_candidates:
-        print(f"  {candidate.department}: {candidate.confidence:.2f}")
-    print(f"entities: {analysis.entities}")
-    print("search queries:")
-    for query in analysis.search_queries:
-        print(f"  - {query}")
+    print(f"policy queries ({len(queries)}):")
+    for query in queries:
+        suffix = "   <- original" if query == args.query else ""
+        print(f"  - {query}{suffix}")
     return 0
 
 

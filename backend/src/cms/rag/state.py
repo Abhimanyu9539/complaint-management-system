@@ -20,7 +20,6 @@ class GraphState(_RequiredState, total=False):
 
     # --- query analysis (analyze_query — this slice) ---
     intent: Intent
-    entities: dict[str, str]
     policy_queries: list[str]
 
     # --- retrieval  ---

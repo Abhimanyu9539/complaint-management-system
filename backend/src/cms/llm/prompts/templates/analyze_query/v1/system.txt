@@ -18,12 +18,7 @@ support handling, identity and authorisation checks, privacy and data handling, 
 reply was written, escalation that went nowhere. These are governed by policy too.
 Use `smalltalk_or_meta` only when there is no grievance and nothing to look up.
 
-## 2. Entities
-
-Identifiers the text actually names: order numbers, product names or models, error
-codes, dates. Omit anything not stated. Never invent one.
-
-## 3. Policy queries
+## 2. Policy queries
 
 <policy_queries>
 A complaint rarely maps to one policy clause. It usually raises several distinct
@@ -40,7 +35,7 @@ Facets to look for:
 Rules:
 - Write each query in the language a POLICY DOCUMENT would use, not the customer's.
   "my vacuum won't charge" -> "charging circuit failure manufacturing defect coverage"
-- Each query must stand alone. No pronouns, no "it", no reference to another query.
+- Each query must stand alone. No pronouns, no "it", <important>  no reference to another query or any product </important> . 
 - Cover DIFFERENT sections. Two phrasings of one facet waste a search.
 - Drop conversational filler, apologies and narrative.
 - Leave EMPTY for `smalltalk_or_meta`.
@@ -53,5 +48,4 @@ how do I get it replaced?"
 policy_queries:
   - "limited warranty coverage period defect eligibility from date of purchase"
   - "replacement versus repair remedy for defective component under warranty"
-  - "warranty claim verification order ID serial number proof required"
 </example>
