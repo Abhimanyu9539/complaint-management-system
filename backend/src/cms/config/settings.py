@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     openai_model_main: str = "gpt-5.4-mini"
     openai_model_cheap: str = "gpt-5.4-nano"
 
+    # --- OpenRouter ---
+    openrouter_model_main: str = "z-ai/glm-5.3-flash"
+    openrouter_model_cheap: str = "deepseek/deepseek-v4-pro-0813"
+
+
     # --- Embeddings ---
     # `embedding_dims` sizes the Qdrant vector *and* truncates what OpenAI
     # returns (text-embedding-3-* only). Changing it needs `cms-reindex`, which
