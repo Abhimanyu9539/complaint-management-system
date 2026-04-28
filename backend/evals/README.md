@@ -5,7 +5,7 @@ Retrieval quality for the **policy** and **case** retrievers, scored with
 
 ```
 evals/
-├── conftest.py              # truststore + OPENAI_API_KEY, applies to every suite here
+├── conftest.py              # truststore + stdout encoding, applies to every suite here
 ├── datasets/
 │   ├── policies.json        # 10 goldens
 │   └── cases.json           # 10 goldens
@@ -136,10 +136,14 @@ Worth knowing:
 
 ## The judge
 
-`gpt-5.4-mini`, pinned in `retriever/metrics.py`. deepeval has that id in its model registry,
-which buys three things a newer or dated id would not: it forces `temperature=1` instead of the
-`0.0` the gpt-5 reasoning endpoint rejects, it uses native structured outputs for the verdicts
-rather than reparsing JSON, and its prices are registered so the cost line is real.
+`gpt-5.4-mini`, pinned in `retriever/metrics.py`, reached **through OpenRouter** —
+`OpenAIModel` takes the gateway's `api_key` and `base_url`, so the suite needs no OpenAI key.
+
+The id stays unprefixed on purpose. deepeval looks it up in its model registry with a plain
+dict lookup, so `openai/gpt-5.4-mini` would miss and lose the three things the registry buys:
+`temperature=1` instead of the `0.0` the gpt-5 reasoning endpoint rejects, native structured
+outputs for the verdicts rather than reparsing JSON, and registered prices so the cost line is
+real. OpenRouter resolves the bare id to `openai/gpt-5.4-mini` itself.
 
 ## The baseline run
 

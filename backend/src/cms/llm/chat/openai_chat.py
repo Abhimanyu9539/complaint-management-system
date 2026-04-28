@@ -1,15 +1,4 @@
 """Chat completions, via OpenAI.
-
-Wrapped in LangChain's `ChatOpenAI` rather than the raw OpenAI client for the
-same reason as `llm/embeddings/openai_embeddings.py`: LangSmith traces every
-call for free when the LangChain wrapper is used.
-
-Unlike the embedder, there is no single model — build.md's node table
-deliberately assigns a cheap model to classification/grading nodes and the
-main model to `generate`, the only customer-visible prose. `get_chat_model`
-takes the model name as a parameter so both live behind one cached factory,
-one client per `(model, process)`, the same shape `qdrant_store.get_vector_store`
-uses for `(collection_name, mode)`.
 """
 
 import logging

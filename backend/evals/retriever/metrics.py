@@ -13,12 +13,10 @@ from deepeval.metrics import (
 )
 from deepeval.models import OpenAIModel
 
+from cms.config.settings import get_settings
+
 logger = logging.getLogger(__name__)
 
-# deepeval has this id in its model registry, which buys three things: it forces
-# temperature=1 (the gpt-5 reasoning endpoint rejects 0.0), it uses native
-# structured outputs for the verdicts, and its prices are registered so the cost
-# line at the end of a run is a real number.
 JUDGE_MODEL = "gpt-5.4-mini"
 
 PRECISION_THRESHOLD = 0.7
@@ -29,7 +27,12 @@ RECALL_THRESHOLD = 0.7
 RELEVANCY_THRESHOLD = 0.5
 
 try:
-    _judge = OpenAIModel(model=JUDGE_MODEL)
+    _settings = get_settings()
+    _judge = OpenAIModel(
+        model=JUDGE_MODEL,
+        api_key=_settings.open_router_api_key,
+        base_url=_settings.openrouter_base_url,
+    )
 except Exception:
     logger.exception("Could not build the %s judge", JUDGE_MODEL)
     raise

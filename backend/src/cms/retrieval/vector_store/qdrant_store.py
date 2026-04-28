@@ -26,7 +26,7 @@ from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from cms.config.settings import get_settings
-from cms.llm.embeddings.openai_embeddings import get_dense_embeddings
+from cms.llm.embeddings.openrouter_embeddings import get_dense_embeddings
 from cms.retrieval.vector_store.create_qdrant_collections import (
     DENSE_VECTOR_NAME,
     SPARSE_VECTOR_NAME,

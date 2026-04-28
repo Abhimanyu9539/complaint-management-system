@@ -1,4 +1,4 @@
-"""Chat completions, via OpenRouter
+"""Chat completions, via OpenRouter.
 """
 
 import logging
@@ -16,14 +16,15 @@ def get_chat_model(model: str) -> ChatOpenRouter:
     """The chat client for one model name, constructed once per process."""
     settings = get_settings()
     try:
-        chat_model = ChatOpenRouter(model=model, api_key=settings.open_router_api_key)
+        chat_model = ChatOpenRouter(
+            model=model,
+            api_key=settings.open_router_api_key,
+            # `timeout` is milliseconds here, unlike the seconds the rerank
+            # client takes — hence the conversion rather than a direct pass.
+            timeout=int(settings.openrouter_timeout_seconds * 1000),
+        )
     except Exception:
         logger.exception("Failed to construct chat model (model=%s)", model)
         raise
     logger.debug("Chat model ready: %s", model)
     return chat_model
-
-
-if __name__ == "__main__":
-    result = get_chat_model(model = get_settings().openrouter_model_cheap).invoke("What is Gen AI? Explain in simple terms")
-    print(result.content)

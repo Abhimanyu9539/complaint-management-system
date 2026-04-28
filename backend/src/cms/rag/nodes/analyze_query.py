@@ -6,7 +6,7 @@ import logging
 from langsmith import traceable
 
 from cms.config.settings import get_settings
-from cms.llm.chat.openai_chat import get_chat_model
+from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
 from cms.rag.state import GraphState
 from cms.schemas.query_analysis import QueryAnalysis
@@ -18,7 +18,7 @@ async def analyze_query_core(query: str) -> QueryAnalysis:
     """Classify `query` and rewrite it into policy-worded retrieval queries."""
     settings = get_settings()
     prompt = load_prompt("analyze_query")
-    model = get_chat_model(settings.openai_model_cheap).with_structured_output(QueryAnalysis)
+    model = get_chat_model(settings.openrouter_model_cheap).with_structured_output(QueryAnalysis)
     chain = prompt | model
 
     try:

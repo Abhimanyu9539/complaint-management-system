@@ -22,7 +22,6 @@ from pathlib import Path
 
 import cms.config  # noqa: F401 — truststore injection; must precede any HTTPS client
 from cms.config.logging_config import setup_logging
-from cms.config.settings import get_settings
 
 # conftest.py does this for pytest runs; a standalone script has to do it itself,
 # and before metrics.py is imported — that module builds the judge at import time.
@@ -30,15 +29,7 @@ from cms.config.settings import get_settings
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 setup_logging()
-os.environ.setdefault("OPENAI_API_KEY", get_settings().openai_api_key)
 os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")
-
-# deepeval retries a judge call twice by default, then lets the exception kill the
-# whole run — one dropped TLS handshake to api.openai.com (this machine's
-# intercepting proxy drops them under concurrency) discards every case scored so
-# far. Four attempts with backoff absorbs a transient blip; a real outage still
-# fails, just later. Must be set before deepeval is imported: its settings object
-# reads the environment once, at import.
 os.environ.setdefault("DEEPEVAL_RETRY_MAX_ATTEMPTS", "4")
 os.environ.setdefault("DEEPEVAL_RETRY_INITIAL_SECONDS", "2")
 os.environ.setdefault("DEEPEVAL_RETRY_CAP_SECONDS", "10")

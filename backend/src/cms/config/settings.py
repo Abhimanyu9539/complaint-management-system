@@ -70,19 +70,23 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="ignore")
 
     # --- OpenAI ---
+    # Still required: embeddings and the deepeval judge call OpenAI directly.
+    # The chat models moved to OpenRouter — kept here for reference only.
     openai_api_key: str
-    openai_model_main: str = "gpt-5.4-mini"
+    openai_model_main: str = "deepseek/deepseek-v4-pro-0813"
     openai_model_cheap: str = "gpt-5.4-nano"
 
     # --- OpenRouter ---
-    openrouter_model_main: str = "z-ai/glm-5.3-flash"
-    openrouter_model_cheap: str = "deepseek/deepseek-v4-pro-0813"
+    openrouter_model_main: str = "openai/gpt-5.4-mini"
+    openrouter_model_cheap: str = "openai/gpt-5.4-nano"
+    openrouter_embedding_model: str = "openai/text-embedding-3-small"
+    open_router_api_key: str
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_rerank_model: str = "voyageai/rerank-2.5-lite"
+    openrouter_timeout_seconds: float = 30.0
 
 
     # --- Embeddings ---
-    # `embedding_dims` sizes the Qdrant vector *and* truncates what OpenAI
-    # returns (text-embedding-3-* only). Changing it needs `cms-reindex`, which
-    # recreates the collections at the new size before re-embedding.
     embedding_model: str = "text-embedding-3-small"
     embedding_dims: int = 1536
 
@@ -97,7 +101,7 @@ class Settings(BaseSettings):
     # Top-k per corpus. For cases this is what the caller gets back. For policies
     # it is now the *candidate pool* the reranker sees — see the rerank block below.
     case_top_k: int = 4
-    policy_top_k: int = 20
+    policy_top_k: int = 40
 
     # --- Voyage reranking (policies) ---
     # A wide `policy_top_k` is what recall needs; it is also what wrecks precision,
@@ -111,15 +115,6 @@ class Settings(BaseSettings):
     rerank_model: str = "rerank-2.5-lite"
     policy_rerank_top_n: int = 15
 
-    # --- OpenRouter reranking (policies) ---
-    # Same Voyage model as `rerank_model` above, reached through the gateway
-    # instead of Voyage directly: one key, one bill, one place to swap models.
-    # The field is `open_router_api_key` because the env var is spelled
-    # OPEN_ROUTER_API_KEY — pydantic-settings derives one from the other.
-    open_router_api_key: str
-    openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_rerank_model: str = "voyageai/rerank-2.5-lite"
-    openrouter_timeout_seconds: float = 30.0
 
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a
