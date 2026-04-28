@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     # Top-k per corpus. For cases this is what the caller gets back. For policies
     # it is now the *candidate pool* the reranker sees — see the rerank block below.
     case_top_k: int = 4
-    policy_top_k: int = 40
+    policy_top_k: int = 20
 
     # --- Voyage reranking (policies) ---
     # A wide `policy_top_k` is what recall needs; it is also what wrecks precision,
