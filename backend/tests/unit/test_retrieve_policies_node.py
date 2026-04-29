@@ -19,6 +19,20 @@ def _install_stub(monkeypatch, by_query: dict[str, list[tuple[Document, float]]]
     return calls
 
 
+def _install_rerank_stub(monkeypatch) -> list[dict]:
+    """Replace the reranker with a recorder that just truncates — the live one bills."""
+    calls: list[dict] = []
+
+    async def fake_rerank(
+        query: str, hits: list[tuple[Document, float]], top_n: int
+    ) -> list[tuple[Document, float]]:
+        calls.append({"query": query, "hits": hits, "top_n": top_n})
+        return hits[:top_n]
+
+    monkeypatch.setattr(retrieve_module, "rerank_documents", fake_rerank)
+    return calls
+
+
 async def test_every_query_is_searched_without_reranking(monkeypatch) -> None:
     calls = _install_stub(monkeypatch, {})
 
@@ -41,13 +55,46 @@ async def test_duplicate_chunks_collapse_to_the_best_score(monkeypatch) -> None:
         },
     )
 
-    update = await retrieve_module.retrieve_policies({"query": "q", "policy_queries": ["a", "b"]})
+    # rerank=False so this stays a test of the merge, not of what ranks the merge.
+    hits = await retrieve_module.retrieve_policies_core(["a", "b"], rerank=False)
 
-    assert [(doc.metadata["chunk_id"], score) for doc, score in update["policy_hits"]] == [
+    assert [(doc.metadata["chunk_id"], score) for doc, score in hits] == [
         ("c2", 0.9),
         ("c1", 0.7),
     ]
+
+
+async def test_merged_union_is_reranked_once_against_the_original_query(monkeypatch) -> None:
+    _install_stub(
+        monkeypatch,
+        {
+            "complaint": [(_chunk("c1"), 0.9), (_chunk("c2"), 0.5)],
+            "rewrite": [(_chunk("c3"), 0.8)],
+        },
+    )
+    rerank_calls = _install_rerank_stub(monkeypatch)
+
+    update = await retrieve_module.retrieve_policies(
+        {"query": "complaint", "policy_queries": ["complaint", "rewrite"]}
+    )
+
+    # One call over the union, not one per query, and ranked by the customer's
+    # own wording rather than by a rewrite.
+    assert len(rerank_calls) == 1
+    assert rerank_calls[0]["query"] == "complaint"
+    assert len(rerank_calls[0]["hits"]) == 3
+    # Union smaller than top_n, so nothing is dropped — capping is covered below.
+    assert len(update["policy_hits"]) == 3
     assert update["no_match"] is False
+
+
+async def test_rerank_caps_the_context_at_top_n(monkeypatch) -> None:
+    _install_stub(monkeypatch, {"q": [(_chunk(f"c{i}"), 1 - i / 100) for i in range(30)]})
+    _install_rerank_stub(monkeypatch)
+
+    hits = await retrieve_module.retrieve_policies_core(["q"], rerank=True, top_n=10)
+
+    assert len(hits) == 10
 
 
 async def test_no_policy_queries_skips_retrieval(monkeypatch) -> None:

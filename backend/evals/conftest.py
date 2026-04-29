@@ -1,4 +1,4 @@
-"""Bootstrap for the eval suite: stdout encoding, truststore, telemetry opt-out."""
+"""Bootstrap for the eval suite: stream encoding, truststore, telemetry opt-out."""
 
 import logging
 import os
@@ -14,9 +14,11 @@ logger = logging.getLogger("cms.evals")
 try:
     # The report echoes retrieved policy text (₹, §, em dashes) through rich, and
     # Windows terminals default stdout to cp1252 — which raises rather than
-    # mangles. Same fix as cli/retrieve.py.
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    # mangles. Same fix as cli/retrieve.py. stderr too, because that is where
+    # `basicConfig` puts its handler and the log lines quote the goldens.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
     setup_logging()
     os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")

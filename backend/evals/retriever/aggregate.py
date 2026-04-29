@@ -10,7 +10,14 @@ Same goldens, same adapters, same judge as the six test files.
     uv run python evals/retriever/aggregate.py --leg policy-hybrid
     uv run python evals/retriever/aggregate.py --leg policy-dense
     uv run python evals/retriever/aggregate.py --leg policy-hybrid-rerank
+    uv run python evals/retriever/aggregate.py --leg policy-graph-rerank
     uv run python evals/retriever/aggregate.py --leg case-dense
+
+`policy-graph-rerank` is the graph's own path, so it writes the queries
+analyze_query generated to the log — one block per golden. Override the cap it
+retrieves at without editing settings:
+
+    POLICY_RERANK_TOP_N=12 uv run python evals/retriever/aggregate.py --leg policy-graph-rerank
 
 Qdrant must be up and the collection populated first — see the README.
 """
@@ -26,8 +33,11 @@ from cms.config.logging_config import setup_logging
 # conftest.py does this for pytest runs; a standalone script has to do it itself,
 # and before metrics.py is imported — that module builds the judge at import time.
 # Hence the deferred imports below.
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+for _stream in (sys.stdout, sys.stderr):
+    # stderr as well as stdout: `basicConfig` puts its handler on stderr, and the
+    # goldens are full of em-dashes and ₹, which a cp1252 console mangles.
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 setup_logging()
 os.environ.setdefault("DEEPEVAL_TELEMETRY_OPT_OUT", "YES")
 os.environ.setdefault("DEEPEVAL_RETRY_MAX_ATTEMPTS", "4")
@@ -38,8 +48,10 @@ from adapters import (
     CASE_K,
     POLICY_K,
     POLICY_TOP_N,
+    build_contexts,
     dense_case_context,
     dense_policy_context,
+    graph_reranked_policy_context,
     hybrid_case_context,
     hybrid_policy_context,
     reranked_dense_policy_context,
@@ -79,11 +91,20 @@ LEGS = {
         POLICY_K,
         POLICY_TOP_N,
     ),
+    "policy-graph-rerank": (
+        "policies.json",
+        graph_reranked_policy_context,
+        POLICY_K,
+        POLICY_TOP_N,
+    ),
     "case-dense": ("cases.json", dense_case_context, CASE_K, None),
     "case-sparse": ("cases.json", sparse_case_context, CASE_K, None),
     "case-hybrid": ("cases.json", hybrid_case_context, CASE_K, None),
 }
 DEFAULT_LEG = "policy-hybrid"
+# Legs that retrieve with analyze_query's fan-out rather than the raw golden input.
+# `top_k` on these is the pool *per query*, so it is worth saying which is which.
+MULTI_QUERY_LEGS = {"policy-graph-rerank"}
 # Half of deepeval's default of 20: that many simultaneous TLS handshakes through
 # the local intercepting proxy is where connection errors start. Lower it further
 # when running several legs at once — they share one judge account, and the rate
@@ -131,13 +152,14 @@ def main() -> int:
     # adapters call asyncio.run(), which refuses to nest inside a running one.
     # `actual_output` stays unset: neither metric needs it, and nothing generated
     # an answer. `golden.context` is never passed — only what the retriever found.
+    contexts = build_contexts(retrieve_context, [golden.input for golden in dataset.goldens])
     test_cases = [
         LLMTestCase(
             input=golden.input,
             expected_output=golden.expected_output,
-            retrieval_context=retrieve_context(golden.input),
+            retrieval_context=context,
         )
-        for golden in dataset.goldens
+        for golden, context in zip(dataset.goldens, contexts, strict=True)
     ]
 
     evaluate(
@@ -158,6 +180,7 @@ def main() -> int:
             # which configuration produced a given file.
             "rerank": top_n is not None,
             "top_n": top_n,
+            "multi_query": args.leg in MULTI_QUERY_LEGS,
             "judge_model": JUDGE_MODEL,
             "golden_set": dataset_file,
         },

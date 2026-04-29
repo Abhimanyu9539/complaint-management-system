@@ -63,15 +63,9 @@ class Settings(BaseSettings):
     surfacing as a confusing error on the first request that needs them.
     """
 
-    # `env_file` is supplied per-instantiation by `get_settings()` rather than
-    # pinned here, so the lookup happens when settings are first read instead of
-    # when this module is imported — the two differ if the caller chdirs in
-    # between, which the notebook does.
     model_config = SettingsConfigDict(env_file_encoding="utf-8", extra="ignore")
 
     # --- OpenAI ---
-    # Still required: embeddings and the deepeval judge call OpenAI directly.
-    # The chat models moved to OpenRouter — kept here for reference only.
     openai_api_key: str
     openai_model_main: str = "deepseek/deepseek-v4-pro-0813"
     openai_model_cheap: str = "gpt-5.4-nano"
@@ -91,30 +85,18 @@ class Settings(BaseSettings):
     embedding_dims: int = 1536
 
     # --- Chunking ---
-    # Overlap exists so a clause straddling a chunk boundary is still fully
-    # present in at least one chunk. Env-tunable for retrieval experiments;
-    # changing either re-ingests the policy corpus via `policy_recipe` below.
     policy_chunk_tokens: int = 800
     policy_chunk_overlap: int = 100
 
     # --- Retrieval ---
-    # Top-k per corpus. For cases this is what the caller gets back. For policies
-    # it is now the *candidate pool* the reranker sees — see the rerank block below.
     case_top_k: int = 4
     policy_top_k: int = 20
 
     # --- Voyage reranking (policies) ---
-    # A wide `policy_top_k` is what recall needs; it is also what wrecks precision,
-    # since the judge grades ranking. So fetch wide, rerank, and keep `top_n`.
-    # `rerank_enabled` is only the process-wide default — every retriever call can
-    # override it, which is how the eval suite scores both legs in one run.
-    # Optional: the production rerank now goes through OpenRouter (below). This
-    # only has to be set to use `retrieval.rerank.voyage_reranker` directly.
     voyage_api_key: str | None = None
     rerank_enabled: bool = True
     rerank_model: str = "rerank-2.5-lite"
-    policy_rerank_top_n: int = 15
-
+    policy_rerank_top_n: int = 12
 
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a
@@ -158,24 +140,7 @@ class Settings(BaseSettings):
         return f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
 
     # --- CORS: comma-separated origins, e.g. "https://cms.example.com,https://admin.example.com" ---
-    # Deployments set this. It is empty by default because a wrong guess here
-    # fails in the browser rather than at startup, and a default that "almost
-    # works" in production is worse than an obvious blank.
     cors_origins: str = ""
-
-    # Local development is matched by pattern instead of by list. Vite does not
-    # own a fixed port — it walks 5173, 5174, 5175… whenever the previous one is
-    # still held by an earlier `npm run dev`, and `localhost` and `127.0.0.1` are
-    # distinct origins to a browser even though they reach the same process. An
-    # explicit list therefore breaks silently the moment either changes: plain
-    # GETs are simple requests, so the server still logs 200 while the browser
-    # discards every response for a missing `Access-Control-Allow-Origin`, and
-    # the panels read "Could not reach the API" against a healthy backend.
-    #
-    # Scoped to loopback http only. It widens nothing a deployment cares about:
-    # a remote page cannot forge `Origin`, so matching here still requires a
-    # page actually served from the developer's own machine. Set
-    # `CORS_ORIGIN_REGEX=` (empty) in production to switch it off entirely.
     cors_origin_regex: str | None = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
 
     @property
@@ -198,10 +163,6 @@ class Settings(BaseSettings):
         return self.cors_origin_regex.strip()
 
     # --- Seed corpus ---
-    # The corpus is fixture data that ships outside the package (backend/data/ is
-    # git-ignored), so a deployment that wants to re-seed points at wherever it
-    # mounted the files. Left unset, `cms.ingestion.seed` finds the source-tree
-    # copy — see `resolve_seed_dir` there for the full order.
     seed_data_dir: Path | None = None
 
 
