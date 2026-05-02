@@ -5,9 +5,11 @@ Usage (from anywhere, once the project is installed):
     cms-graph "my ProBlend 300 is showing ERR-22 and won't start"
     cms-graph "hey, what can you do?"
     cms-graph "refund for a delayed order" --json
+    cms-graph "my order never arrived" --context
 
-Prints the branch taken and, for a complaint, every chunk retrieved with the
-generated policy queries. No reranking on this path yet.
+Prints the branch taken and, for a complaint, every reranked chunk retrieved
+with the generated policy queries. `--context` prints the assembled context
+block and citations instead — what the generate node will hand the model.
 """
 
 import argparse
@@ -21,6 +23,7 @@ import sys
 # client (openai, supabase) is constructed.
 from cms.config.logging_config import setup_logging  # isort: skip
 from cms.cli.display import print_hits
+from cms.rag.context import build_context
 from cms.rag.graph import get_graph, route_by_intent
 
 logger = logging.getLogger("cms.cli.graph")
@@ -45,10 +48,15 @@ async def _main() -> int:
 
     parser = argparse.ArgumentParser(
         description="Graph probe: analyze the query, then either reply to smalltalk or "
-        "retrieve policy chunks — no reranking, no generation."
+        "retrieve and rerank policy chunks. No generation yet."
     )
     parser.add_argument("query", help="The question or complaint text to run.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    parser.add_argument(
+        "--context",
+        action="store_true",
+        help="Print the assembled context block and citations instead of chunk snippets.",
+    )
     args = parser.parse_args()
 
     try:
@@ -59,6 +67,9 @@ async def _main() -> int:
 
     branch = route_by_intent(state)
     hits = state.get("policy_hits", [])
+    # Built here rather than read from state: augmentation belongs to the
+    # `generate` node, which does not exist yet. This is the probe for it.
+    context, citations = build_context(hits) if args.context else ("", [])
 
     if args.json:
         print(
@@ -69,6 +80,8 @@ async def _main() -> int:
                     "branch": branch,
                     "policy_queries": state.get("policy_queries", []),
                     "draft": state.get("draft"),
+                    "context": context if args.context else None,
+                    "citations": [citation.model_dump() for citation in citations],
                     "hits": [
                         {"score": score, "text": document.page_content, **document.metadata}
                         for document, score in hits
@@ -93,7 +106,17 @@ async def _main() -> int:
         print(f"  - {query}{suffix}")
 
     print(f"\n{len(hits)} chunk(s)")
-    print_hits(hits)
+    if not args.context:
+        print_hits(hits)
+        return 0
+
+    # What the generate node will hand the model, verbatim.
+    print(f"\n--- context ({len(citations)} chunk(s)) ---\n")
+    print(context)
+    print(f"\n--- citations ({len(citations)}) ---")
+    for citation in citations:
+        print(f"  [{citation.marker}] {citation.title} — {citation.section}")
+        print(f"      doc_id={citation.doc_id} chunk_id={citation.chunk_id}")
     return 0
 
 

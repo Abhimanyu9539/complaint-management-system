@@ -98,6 +98,19 @@ class Settings(BaseSettings):
     rerank_model: str = "rerank-2.5-lite"
     policy_rerank_top_n: int = 12
 
+    # --- Generation ---
+    # A guard, not a shaper: 12 reranked chunks measure at ~2,400 tokens, so this
+    # only trips if policy_rerank_top_n is raised or a chunk arrives oversized.
+    generation_context_tokens: int = 4000
+    # What we say when retrieval found nothing. Kept here rather than inline in
+    # the node so the wording is tunable without a deploy.
+    no_match_message: str = (
+        "I couldn't find a policy section that covers this complaint, so I have "
+        "nothing to base a response on. Please check the policy library directly "
+        "or escalate to the responsible department — I'd rather say this than "
+        "guess at an entitlement the customer may not have."
+    )
+
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a
     # strategy change re-ingests instead of silently skipping. Per corpus, so a
