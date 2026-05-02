@@ -6,6 +6,7 @@ from typing import TypedDict
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
 
+from cms.schemas.generation import Citation
 from cms.schemas.query_analysis import Intent
 
 
@@ -30,6 +31,6 @@ class GraphState(_RequiredState, total=False):
 
     # --- generation ---
     draft: str
-    citations: list[dict]
+    citations: list[Citation]
     grounded: bool | None
     regenerated: bool
