@@ -5,7 +5,9 @@
                             +-> smalltalk         -> END
 """
 
+import logging
 from functools import lru_cache
+from pathlib import Path
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -15,6 +17,8 @@ from cms.rag.nodes.no_match import no_match
 from cms.rag.nodes.retrieve_policies import retrieve_policies
 from cms.rag.nodes.smalltalk import smalltalk
 from cms.rag.state import GraphState
+
+logger = logging.getLogger(__name__)
 
 # Node names, so the router and the edges cannot drift apart.
 ANALYZE_QUERY = "analyze_query"
@@ -75,3 +79,22 @@ def build_graph() -> CompiledStateGraph:
 def get_graph() -> CompiledStateGraph:
     """The process-wide compiled graph — compiling is pure setup, so do it once."""
     return build_graph()
+
+
+def render_graph() -> None:
+    """Print the graph as Mermaid and save it as a PNG next to this module.
+
+    The PNG needs the network: the diagram is POSTed to mermaid.ink and what
+    comes back is what gets written.
+    """
+    target = Path(__file__).with_suffix(".png")
+    try:
+        graph = get_graph().get_graph()
+        graph.draw_mermaid_png(output_file_path=str(target))
+        logger.info("Graph png saved to %s", target)
+    except Exception:
+        logger.exception("Could not render the graph")
+
+
+if __name__ == "__main__":
+    render_graph()
