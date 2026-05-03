@@ -67,9 +67,11 @@ async def _main() -> int:
 
     branch = route_by_intent(state)
     hits = state.get("policy_hits", [])
-    # Built here rather than read from state: augmentation belongs to the
-    # `generate` node, which does not exist yet. This is the probe for it.
-    context, citations = build_context(hits) if args.context else ("", [])
+    draft = state.get("draft")
+    # Two different lists, and the difference is the point: `offered` is every
+    # chunk the model was given, `cited` is the subset its draft actually used.
+    offered_context, offered = build_context(hits) if args.context else ("", [])
+    cited = state.get("citations", [])
 
     if args.json:
         print(
@@ -79,9 +81,9 @@ async def _main() -> int:
                     "intent": state.get("intent"),
                     "branch": branch,
                     "policy_queries": state.get("policy_queries", []),
-                    "draft": state.get("draft"),
-                    "context": context if args.context else None,
-                    "citations": [citation.model_dump() for citation in citations],
+                    "draft": draft,
+                    "context": offered_context if args.context else None,
+                    "citations": [citation.model_dump() for citation in cited],
                     "hits": [
                         {"score": score, "text": document.page_content, **document.metadata}
                         for document, score in hits
@@ -95,28 +97,32 @@ async def _main() -> int:
     print(f"query={args.query!r}")
     print(f"intent: {state.get('intent')} -> {branch}")
 
-    if state.get("draft"):
-        print(f"\n{state['draft']}")
-        return 0
-
     queries = state.get("policy_queries", [])
-    print(f"policy queries ({len(queries)}):")
-    for query in queries:
-        suffix = "   <- original" if query == args.query else ""
-        print(f"  - {query}{suffix}")
+    if queries:
+        print(f"\npolicy queries ({len(queries)}):")
+        for query in queries:
+            suffix = "   <- original" if query == args.query else ""
+            print(f"  - {query}{suffix}")
 
-    print(f"\n{len(hits)} chunk(s)")
-    if not args.context:
-        print_hits(hits)
-        return 0
+    if hits:
+        print(f"\n{len(hits)} chunk(s) retrieved")
+        if args.context:
+            # Exactly what generate was handed, verbatim.
+            print(f"\n--- context offered ({len(offered)} chunk(s)) ---\n")
+            print(offered_context)
+        else:
+            print_hits(hits)
 
-    # What the generate node will hand the model, verbatim.
-    print(f"\n--- context ({len(citations)} chunk(s)) ---\n")
-    print(context)
-    print(f"\n--- citations ({len(citations)}) ---")
-    for citation in citations:
-        print(f"  [{citation.marker}] {citation.title} — {citation.section}")
-        print(f"      doc_id={citation.doc_id} chunk_id={citation.chunk_id}")
+    if draft:
+        print(f"\n--- draft ---\n{draft}")
+
+    # Printed after the draft so the markers above are still on screen. Fewer
+    # than the chunks offered is the normal, healthy case.
+    if cited:
+        print(f"\n--- cited ({len(cited)} of {len(hits)} offered) ---")
+        for citation in cited:
+            print(f"  [{citation.marker}] {citation.title} — {citation.section}")
+            print(f"      doc_id={citation.doc_id} chunk_id={citation.chunk_id}")
     return 0
 
 
