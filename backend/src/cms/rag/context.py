@@ -6,6 +6,7 @@ returns the same string, so it is cheap to test and cheap to eyeball
 """
 
 import logging
+import re
 
 from langchain_core.documents import Document
 
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONTEXT_TOKENS = get_settings().generation_context_tokens
 
 BLOCK_SEPARATOR = "\n\n"
+
+# The `[3]` markers the draft cites with — the same shape `build_context` writes.
+MARKER_PATTERN = re.compile(r"\[(\d+)\]")
 
 
 def _section(document: Document) -> str:
@@ -88,3 +92,38 @@ def build_context(
 
     logger.info("build_context: %d chunk(s), ~%d tokens", len(blocks), used)
     return BLOCK_SEPARATOR.join(blocks), citations
+
+
+def used_citations(draft: str, citations: list[Citation]) -> list[Citation]:
+    """The subset of `citations` the draft actually cited, in marker order.
+
+    The model is offered 12 chunks and typically leans on a handful; showing the
+    agent all 12 as sources would misrepresent what the draft rests on.
+
+    Markers are never renumbered — `[3]` in the prose has to keep pointing at
+    `marker=3`, so this filters and nothing else.
+
+    The two warnings below are the cheapest groundedness signal available: no
+    judge, no second model call, just what the draft cites versus what it was
+    given. Neither is fatal — this returns the best mapping it can either way,
+    because a draft with a bad reference is still worth showing to an agent who
+    can see the citations next to it.
+    """
+    if not citations:
+        return []
+
+    markers = {int(marker) for marker in MARKER_PATTERN.findall(draft)}
+    if not markers:
+        logger.warning("used_citations: the draft cites nothing; it may be ungrounded")
+        return []
+
+    by_marker = {citation.marker: citation for citation in citations}
+    unknown = markers - by_marker.keys()
+    if unknown:
+        logger.warning(
+            "used_citations: draft cites %s, but only %d chunk(s) were provided",
+            sorted(unknown),
+            len(citations),
+        )
+
+    return [by_marker[marker] for marker in sorted(markers & by_marker.keys())]

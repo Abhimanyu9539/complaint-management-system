@@ -1,0 +1,7 @@
+Policy extracts:
+
+{context}
+
+Complaint:
+
+{query}
