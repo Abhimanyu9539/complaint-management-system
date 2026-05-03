@@ -1,6 +1,5 @@
-from langgraph.graph import END
-
 from cms.rag.graph import (
+    GENERATE,
     NO_MATCH,
     RETRIEVE_POLICIES,
     SMALLTALK,
@@ -25,10 +24,9 @@ def test_empty_retrieval_goes_to_no_match() -> None:
     assert route_after_retrieval({"query": "q", "no_match": True}) == NO_MATCH
 
 
-def test_retrieved_chunks_continue_past_retrieval() -> None:
-    # END stands in for `generate` until that node lands.
-    assert route_after_retrieval({"query": "q", "no_match": False}) == END
+def test_retrieved_chunks_go_to_generate() -> None:
+    assert route_after_retrieval({"query": "q", "no_match": False}) == GENERATE
 
 
-def test_missing_no_match_flag_continues() -> None:
-    assert route_after_retrieval({"query": "q"}) == END
+def test_missing_no_match_flag_goes_to_generate() -> None:
+    assert route_after_retrieval({"query": "q"}) == GENERATE
