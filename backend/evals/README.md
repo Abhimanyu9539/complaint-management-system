@@ -1,28 +1,34 @@
 # Evals
 
-Retrieval quality for the **policy** and **case** retrievers, scored with
-[deepeval](https://deepeval.com).
+Two suites, scored with [deepeval](https://deepeval.com): **retrieval** quality for the policy and
+case retrievers, and **generation** quality for the draft the `generate` node writes.
 
 ```
 evals/
 ├── conftest.py              # truststore, stdout/stderr encoding, telemetry opt-out
 ├── datasets/
-│   ├── policies.json        # 30 goldens
+│   ├── policies.json        # 30 goldens — used by BOTH suites
 │   └── cases.json           # 30 goldens
-└── retriever/
-    ├── adapters.py          # each leg -> retrieved chunk texts, in rank order
-    ├── aggregate.py         # one leg -> the aggregate table (all 9 legs live here)
-    ├── metrics.py           # the shared judge and thresholds
-    ├── test_policy_dense.py         test_policy_dense_rerank.py
-    ├── test_policy_sparse.py        test_policy_hybrid_rerank.py
-    ├── test_policy_hybrid.py
-    ├── test_case_dense.py
-    ├── test_case_sparse.py
-    └── test_case_hybrid.py
+├── retriever/
+│   ├── adapters.py          # each leg -> retrieved chunk texts, in rank order
+│   ├── aggregate.py         # one leg -> the aggregate table (all 9 legs live here)
+│   ├── metrics.py           # the shared judge and thresholds
+│   ├── test_policy_dense.py         test_policy_dense_rerank.py
+│   ├── test_policy_sparse.py        test_policy_hybrid_rerank.py
+│   ├── test_policy_hybrid.py
+│   ├── test_case_dense.py
+│   ├── test_case_sparse.py
+│   └── test_case_hybrid.py
+└── generator/
+    ├── adapters.py          # one golden -> (what the model saw, what it wrote)
+    ├── aggregate.py         # the --leg entry point
+    └── metrics.py           # judge + the three generation thresholds
 ```
 
-There is no `generate` node in the graph yet, so retrieval is the last stage that can be
-evaluated end to end — and neither metric needs an `actual_output`.
+The retriever metrics need no `actual_output` — nothing generates an answer on those legs. The
+generator suite is the one that does, and it reuses the same `policies.json` goldens: their
+`expected_output` was written as agent-facing policy guidance, which is exactly what `generate`
+produces.
 
 ## The metrics
 
@@ -54,6 +60,52 @@ relevant-chunk density instead.
 *sentence* inside an otherwise-correct chunk, which over 800-token policy chunks marks correct
 retrievals down for boilerplate they cannot avoid carrying. Its threshold constant is left in place
 so re-enabling it is a one-line change.
+
+## The generation suite
+
+One leg, `policy-graph-generate`: the real complaint branch end to end — `analyze_query_core` →
+`retrieve_policies_core` → `generate_core`. The scores describe what ships.
+
+| Metric                | What it asks                                              | Threshold |
+| --------------------- | --------------------------------------------------------- | --------- |
+| `FaithfulnessMetric`  | Is every claim supported by the chunks the model was given? | 0.8       |
+| `AnswerRelevancyMetric` | Does the draft address the complaint?                     | 0.7       |
+| `GEval` "Correctness" | Does it reach the reference's policy conclusions?           | 0.7       |
+
+Faithfulness sits higher than the rest because an invented entitlement is the failure that
+actually costs something, and the one a support agent is least able to catch.
+
+Correctness is a `GEval` rather than a predefined metric because "correct" here is domain-specific:
+the same coverage decision, the same remedy, the same checks — and explicitly *not* penalised for
+different wording, ordering or length. The goldens are written in one particular voice and a draft
+must not lose points for choosing another.
+
+```bash
+uv run python evals/generator/aggregate.py --leg policy-graph-generate
+```
+
+### Three things worth knowing before reading a score
+
+- **`retrieval_context` is what the model actually saw**, not the raw hits. `build_context` stops
+  at `generation_context_tokens`, so a hit past the cut never reached the model and must not count
+  against faithfulness. `adapters.py` slices `hits[:len(offered)]` for this.
+- **There is no `test_*.py` here, on purpose.** Like `policy-graph-rerank`, this leg is async and
+  must run the whole dataset in one event loop — the cached embedding client binds its pool to the
+  loop that made it, so a pytest file doing one `asyncio.run` per golden dies partway through with
+  "Event loop is closed". `aggregate.py` is the entry point, and it prints per-case results as well
+  as the aggregate.
+- **A run costs ~$0.52 and ~85s**, materially more than a retriever leg — every golden pays for a
+  generation call on top of the retrieval fan-out.
+
+### Citation health — free, no judge
+
+`aggregate.py` prints one line before the metrics: how many drafts cited nothing, and how many
+cited a marker that was never offered. Both are computed from the draft text against
+`retrieval_context`, so they cost nothing once generation has run, and they catch the two failures
+a judge is overkill for. `used_citations` in `cms/rag/context.py` warns about each individually;
+this is the per-run total.
+
+At `generate/v1` both are **0 of 30**.
 
 ## The legs
 
