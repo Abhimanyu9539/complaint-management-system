@@ -44,26 +44,28 @@ cd backend
 uv run python evals/generator/aggregate.py --leg policy-graph-generate
 ```
 
-| Setting            | Value                                                        |
-| ------------------ | ------------------------------------------------------------ |
-| Leg                | `policy-graph-generate`                                       |
-| Retrieval          | `policy-graph-rerank` above, unchanged — 12 chunks            |
-| Generation model   | `openai/gpt-5.4-mini` (`openrouter_model_main`)               |
-| Prompt             | `generate/v1`                                                 |
-| Judge              | `gpt-5.4-mini`                                                |
-| Goldens            | 30 (`evals/datasets/policies.json`)                           |
-| Cost               | ~$0.52 and ~85s per run                                       |
+
+| Setting          | Value                                               |
+| ------------------ | ----------------------------------------------------- |
+| Leg              | `policy-graph-generate`                             |
+| Retrieval        | `policy-graph-rerank` above, unchanged — 12 chunks |
+| Generation model | `openai/gpt-5.4-mini` (`openrouter_model_main`)     |
+| Prompt           | `generate/v1`                                       |
+| Judge            | `gpt-5.4-mini`                                      |
+| Goldens          | 30 (`evals/datasets/policies.json`)                 |
+| Cost             | ~$0.52 and ~85s per run                             |
 
 ## Scores
 
 Two runs, 2026-09-07. Both are reported because one of the three metrics is not stable enough
 to quote from a single run.
 
-| Metric               | Threshold | Run 1              | Run 2              |
-| -------------------- | --------- | ------------------ | ------------------ |
-| Faithfulness         | 0.80      | **0.995** (30/30)  | **0.986** (30/30)  |
-| Answer Relevancy     | 0.70      | 0.932 (30/30)      | 0.844 (24/30)      |
-| Correctness [GEval]  | 0.70      | 0.723 (26/30)      | 0.737 (27/30)      |
+
+| Metric              | Threshold | Run 1             | Run 2             | Run 3        |
+| --------------------- | ----------- | ------------------- | ------------------- | -------------- |
+| Faithfulness        | 0.80      | **0.995** (30/30) | **0.986** (30/30) | 0.99 (30/30) |
+| Answer Relevancy    | 0.70      | 0.932 (30/30)     | 0.844 (24/30)     | 0.93 (28/30) |
+| Correctness [GEval] | 0.70      | 0.723 (26/30)     | 0.737 (27/30)     | 0.72 (22/30) |
 
 Citation health (deterministic, no judge): **0 of 30** drafts cited nothing, **0 of 30** cited a
 marker that was never offered. Both runs.
@@ -88,12 +90,13 @@ marker that was never offered. Both runs.
 Four goldens fail, and they fail the same way: **the draft offers a remedy in a situation where
 policy says to stop and hand off.**
 
-| Golden | Score | What went wrong |
-| ------ | ----- | --------------- |
-| `test_case_7`  | 0.20 | Burn injury. Draft authorised immediate refund *and* replacement; policy says support stops offering remedies entirely and only Legal decides. |
-| `test_case_6`  | 0.60 | Foreign material in food. Draft promised an immediate full refund on request. |
-| `test_case_27` | 0.60 | Introduced a 30-day return rule; the expected answer is no customer-facing response at all. |
-| `test_case_28` | 0.50 | Invented operational specifics (chase twice, 3 business days, close after 10 days). |
+
+| Golden         | Score | What went wrong                                                                                                                               |
+| ---------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test_case_7`  | 0.20  | Burn injury. Draft authorised immediate refund*and* replacement; policy says support stops offering remedies entirely and only Legal decides. |
+| `test_case_6`  | 0.60  | Foreign material in food. Draft promised an immediate full refund on request.                                                                 |
+| `test_case_27` | 0.60  | Introduced a 30-day return rule; the expected answer is no customer-facing response at all.                                                   |
+| `test_case_28` | 0.50  | Invented operational specifics (chase twice, 3 business days, close after 10 days).                                                           |
 
 Note that faithfulness is ~1.0 on these same cases. **This is not hallucination — it is
 precedence.** The retrieved context legitimately contains both the remedy clauses and the safety
