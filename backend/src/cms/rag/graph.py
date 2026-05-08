@@ -1,8 +1,11 @@
 """Graph assembly: analyze the query, then fork on intent using conditional edge branches.
 
     START -> analyze_query -+-> retrieve_policies -+-> generate  -> END
-                            |                     +-> no_match -> END
-                            +-> smalltalk         -> END
+                            |                      +-> no_match -> END
+                            +-> retrieve_cases     -> END
+                            +-> smalltalk          -> END
+
+A complaint runs retrieve_policies and retrieve_cases in parallel.
 """
 
 import logging
@@ -15,6 +18,7 @@ from langgraph.graph.state import CompiledStateGraph
 from cms.rag.nodes.analyze_query import analyze_query
 from cms.rag.nodes.generate import generate
 from cms.rag.nodes.no_match import no_match
+from cms.rag.nodes.retrieve_cases import retrieve_cases
 from cms.rag.nodes.retrieve_policies import retrieve_policies
 from cms.rag.nodes.smalltalk import smalltalk
 from cms.rag.state import GraphState
@@ -24,6 +28,7 @@ logger = logging.getLogger(__name__)
 # Node names
 ANALYZE_QUERY = "analyze_query"
 RETRIEVE_POLICIES = "retrieve_policies"
+RETRIEVE_CASES = "retrieve_cases"
 SMALLTALK = "smalltalk"
 NO_MATCH = "no_match"
 GENERATE = "generate"
@@ -32,9 +37,11 @@ COMPLAINT_QUERY = "complaint_query"
 OTHER_QUERY = "other_query"
 
 
-def route_by_intent(state: GraphState) -> str:
-    """Determine the branch after `analyze_query` based on user intent."""
-    return "complaint_query" if state.get("intent") == "complaint_query" else "other_query"
+def route_by_intent(state: GraphState) -> list[str] | str:
+    """Determine the branch(es) after `analyze_query`: a complaint searches policies and cases in parallel."""
+    if state.get("intent") == "complaint_query":
+        return ["policy_search", "case_search"]
+    return "other_query"
 
 
 def route_after_retrieval(state: GraphState) -> str:
@@ -49,6 +56,7 @@ def build_graph() -> CompiledStateGraph:
     # Register nodes
     builder.add_node(ANALYZE_QUERY, analyze_query)
     builder.add_node(RETRIEVE_POLICIES, retrieve_policies)
+    builder.add_node(RETRIEVE_CASES, retrieve_cases)
     builder.add_node(SMALLTALK, smalltalk)
     builder.add_node(NO_MATCH, no_match)
     builder.add_node(GENERATE, generate)
@@ -61,7 +69,8 @@ def build_graph() -> CompiledStateGraph:
         ANALYZE_QUERY, 
         route_by_intent, 
         {
-            "complaint_query": RETRIEVE_POLICIES,
+            "policy_search": RETRIEVE_POLICIES,
+            "case_search": RETRIEVE_CASES,
             "other_query": SMALLTALK,
         }
     )
@@ -78,6 +87,8 @@ def build_graph() -> CompiledStateGraph:
     builder.add_edge(GENERATE, END)
     builder.add_edge(NO_MATCH, END)
     builder.add_edge(SMALLTALK, END)
+    # Same step as retrieve_policies, so generate still runs after both.
+    builder.add_edge(RETRIEVE_CASES, END)
     
     return builder.compile()
 

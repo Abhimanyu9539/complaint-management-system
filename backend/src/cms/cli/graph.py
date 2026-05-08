@@ -67,6 +67,7 @@ async def _main() -> int:
 
     branch = route_by_intent(state)
     hits = state.get("policy_hits", [])
+    case_hits = state.get("case_hits", [])
     draft = state.get("draft")
     # Two different lists, and the difference is the point: `offered` is every
     # chunk the model was given, `cited` is the subset its draft actually used.
@@ -87,6 +88,10 @@ async def _main() -> int:
                     "hits": [
                         {"score": score, "text": document.page_content, **document.metadata}
                         for document, score in hits
+                    ],
+                    "case_hits": [
+                        {"score": score, "text": document.page_content, **document.metadata}
+                        for document, score in case_hits
                     ],
                 },
                 default=str,
@@ -112,6 +117,10 @@ async def _main() -> int:
             print(offered_context)
         else:
             print_hits(hits)
+
+    if case_hits:
+        print(f"\n{len(case_hits)} similar case(s)")
+        print_hits(case_hits)
 
     if draft:
         print(f"\n--- draft ---\n{draft}")
