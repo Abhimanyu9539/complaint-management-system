@@ -26,6 +26,7 @@ class GraphState(_RequiredState, total=False):
 
     # --- retrieval  ---
     policy_hits: list[tuple[Document, float]]  # (chunk, score), best first
+    case_hits: list[tuple[Document, float]]  # (chunk, score), best first
     retrieval_attempts: int
     no_match: bool
 
