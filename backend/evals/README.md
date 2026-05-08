@@ -189,8 +189,25 @@ also that a wider *pool* is nearly free — `k=60 → 10` beats `k=20 → 10` on
 the union reranked as one call, `policy_top_k` is capped by `MAX_DOCUMENTS`: at most 4 queries ×
 `policy_top_k` may reach the reranker.
 
-The **case** legs have not been re-run since the golden set grew from 10 to 30. Numbers there are
-stale; re-run before quoting them.
+### Case legs
+
+2026-09-14, 30 goldens, `gpt-5.4-mini`. `k=4`, no rerank. The `retrieve_cases` graph node calls
+`retrieve_cases_hybrid` with the original query, so `case-hybrid` *is* the graph path.
+
+| Leg           | `k` | Runs | Precision | Recall | Recall (24 with a precedent) |
+| ------------- | --- | ---- | --------- | ------ | ---------------------------- |
+| `case-dense`  | 4   | 1    | 0.847     | 0.590  | 0.705                        |
+| `case-hybrid` | 4   | 2    | 0.722     | 0.620  | 0.728                        |
+| `case-sparse` | 4   | 0    | —         | —      | —                            |
+
+- **6 of the 30 goldens are "no precedent" by design.** Their `expected_output` says the corpus holds
+  no matching case. ContextualRecall cannot attribute that sentence to any retrieved chunk, so these
+  goldens score ~0.15 whatever the retriever does. The last column leaves them out.
+- This is well below the "near ceiling" described above, which predates the 30-golden set.
+- `case-hybrid` precision moved 0.785 → 0.658 between its two runs. Treat a gap between dense and
+  hybrid that small as noise until more runs are in.
+- `case-sparse` has not been run on 30 goldens yet: the run stopped on an OpenRouter 402
+  (`in_flight_budget_exhausted`).
 
 ## Open questions
 
