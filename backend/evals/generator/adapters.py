@@ -14,10 +14,11 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
-from cms.rag.context import build_context
+from cms.rag.context import build_generation_context
 from cms.rag.nodes.analyze_query import analyze_query_core, build_policy_queries
 from cms.rag.nodes.generate import generate_core
 from cms.rag.nodes.retrieve_policies import retrieve_policies_core
+from cms.retrieval.retrievers.case_retriever import retrieve_cases_hybrid
 from cms.retrieval.retrievers.policy_retriever import DEFAULT_TOP_N as POLICY_TOP_N
 
 logger = logging.getLogger(__name__)
@@ -31,20 +32,28 @@ GenerationCase = tuple[list[str], str]
 
 
 async def graph_generation_case(query: str) -> GenerationCase:
-    """The production path end to end: analyze, retrieve, rerank, generate.
+    """The production path end to end: analyze, retrieve policies and cases, rerank, generate.
 
     `retrieval_context` is what the model was actually shown, not the raw hits:
     `build_context` stops at the token budget, so a hit past the cut never
     reached the model and must not be counted against faithfulness. Calling
-    `build_context` here duplicates the call inside `generate_core`, which is
-    free — it is pure, with no I/O.
+    `build_generation_context` here duplicates the call inside `generate_core`,
+    which is free — it is pure, with no I/O.
+
+    Policy texts come first, then case texts — the same order as the markers, so
+    `log_citation_health`'s marker range check still lines up.
     """
     analysis = await analyze_query_core(query)
     queries = build_policy_queries(query, analysis)
-    hits = await retrieve_policies_core(queries, rerank=True, top_n=POLICY_TOP_N)
+    policy_hits, case_hits = await asyncio.gather(
+        retrieve_policies_core(queries, rerank=True, top_n=POLICY_TOP_N),
+        retrieve_cases_hybrid(query),
+    )
 
-    _, offered = build_context(hits)
-    draft, cited = await generate_core(query, hits)
+    _, _, offered = build_generation_context(policy_hits, case_hits)
+    offered_policies = sum(1 for citation in offered if citation.doc_type == "policy")
+    offered_cases = len(offered) - offered_policies
+    draft, cited = await generate_core(query, policy_hits, case_hits)
 
     logger.info(
         "generation leg | %s",
@@ -52,11 +61,14 @@ async def graph_generation_case(query: str) -> GenerationCase:
             [
                 f"golden:  {query}",
                 f"  intent: {analysis.intent}",
-                f"  chunks: {len(offered)} offered, {len(cited)} cited",
+                (f"  chunks: {offered_policies} policy + {offered_cases} case offered, "
+                f"{len(cited)} cited"),
             ]
         ),
     )
-    return [document.page_content for document, _ in hits[: len(offered)]], draft
+    contexts = [document.page_content for document, _ in policy_hits[:offered_policies]]
+    contexts += [document.page_content for document, _ in case_hits[:offered_cases]]
+    return contexts, draft
 
 
 async def _gather_cases(

@@ -50,7 +50,7 @@ DEFAULT_RESULTS_FOLDER = Path(__file__).parents[1] / "results"
 
 # The prompt `generate_core` loads. Recorded as a hyperparameter because it is
 # half of what determines a score — a v2 prompt is a different system under test.
-PROMPT_VERSION = "generate/v1"
+PROMPT_VERSION = f"generate/{get_settings().generate_prompt_version}"
 
 # leg -> (dataset file, the coroutine that runs it).
 LEGS = {
