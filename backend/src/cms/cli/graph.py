@@ -23,7 +23,7 @@ import sys
 # client (openai, supabase) is constructed.
 from cms.config.logging_config import setup_logging  # isort: skip
 from cms.cli.display import print_hits
-from cms.rag.context import build_context
+from cms.rag.context import build_generation_context
 from cms.rag.graph import get_graph, route_by_intent
 
 logger = logging.getLogger("cms.cli.graph")
@@ -71,7 +71,9 @@ async def _main() -> int:
     draft = state.get("draft")
     # Two different lists, and the difference is the point: `offered` is every
     # chunk the model was given, `cited` is the subset its draft actually used.
-    offered_context, offered = build_context(hits) if args.context else ("", [])
+    policy_context, case_context, offered = (
+        build_generation_context(hits, case_hits) if args.context else ("", "", [])
+    )
     cited = state.get("citations", [])
 
     if args.json:
@@ -83,7 +85,8 @@ async def _main() -> int:
                     "branch": branch,
                     "policy_queries": state.get("policy_queries", []),
                     "draft": draft,
-                    "context": offered_context if args.context else None,
+                    "context": policy_context if args.context else None,
+                    "cases_context": case_context if args.context else None,
                     "citations": [citation.model_dump() for citation in cited],
                     "hits": [
                         {"score": score, "text": document.page_content, **document.metadata}
@@ -113,14 +116,18 @@ async def _main() -> int:
         print(f"\n{len(hits)} chunk(s) retrieved")
         if args.context:
             # Exactly what generate was handed, verbatim.
-            print(f"\n--- context offered ({len(offered)} chunk(s)) ---\n")
-            print(offered_context)
+            print("\n--- policy context offered ---\n")
+            print(policy_context)
         else:
             print_hits(hits)
 
     if case_hits:
         print(f"\n{len(case_hits)} similar case(s)")
-        print_hits(case_hits)
+        if args.context:
+            print("\n--- similar cases offered ---\n")
+            print(case_context)
+        else:
+            print_hits(case_hits)
 
     if draft:
         print(f"\n--- draft ---\n{draft}")
@@ -128,9 +135,10 @@ async def _main() -> int:
     # Printed after the draft so the markers above are still on screen. Fewer
     # than the chunks offered is the normal, healthy case.
     if cited:
-        print(f"\n--- cited ({len(cited)} of {len(hits)} offered) ---")
+        offered_count = len(offered) if args.context else len(hits) + len(case_hits)
+        print(f"\n--- cited ({len(cited)} of {offered_count} offered) ---")
         for citation in cited:
-            print(f"  [{citation.marker}] {citation.title} — {citation.section}")
+            print(f"  [{citation.marker}] ({citation.doc_type}) {citation.title} — {citation.section}")
             print(f"      doc_id={citation.doc_id} chunk_id={citation.chunk_id}")
     return 0
 

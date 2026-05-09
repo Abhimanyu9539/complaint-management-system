@@ -1,6 +1,11 @@
 """Contracts for the generation stage: what a `[n]` marker in a draft points at."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
+
+# Which corpus a citation's `doc_id` resolves in — cases and policies are separate tables.
+DocType = Literal["policy", "case"]
 
 
 class _Base(BaseModel):
@@ -21,3 +26,4 @@ class Citation(_Base):
     chunk_id: str
     title: str
     section: str
+    doc_type: DocType = "policy"
