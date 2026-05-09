@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     # A guard, not a shaper: 12 reranked chunks measure at ~2,400 tokens, so this
     # only trips if policy_rerank_top_n is raised or a chunk arrives oversized.
     generation_context_tokens: int = 4000
+    # v2 adds similar past cases; v1 (policies only) is kept as the eval baseline.
+    generate_prompt_version: str = "v2"
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (

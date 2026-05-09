@@ -12,7 +12,7 @@ from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
 from cms.ingestion.transform.chunker import count_tokens
-from cms.schemas.generation import Citation
+from cms.schemas.generation import Citation, DocType
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +38,13 @@ def _section(document: Document) -> str:
 def build_context(
     hits: list[tuple[Document, float]],
     budget_tokens: int = DEFAULT_CONTEXT_TOKENS,
+    start: int = 1,
+    doc_type: DocType = "policy",
 ) -> tuple[str, list[Citation]]:
-    """Format `hits` (best first) as `[1] ... [n]` blocks within `budget_tokens`.
+    """Format `hits` (best first) as `[start] ... [n]` blocks within `budget_tokens`.
 
     Returns the block text and one `Citation` per chunk that made it in, with
-    matching markers — a draft's `[3]` is `citations[2]`.
+    matching markers — with the default `start`, a draft's `[3]` is `citations[2]`.
 
     Scores are dropped on purpose: they are the reranker's, on its own scale,
     and showing a model a number it cannot calibrate invites it to reason about
@@ -64,7 +66,7 @@ def build_context(
     citations: list[Citation] = []
     used = 0
 
-    for marker, (document, _score) in enumerate(hits, start=1):
+    for marker, (document, _score) in enumerate(hits, start=start):
         metadata = document.metadata
         block = f"[{marker}] {metadata.get('title', 'Untitled')}\n{document.page_content}"
 
@@ -87,11 +89,28 @@ def build_context(
                 chunk_id=str(metadata.get("chunk_id", "")),
                 title=str(metadata.get("title", "Untitled")),
                 section=_section(document),
+                doc_type=doc_type,
             )
         )
 
-    logger.info("build_context: %d chunk(s), ~%d tokens", len(blocks), used)
+    logger.info("build_context: %d %s chunk(s), ~%d tokens", len(blocks), doc_type, used)
     return BLOCK_SEPARATOR.join(blocks), citations
+
+
+def build_generation_context(
+    policy_hits: list[tuple[Document, float]],
+    case_hits: list[tuple[Document, float]],
+) -> tuple[str, str, list[Citation]]:
+    """Policy block and case block on one marker sequence: cases number on from the last policy.
+
+    Returns `(policy_context, case_context, citations)`. One sequence means a
+    draft's `[n]` is unambiguous and `used_citations` needs no change.
+    """
+    policy_context, policy_citations = build_context(policy_hits)
+    case_context, case_citations = build_context(
+        case_hits, start=len(policy_citations) + 1, doc_type="case"
+    )
+    return policy_context, case_context, policy_citations + case_citations
 
 
 def used_citations(draft: str, citations: list[Citation]) -> list[Citation]:

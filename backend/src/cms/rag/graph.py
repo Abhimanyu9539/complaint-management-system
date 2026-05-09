@@ -1,11 +1,12 @@
 """Graph assembly: analyze the query, then fork on intent using conditional edge branches.
 
-    START -> analyze_query -+-> retrieve_policies -+-> generate  -> END
-                            |                      +-> no_match -> END
-                            +-> retrieve_cases     -> END
-                            +-> smalltalk          -> END
+    START -> analyze_query -+-> retrieve_policies -+
+                            |                      +-> join_retrieval -+-> generate -> END
+                            +-> retrieve_cases ----+                   +-> no_match -> END
+                            +-> smalltalk -> END
 
-A complaint runs retrieve_policies and retrieve_cases in parallel.
+A complaint runs retrieve_policies and retrieve_cases in parallel; join_retrieval
+waits for both, so generate gets policy and case hits.
 """
 
 import logging
@@ -17,6 +18,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from cms.rag.nodes.analyze_query import analyze_query
 from cms.rag.nodes.generate import generate
+from cms.rag.nodes.join_retrieval import join_retrieval
 from cms.rag.nodes.no_match import no_match
 from cms.rag.nodes.retrieve_cases import retrieve_cases
 from cms.rag.nodes.retrieve_policies import retrieve_policies
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 ANALYZE_QUERY = "analyze_query"
 RETRIEVE_POLICIES = "retrieve_policies"
 RETRIEVE_CASES = "retrieve_cases"
+JOIN_RETRIEVAL = "join_retrieval"
 SMALLTALK = "smalltalk"
 NO_MATCH = "no_match"
 GENERATE = "generate"
@@ -45,7 +48,7 @@ def route_by_intent(state: GraphState) -> list[str] | str:
 
 
 def route_after_retrieval(state: GraphState) -> str:
-    """Determine the branch after `retrieve_policies` based on match results."""
+    """Determine the branch after `join_retrieval` based on the policy match result."""
     return "no_match_found" if state.get("no_match") else "match_found"
 
 
@@ -57,6 +60,7 @@ def build_graph() -> CompiledStateGraph:
     builder.add_node(ANALYZE_QUERY, analyze_query)
     builder.add_node(RETRIEVE_POLICIES, retrieve_policies)
     builder.add_node(RETRIEVE_CASES, retrieve_cases)
+    builder.add_node(JOIN_RETRIEVAL, join_retrieval)
     builder.add_node(SMALLTALK, smalltalk)
     builder.add_node(NO_MATCH, no_match)
     builder.add_node(GENERATE, generate)
@@ -75,8 +79,11 @@ def build_graph() -> CompiledStateGraph:
         }
     )
     
+    # Waits for both retrievals before the one match/no-match decision.
+    builder.add_edge([RETRIEVE_POLICIES, RETRIEVE_CASES], JOIN_RETRIEVAL)
+
     builder.add_conditional_edges(
-        RETRIEVE_POLICIES,
+        JOIN_RETRIEVAL,
         route_after_retrieval,
         {
             "match_found": GENERATE,
@@ -87,8 +94,6 @@ def build_graph() -> CompiledStateGraph:
     builder.add_edge(GENERATE, END)
     builder.add_edge(NO_MATCH, END)
     builder.add_edge(SMALLTALK, END)
-    # Same step as retrieve_policies, so generate still runs after both.
-    builder.add_edge(RETRIEVE_CASES, END)
     
     return builder.compile()
 
