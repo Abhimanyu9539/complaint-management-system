@@ -1,6 +1,6 @@
 from langchain_core.documents import Document
 
-from cms.rag.context import build_context, used_citations
+from cms.rag.context import build_context, build_generation_context, used_citations
 from cms.schemas.generation import Citation
 
 BREADCRUMB = "Warranty Policy > 2. Manufacturing Defects > 2.3 Charging Circuit"
@@ -78,6 +78,36 @@ def test_missing_metadata_does_not_raise() -> None:
     assert citations[0].doc_id == ""
     assert citations[0].section == "just text"
     assert "[1] Untitled" in context
+
+
+def test_start_and_doc_type_carry_into_markers_and_citations() -> None:
+    context, citations = build_context([_hit("c1")], start=5, doc_type="case")
+
+    assert context.startswith("[5] Warranty Policy")
+    assert citations[0].marker == 5
+    assert citations[0].doc_type == "case"
+
+
+# --- build_generation_context ---------------------------------------------
+
+
+def test_cases_number_on_from_the_last_policy() -> None:
+    policy_context, case_context, citations = build_generation_context(
+        [_hit("p1"), _hit("p2")], [_hit("k1")]
+    )
+
+    # One marker sequence across both blocks, so a draft's [n] is unambiguous.
+    assert [citation.marker for citation in citations] == [1, 2, 3]
+    assert [citation.doc_type for citation in citations] == ["policy", "policy", "case"]
+    assert "[3]" not in policy_context
+    assert case_context.startswith("[3] ")
+
+
+def test_no_cases_is_an_empty_case_block() -> None:
+    _, case_context, citations = build_generation_context([_hit("p1")], [])
+
+    assert case_context == ""
+    assert [citation.doc_type for citation in citations] == ["policy"]
 
 
 # --- used_citations -------------------------------------------------------

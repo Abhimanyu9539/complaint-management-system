@@ -13,7 +13,7 @@ class _FakeMessage:
 def _install_model_stub(monkeypatch, reply: str) -> list[str]:
     """Replace only the chat model, so nothing reaches OpenRouter.
 
-    A `RunnableLambda` rather than a bare object: the real `generate/v1`
+    A `RunnableLambda` rather than a bare object: the real `generate/v2`
     template still renders and pipes into it, so these tests also prove the
     prompt interpolates — which a hand-rolled chain stub would skip.
     """
@@ -39,22 +39,49 @@ def _hit(chunk_id: str, title: str = "Warranty Policy") -> tuple[Document, float
     )
 
 
+def _case_hit(chunk_id: str) -> tuple[Document, float]:
+    """A case chunk shaped the way `build_case_text` writes them."""
+    return (
+        Document(
+            page_content="COMPLAINT:\nvacuum stopped charging\n\nRESOLUTION:\nreplacement issued",
+            metadata={
+                "doc_id": "case-1",
+                "chunk_id": chunk_id,
+                "title": "C-1001 — warranty / faulty_product",
+            },
+        ),
+        0.8,
+    )
+
+
 async def test_the_model_is_given_the_built_context_and_the_query(monkeypatch) -> None:
     prompts = _install_model_stub(monkeypatch, "Covered under warranty [1].")
 
-    await generate_module.generate_core("my unit stopped charging", [_hit("c1")])
+    await generate_module.generate_core("my unit stopped charging", [_hit("c1")], [])
 
-    # Both variables interpolated into the real generate/v1 template.
+    # Every variable interpolated into the real generate/v2 template.
     assert "my unit stopped charging" in prompts[0]
     assert "[1] Warranty Policy" in prompts[0]  # the numbered block, not raw chunks
     assert "{context}" not in prompts[0]
+    assert "{cases}" not in prompts[0]
+
+
+async def test_cases_are_numbered_after_policies_and_cited_as_cases(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Covered [1]; a similar case was replaced [2].")
+
+    _, citations = await generate_module.generate_core("q", [_hit("p1")], [_case_hit("k1")])
+
+    # The case sits in its own section, numbered on from the policy extracts.
+    assert prompts[0].index("Similar past cases") < prompts[0].index("[2] C-1001")
+    assert [citation.doc_type for citation in citations] == ["policy", "case"]
+    assert [citation.doc_id for citation in citations] == ["doc-1", "case-1"]
 
 
 async def test_only_the_cited_chunks_come_back(monkeypatch) -> None:
     _install_model_stub(monkeypatch, "Covered [1], and the remedy is replacement [3].")
 
     _, citations = await generate_module.generate_core(
-        "q", [_hit("c1"), _hit("c2"), _hit("c3")]
+        "q", [_hit("c1"), _hit("c2"), _hit("c3")], []
     )
 
     # [2] was offered and not cited, so it is not presented as a source.
@@ -66,24 +93,27 @@ async def test_node_returns_the_draft_and_citations(monkeypatch) -> None:
     seen: list[tuple] = []
     citation = Citation(marker=1, doc_id="d", chunk_id="c", title="t", section="s")
 
-    async def fake_core(query, hits):
-        seen.append((query, hits))
+    async def fake_core(query, policy_hits, case_hits):
+        seen.append((query, policy_hits, case_hits))
         return "the draft [1]", [citation]
 
     monkeypatch.setattr(generate_module, "generate_core", fake_core)
     hits = [_hit("c1")]
+    case_hits = [_case_hit("k1")]
 
-    update = await generate_module.generate({"query": "complaint", "policy_hits": hits})
+    update = await generate_module.generate(
+        {"query": "complaint", "policy_hits": hits, "case_hits": case_hits}
+    )
 
     assert update == {"draft": "the draft [1]", "citations": [citation]}
-    assert seen == [("complaint", hits)]
+    assert seen == [("complaint", hits, case_hits)]
 
 
 async def test_no_hits_does_not_crash(monkeypatch) -> None:
     """The graph routes empty retrieval to no_match, but the function stands alone."""
     prompts = _install_model_stub(monkeypatch, "Nothing in policy covers this.")
 
-    draft, citations = await generate_module.generate_core("q", [])
+    draft, citations = await generate_module.generate_core("q", [], [])
 
     # No chunk text reached the model. Not asserted via "[1]" — the system
     # prompt uses bracket numbers to explain the citation format.
