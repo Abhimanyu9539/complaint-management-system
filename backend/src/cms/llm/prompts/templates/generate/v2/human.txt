@@ -1,0 +1,11 @@
+Policy extracts:
+
+{context}
+
+Similar past cases:
+
+{cases}
+
+Complaint:
+
+{query}

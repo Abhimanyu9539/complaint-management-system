@@ -104,6 +104,9 @@ or legal override, and the draft blends them instead of letting the override win
 says only "where two extracts conflict or one overrides another, say which applies and why," which
 is too weak to stop it.
 
-The fix is a `generate/v2` with an explicit precedence rule: when an extract routes the case
+The fix is a new prompt version with an explicit precedence rule: when an extract routes the case
 elsewhere (safety, injury, legal, fraud), that overrides every remedy the other extracts describe,
 and no remedy is offered at all. Not yet done — `v1` is the recorded baseline to move against.
+
+All numbers on this page are `generate/v1` (policy extracts only). `generate/v2` adds similar past
+cases as cited precedent and has not been scored yet, so the precedence fix above becomes `v3`.
