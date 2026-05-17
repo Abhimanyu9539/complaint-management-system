@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 async def analyze_query_core(query: str) -> QueryAnalysis:
-    """Classify `query` and rewrite it into policy-worded retrieval queries."""
+    """Classify `query`, flag its risks, and rewrite it into policy-worded retrieval queries."""
     settings = get_settings()
-    prompt = load_prompt("analyze_query")
+    prompt = load_prompt("analyze_query", settings.analyze_query_prompt_version)
     model = get_chat_model(settings.openrouter_model_cheap).with_structured_output(QueryAnalysis)
     chain = prompt | model
 
@@ -28,8 +28,9 @@ async def analyze_query_core(query: str) -> QueryAnalysis:
         raise
 
     logger.info(
-        "analyze_query: intent=%s, %d policy query(ies) for %r",
+        "analyze_query: intent=%s, risk_flags=%s, %d policy query(ies) for %r",
         analysis.intent,
+        analysis.risk_flags,
         len(analysis.policy_queries),
         query,
     )
@@ -56,4 +57,7 @@ async def analyze_query(state: GraphState) -> dict:
     return {
         "intent": analysis.intent,
         "policy_queries": build_policy_queries(state["query"], analysis),
+        "risk_flags": analysis.risk_flags,
+        # Any flag means a lead reviews the reply before it is sent (ai §4).
+        "requires_lead_review": bool(analysis.risk_flags),
     }
