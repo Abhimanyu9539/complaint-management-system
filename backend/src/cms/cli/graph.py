@@ -81,10 +81,18 @@ async def _main() -> int:
             json.dumps(
                 {
                     "query": args.query,
+                    # What the graph ran on: the query with sensitive data masked.
+                    "guarded_query": state["query"],
+                    "input_blocked": state.get("input_blocked"),
                     "intent": state.get("intent"),
                     "branch": branch,
+                    "risk_flags": state.get("risk_flags", []),
+                    "requires_lead_review": state.get("requires_lead_review"),
                     "policy_queries": state.get("policy_queries", []),
                     "draft": draft,
+                    "grounded": state.get("grounded"),
+                    "regenerated": state.get("regenerated", False),
+                    "guard_reasons": state.get("guard_reasons", []),
                     "context": policy_context if args.context else None,
                     "cases_context": case_context if args.context else None,
                     "citations": [citation.model_dump() for citation in cited],
@@ -103,13 +111,20 @@ async def _main() -> int:
         return 0
 
     print(f"query={args.query!r}")
-    print(f"intent: {state.get('intent')} -> {branch}")
+    if state["query"] != args.query:
+        print(f"guarded query={state['query']!r}")
+    if state.get("input_blocked"):
+        print(f"input blocked: {state.get('guard_reasons', [])}")
+    else:
+        print(f"intent: {state.get('intent')} -> {branch}")
+    if state.get("risk_flags"):
+        print(f"risk flags: {state['risk_flags']} (lead review required)")
 
     queries = state.get("policy_queries", [])
     if queries:
         print(f"\npolicy queries ({len(queries)}):")
         for query in queries:
-            suffix = "   <- original" if query == args.query else ""
+            suffix = "   <- original" if query == state["query"] else ""
             print(f"  - {query}{suffix}")
 
     if hits:
@@ -131,6 +146,12 @@ async def _main() -> int:
 
     if draft:
         print(f"\n--- draft ---\n{draft}")
+
+    if "grounded" in state:
+        print(
+            f"\ngrounded={state['grounded']} regenerated={state.get('regenerated', False)}"
+            f" reasons={state.get('guard_reasons', [])}"
+        )
 
     # Printed after the draft so the markers above are still on screen. Fewer
     # than the chunks offered is the normal, healthy case.

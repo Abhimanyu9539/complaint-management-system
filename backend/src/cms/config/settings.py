@@ -102,8 +102,11 @@ class Settings(BaseSettings):
     # A guard, not a shaper: 12 reranked chunks measure at ~2,400 tokens, so this
     # only trips if policy_rerank_top_n is raised or a chunk arrives oversized.
     generation_context_tokens: int = 4000
-    # v2 adds similar past cases; v1 (policies only) is kept as the eval baseline.
-    generate_prompt_version: str = "v2"
+    # v3 adds tagged inputs and guardrail feedback; v2 (no feedback) and v1
+    # (policies only) are kept as eval baselines.
+    generate_prompt_version: str = "v3"
+    # v2 adds risk flags.
+    analyze_query_prompt_version: str = "v2"
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (
@@ -112,6 +115,56 @@ class Settings(BaseSettings):
         "or escalate to the responsible department — I'd rather say this than "
         "guess at an entitlement the customer may not have."
     )
+
+    # --- Guardrails ---
+    # Kill switches. The Guardrails AI checks run locally; the NeMo rails are LLM calls.
+    guardrails_enabled: bool = True
+    nemo_rails_enabled: bool = True
+    # Same bounds as `CreateTicketRequest.body`.
+    query_min_chars: int = 10
+    query_max_chars: int = 8000
+    # Presidio entities masked out of the complaint and flagged in drafts (privacy §2).
+    pii_entities: list[str] = [
+        "CREDIT_CARD",
+        "IN_AADHAAR",
+        "IN_PAN",
+        "EMAIL_ADDRESS",
+        "PHONE_NUMBER",
+    ]
+    # Credentials Presidio has no recognizer for: an OTP, UPI PIN or CVV and its digits.
+    credential_pattern: str = r"(?i)\b(?:otp|one[- ]time password|upi pin|cvv)\b\D{0,15}\d{3,8}\b"
+    # No match when the best reranked policy chunk scores below this (lld.md
+    # NO_MATCH_THRESHOLD). Reranked hits only — RRF scores are on another scale.
+    # 0.50 measured on the 30 eval goldens: lowest golden best score 0.539;
+    # clearly off-topic complaints topped out at 0.47-0.50.
+    policy_relevance_threshold: float = 0.50
+    blocked_input_message: str = (
+        "This complaint was not processed: it contains instructions aimed at the "
+        "assistant, abusive content, or text the checks could not accept. Please "
+        "read it and handle it manually."
+    )
+    grounding_caveat: str = (
+        "CAUTION — this draft failed the guardrail checks twice. Verify every claim "
+        "against the cited sources before using any of it:"
+    )
+    # Recorded when a guard itself errors; the flow fails closed.
+    guard_error_reason: str = "A guardrail check could not run."
+    # Feedback when Presidio finds personal data in a draft.
+    draft_pii_reason: str = (
+        "The draft contains personal data (a card, ID, email or phone number). Remove it."
+    )
+    # Feedback for the regenerated draft, keyed by the NeMo rail that blocked it.
+    rail_feedback: dict[str, str] = {
+        "self check input": "The complaint contains instructions aimed at the assistant, or abuse.",
+        "self check facts": (
+            "A reviewer found claims the extracts do not support. State only what the "
+            "extracts and past cases say, and cite each claim."
+        ),
+        "self check output": (
+            "The draft is not written to the support agent. Write to the agent, with no "
+            "greeting or sign-off, and in a neutral tone about the customer."
+        ),
+    }
 
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a
