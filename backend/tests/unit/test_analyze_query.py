@@ -46,3 +46,27 @@ def test_build_policy_queries_is_empty_for_smalltalk() -> None:
     analysis = QueryAnalysis(intent="smalltalk_or_meta")
 
     assert analyze_query_module.build_policy_queries("hey there", analysis) == []
+
+
+async def test_any_risk_flag_requires_lead_review(monkeypatch) -> None:
+    async def fake_core(query: str) -> QueryAnalysis:
+        return QueryAnalysis(intent="complaint_query", risk_flags=["safety", "legal"])
+
+    monkeypatch.setattr(analyze_query_module, "analyze_query_core", fake_core)
+
+    update = await analyze_query_module.analyze_query({"query": "it sparked and burned me"})
+
+    assert update["risk_flags"] == ["safety", "legal"]
+    assert update["requires_lead_review"] is True
+
+
+async def test_no_risk_flags_needs_no_lead_review(monkeypatch) -> None:
+    async def fake_core(query: str) -> QueryAnalysis:
+        return _canned_analysis()
+
+    monkeypatch.setattr(analyze_query_module, "analyze_query_core", fake_core)
+
+    update = await analyze_query_module.analyze_query({"query": "my X200 won't charge"})
+
+    assert update["risk_flags"] == []
+    assert update["requires_lead_review"] is False
