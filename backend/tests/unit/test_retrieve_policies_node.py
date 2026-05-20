@@ -104,3 +104,41 @@ async def test_no_policy_queries_skips_retrieval(monkeypatch) -> None:
 
     assert calls == []
     assert update == {"policy_hits": [], "no_match": True}
+
+
+async def test_a_strong_best_hit_keeps_every_reranked_hit(monkeypatch) -> None:
+    # The gate is on the best score only; weaker supporting chunks stay in the context.
+    _install_stub(monkeypatch, {"q": [(_chunk("c1"), 0.9), (_chunk("c2"), 0.3)]})
+    _install_rerank_stub(monkeypatch)
+
+    hits = await retrieve_module.retrieve_policies_core(["q"], rerank=True, min_score=0.5)
+
+    assert [doc.metadata["chunk_id"] for doc, _ in hits] == ["c1", "c2"]
+
+
+async def test_a_weak_best_hit_returns_nothing(monkeypatch) -> None:
+    _install_stub(monkeypatch, {"q": [(_chunk("c1"), 0.4), (_chunk("c2"), 0.3)]})
+    _install_rerank_stub(monkeypatch)
+
+    hits = await retrieve_module.retrieve_policies_core(["q"], rerank=True, min_score=0.5)
+
+    assert hits == []
+
+
+async def test_weak_best_hit_is_a_no_match(monkeypatch) -> None:
+    # 0.01 sits below any sensible default threshold.
+    _install_stub(monkeypatch, {"q": [(_chunk("c1"), 0.01)]})
+    _install_rerank_stub(monkeypatch)
+
+    update = await retrieve_module.retrieve_policies({"query": "q", "policy_queries": ["q"]})
+
+    assert update == {"policy_hits": [], "no_match": True}
+
+
+async def test_no_floor_without_rerank(monkeypatch) -> None:
+    # RRF scores are on another scale, so the reranker threshold does not apply.
+    _install_stub(monkeypatch, {"q": [(_chunk("c1"), 0.02)]})
+
+    hits = await retrieve_module.retrieve_policies_core(["q"], rerank=False, min_score=0.5)
+
+    assert len(hits) == 1

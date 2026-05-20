@@ -13,7 +13,7 @@ class _FakeMessage:
 def _install_model_stub(monkeypatch, reply: str) -> list[str]:
     """Replace only the chat model, so nothing reaches OpenRouter.
 
-    A `RunnableLambda` rather than a bare object: the real `generate/v2`
+    A `RunnableLambda` rather than a bare object: the real `generate/v3`
     template still renders and pipes into it, so these tests also prove the
     prompt interpolates — which a hand-rolled chain stub would skip.
     """
@@ -59,7 +59,7 @@ async def test_the_model_is_given_the_built_context_and_the_query(monkeypatch) -
 
     await generate_module.generate_core("my unit stopped charging", [_hit("c1")], [])
 
-    # Every variable interpolated into the real generate/v2 template.
+    # Every variable interpolated into the real generate/v3 template.
     assert "my unit stopped charging" in prompts[0]
     assert "[1] Warranty Policy" in prompts[0]  # the numbered block, not raw chunks
     assert "{context}" not in prompts[0]
@@ -72,7 +72,7 @@ async def test_cases_are_numbered_after_policies_and_cited_as_cases(monkeypatch)
     _, citations = await generate_module.generate_core("q", [_hit("p1")], [_case_hit("k1")])
 
     # The case sits in its own section, numbered on from the policy extracts.
-    assert prompts[0].index("Similar past cases") < prompts[0].index("[2] C-1001")
+    assert prompts[0].index("<past_cases>") < prompts[0].index("[2] C-1001")
     assert [citation.doc_type for citation in citations] == ["policy", "case"]
     assert [citation.doc_id for citation in citations] == ["doc-1", "case-1"]
 
@@ -93,8 +93,8 @@ async def test_node_returns_the_draft_and_citations(monkeypatch) -> None:
     seen: list[tuple] = []
     citation = Citation(marker=1, doc_id="d", chunk_id="c", title="t", section="s")
 
-    async def fake_core(query, policy_hits, case_hits):
-        seen.append((query, policy_hits, case_hits))
+    async def fake_core(query, policy_hits, case_hits, feedback=None):
+        seen.append((query, policy_hits, case_hits, feedback))
         return "the draft [1]", [citation]
 
     monkeypatch.setattr(generate_module, "generate_core", fake_core)
@@ -106,7 +106,7 @@ async def test_node_returns_the_draft_and_citations(monkeypatch) -> None:
     )
 
     assert update == {"draft": "the draft [1]", "citations": [citation]}
-    assert seen == [("complaint", hits, case_hits)]
+    assert seen == [("complaint", hits, case_hits, None)]
 
 
 async def test_no_hits_does_not_crash(monkeypatch) -> None:
@@ -120,3 +120,38 @@ async def test_no_hits_does_not_crash(monkeypatch) -> None:
     assert "Warranty Policy" not in prompts[0]
     assert citations == []
     assert draft
+
+
+async def test_first_draft_has_no_feedback_block(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Covered [1].")
+
+    await generate_module.generate_core("q", [_hit("c1")], [])
+
+    # The system prompt names the section; only a retry renders one.
+    assert "<feedback>\n-" not in prompts[0]
+    assert "{feedback}" not in prompts[0]
+
+
+async def test_guard_reasons_reach_the_prompt_as_feedback(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Covered [1].")
+
+    await generate_module.generate_core("q", [_hit("c1")], [], feedback=["Cite every claim."])
+
+    assert "<feedback>\n- Cite every claim.\n</feedback>" in prompts[0]
+
+
+async def test_node_retries_with_feedback_after_an_ungrounded_draft(monkeypatch) -> None:
+    seen: list[list[str] | None] = []
+
+    async def fake_core(query, policy_hits, case_hits, feedback=None):
+        seen.append(feedback)
+        return "better draft [1]", []
+
+    monkeypatch.setattr(generate_module, "generate_core", fake_core)
+
+    update = await generate_module.generate(
+        {"query": "q", "grounded": False, "guard_reasons": ["uncited claim"]}
+    )
+
+    assert seen == [["uncited claim"]]
+    assert update["regenerated"] is True
