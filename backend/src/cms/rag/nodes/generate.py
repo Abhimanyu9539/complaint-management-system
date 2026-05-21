@@ -16,12 +16,15 @@ from cms.schemas.generation import Citation
 logger = logging.getLogger(__name__)
 
 
-def format_feedback(reasons: list[str] | None) -> str:
-    """The prompt's <feedback> block: why the last draft failed. Empty on a first draft."""
+def format_feedback(reasons: list[str] | None, previous_draft: str | None = None) -> str:
+    """The retry block: the draft that failed, then why it failed. Empty on a first draft."""
     if not reasons:
         return ""
     bullets = "\n".join(f"- {reason}" for reason in reasons)
-    return f"\n<feedback>\n{bullets}\n</feedback>\n"
+    block = f"\n<feedback>\n{bullets}\n</feedback>\n"
+    if previous_draft:
+        block = f"\n<previous_draft>\n{previous_draft}\n</previous_draft>\n{block}"
+    return block
 
 
 async def generate_core(
@@ -29,6 +32,7 @@ async def generate_core(
     policy_hits: list[tuple[Document, float]],
     case_hits: list[tuple[Document, float]],
     feedback: list[str] | None = None,
+    previous_draft: str | None = None,
 ) -> tuple[str, list[Citation]]:
     """A grounded draft for `query`, plus the citations it actually used.
 
@@ -42,8 +46,9 @@ async def generate_core(
     Returns `used_citations`, not everything `build_context` offered — see that
     function for why.
 
-    `feedback` is the output guard's reasons on a regeneration. Prompt versions
-    before v3 have no slot for it and ignore it.
+    `feedback` is the output guard's reasons on a regeneration and `previous_draft`
+    the draft they apply to, so the model revises it rather than starting over.
+    Prompt versions before v3 have no slot for either and ignore them.
     """
     settings = get_settings()
     context, cases, citations = build_generation_context(policy_hits, case_hits)
@@ -56,7 +61,7 @@ async def generate_core(
                 "context": context,
                 "cases": cases,
                 "query": query,
-                "feedback": format_feedback(feedback),
+                "feedback": format_feedback(feedback, previous_draft),
             }
         )
     except Exception:
@@ -80,16 +85,22 @@ async def generate(state: GraphState) -> dict:
     """The graph node: a partial `GraphState` update.
 
     Runs a second time only when `output_guard` marked the draft ungrounded; that
-    pass gets the guard's reasons as feedback and sets `regenerated`, which caps
-    the loop at one retry.
+    pass gets the failed draft and the guard's reasons, and sets `regenerated`,
+    which caps the loop at one retry. `output_guard` never changes `draft`, so on
+    a retry it still holds the draft that failed.
     """
     retry = state.get("grounded") is False
     feedback = state.get("guard_reasons") if retry else None
+    previous_draft = state.get("draft") if retry else None
     if retry:
-        logger.info("generate: regenerating with %d guard reason(s)", len(feedback or []))
+        logger.info("generate: revising the failed draft with %d guard reason(s)", len(feedback or []))
 
     draft, citations = await generate_core(
-        state["query"], state.get("policy_hits", []), state.get("case_hits", []), feedback=feedback
+        state["query"],
+        state.get("policy_hits", []),
+        state.get("case_hits", []),
+        feedback=feedback,
+        previous_draft=previous_draft,
     )
     update = {"draft": draft, "citations": citations}
     if retry:

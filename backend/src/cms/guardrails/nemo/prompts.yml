@@ -23,9 +23,16 @@ prompts:
       You check a draft written for a support agent against the only evidence it may use:
       numbered policy extracts and past cases.
 
-      Answer "yes" if every factual claim in the draft — coverage, remedies, amounts, periods,
-      procedures, deadlines — is supported by the evidence. Answer "no" if any claim is missing
-      from or contradicts the evidence. Do not use outside knowledge.
+      A material claim states one of:
+      - coverage or eligibility
+      - a remedy
+      - an amount, a period or a deadline
+      - a required step, or the order of required steps
+      - who decides
+
+      Answer "no" only if a material claim is missing from the evidence or contradicts it.
+      Otherwise answer "yes". Ignore wording, paraphrase, the order sentences appear in, and
+      general advice to the agent that states no policy fact. Do not use outside knowledge.
 
       "evidence": {{ evidence }}
 

@@ -102,9 +102,9 @@ class Settings(BaseSettings):
     # A guard, not a shaper: 12 reranked chunks measure at ~2,400 tokens, so this
     # only trips if policy_rerank_top_n is raised or a chunk arrives oversized.
     generation_context_tokens: int = 4000
-    # v3 adds tagged inputs and guardrail feedback; v2 (no feedback) and v1
-    # (policies only) are kept as eval baselines.
-    generate_prompt_version: str = "v3"
+    # v4 revises the failed draft on a retry; v3 (feedback only), v2 (no feedback)
+    # and v1 (policies only) are kept as the record and eval baselines.
+    generate_prompt_version: str = "v4"
     # v2 adds risk flags.
     analyze_query_prompt_version: str = "v2"
     # What we say when retrieval found nothing. Kept here rather than inline in
@@ -165,6 +165,15 @@ class Settings(BaseSettings):
             "greeting or sign-off, and in a neutral tone about the customer."
         ),
     }
+    # Model for NeMo's output rails (fact check, tone). Measured on the 30 eval goldens
+    # with the material-claims prompt: gpt-5.4-nano blocked 2 of 5 invented remedies,
+    # gpt-5.4-mini blocked 5 of 5 with 5/30 drafts caveated. The input rail stays on
+    # `openrouter_model_cheap`.
+    guard_judge_model: str = "openai/gpt-5.4-mini"
+    # When NeMo's fact check blocks, a cheap model names the unsupported claims.
+    fact_check_prompt_version: str = "v1"
+    # Enough to act on; more turns the retry feedback into a second draft.
+    fact_check_max_claims: int = 5
 
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a

@@ -8,23 +8,24 @@ from nemoguardrails import LLMRails, RailsConfig
 from nemoguardrails.rails.llm.options import RailsResult, RailStatus, RailType
 
 from cms.config.settings import get_settings
+from cms.guardrails.fact_check import find_unsupported_claims
 from cms.schemas.guardrails import GuardResult
 
 logger = logging.getLogger(__name__)
 
 PROMPTS_FILE = Path(__file__).parent / "nemo" / "prompts.yml"
+FACTS_RAIL = "self check facts"
 
 
-@lru_cache
-def get_rails() -> LLMRails:
-    """The rails, built once: the cheap model over OpenRouter and three self-check prompts."""
+def _build_rails(model: str, rails: dict) -> LLMRails:
+    """One `LLMRails` over OpenRouter with the shared self-check prompts. NeMo takes one model per instance."""
     settings = get_settings()
     config = {
         "models": [
             {
                 "type": "main",
                 "engine": "openai",
-                "model": settings.openrouter_model_cheap,
+                "model": model,
                 "parameters": {
                     "base_url": settings.openrouter_base_url,
                     "api_key": settings.open_router_api_key,
@@ -32,17 +33,29 @@ def get_rails() -> LLMRails:
                 },
             }
         ],
-        "rails": {
-            "input": {"flows": ["self check input"]},
-            "output": {"flows": ["self check facts", "self check output"]},
-        },
+        "rails": rails,
     }
     try:
         prompts = PROMPTS_FILE.read_text(encoding="utf-8")
         return LLMRails(RailsConfig.from_content(yaml_content=prompts, config=config))
     except Exception:
-        logger.exception("Failed to build the NeMo rails from %s", PROMPTS_FILE)
+        logger.exception("Failed to build the NeMo rails (model=%s) from %s", model, PROMPTS_FILE)
         raise
+
+
+@lru_cache
+def get_input_rails() -> LLMRails:
+    """The input rail on the cheap model: spotting instructions aimed at the assistant is an easy call."""
+    return _build_rails(get_settings().openrouter_model_cheap, {"input": {"flows": ["self check input"]}})
+
+
+@lru_cache
+def get_output_rails() -> LLMRails:
+    """The output rails on the judge model: the cheap one missed invented remedies (see `guard_judge_model`)."""
+    return _build_rails(
+        get_settings().guard_judge_model,
+        {"output": {"flows": [FACTS_RAIL, "self check output"]}},
+    )
 
 
 def _to_guard_result(result: RailsResult, text: str, check: str) -> GuardResult:
@@ -57,7 +70,7 @@ def _to_guard_result(result: RailsResult, text: str, check: str) -> GuardResult:
 async def check_input(query: str) -> GuardResult:
     """Block a complaint that tries to instruct the assistant, or is abuse with no complaint."""
     try:
-        result = await get_rails().check_async(
+        result = await get_input_rails().check_async(
             [{"role": "user", "content": query}], rail_types=[RailType.INPUT]
         )
     except Exception:
@@ -67,7 +80,12 @@ async def check_input(query: str) -> GuardResult:
 
 
 async def check_output(query: str, draft: str, context: str) -> GuardResult:
-    """Fact-check `draft` against `context`, and check it is written to the agent."""
+    """Fact-check `draft` against `context`, and check it is written to the agent.
+
+    A fact-check block is followed by the claim finder, so the reasons name the
+    claims that failed. If it finds none or errors, the draft stays blocked with
+    the generic reason — a disagreement never lets a draft through.
+    """
     messages = [
         # `check_facts` switches the fact-check rail on; without it that rail is skipped.
         {"role": "context", "content": {"relevant_chunks": context, "check_facts": True}},
@@ -75,8 +93,24 @@ async def check_output(query: str, draft: str, context: str) -> GuardResult:
         {"role": "assistant", "content": draft},
     ]
     try:
-        result = await get_rails().check_async(messages, rail_types=[RailType.OUTPUT])
+        result = await get_output_rails().check_async(messages, rail_types=[RailType.OUTPUT])
     except Exception:
         logger.exception("nemo output check failed")
         raise
-    return _to_guard_result(result, draft, "nemo output check")
+
+    guard_result = _to_guard_result(result, draft, "nemo output check")
+    if result.status != RailStatus.BLOCKED or result.rail != FACTS_RAIL:
+        return guard_result
+
+    try:
+        claims = await find_unsupported_claims(draft, context)
+    except Exception:
+        logger.exception("nemo output check: claim finder failed, keeping the generic reason")
+        return guard_result
+
+    if not claims:
+        logger.warning("nemo output check: fact check blocked but the claim finder found no claim")
+        return guard_result
+
+    reasons = [f'"{claim.claim}": {claim.reason}' for claim in claims]
+    return GuardResult(passed=False, text=draft, reasons=reasons)

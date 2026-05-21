@@ -18,3 +18,19 @@ class GuardResult(_Base):
     passed: bool
     text: str
     reasons: list[str] = Field(default_factory=list)
+
+
+class UnsupportedClaim(_Base):
+    """One material claim in a draft that the evidence does not support."""
+
+    claim: str = Field(description="The claim, quoted briefly from the draft.")
+    reason: str = Field(description="Why the evidence does not support it, citing [n] where relevant.")
+
+
+class FactCheckFindings(_Base):
+    """The structured output of the claim finder that runs when NeMo's fact check blocks."""
+
+    unsupported_claims: list[UnsupportedClaim] = Field(
+        default_factory=list,
+        description="Every unsupported or contradicted material claim; empty when there are none.",
+    )
