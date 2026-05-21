@@ -1,0 +1,7 @@
+<evidence>
+{context}
+</evidence>
+
+<draft>
+{draft}
+</draft>
