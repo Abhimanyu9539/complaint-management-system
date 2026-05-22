@@ -93,8 +93,8 @@ async def test_node_returns_the_draft_and_citations(monkeypatch) -> None:
     seen: list[tuple] = []
     citation = Citation(marker=1, doc_id="d", chunk_id="c", title="t", section="s")
 
-    async def fake_core(query, policy_hits, case_hits, feedback=None):
-        seen.append((query, policy_hits, case_hits, feedback))
+    async def fake_core(query, policy_hits, case_hits, feedback=None, previous_draft=None):
+        seen.append((query, policy_hits, case_hits, feedback, previous_draft))
         return "the draft [1]", [citation]
 
     monkeypatch.setattr(generate_module, "generate_core", fake_core)
@@ -106,7 +106,7 @@ async def test_node_returns_the_draft_and_citations(monkeypatch) -> None:
     )
 
     assert update == {"draft": "the draft [1]", "citations": [citation]}
-    assert seen == [("complaint", hits, case_hits, None)]
+    assert seen == [("complaint", hits, case_hits, None, None)]
 
 
 async def test_no_hits_does_not_crash(monkeypatch) -> None:
@@ -127,8 +127,9 @@ async def test_first_draft_has_no_feedback_block(monkeypatch) -> None:
 
     await generate_module.generate_core("q", [_hit("c1")], [])
 
-    # The system prompt names the section; only a retry renders one.
+    # The system prompt names the sections; only a retry renders them.
     assert "<feedback>\n-" not in prompts[0]
+    assert "<previous_draft>\n" not in prompts[0]
     assert "{feedback}" not in prompts[0]
 
 
@@ -140,18 +141,43 @@ async def test_guard_reasons_reach_the_prompt_as_feedback(monkeypatch) -> None:
     assert "<feedback>\n- Cite every claim.\n</feedback>" in prompts[0]
 
 
-async def test_node_retries_with_feedback_after_an_ungrounded_draft(monkeypatch) -> None:
-    seen: list[list[str] | None] = []
+async def test_retry_prompt_carries_the_failed_draft_before_the_feedback(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Covered [1].")
 
-    async def fake_core(query, policy_hits, case_hits, feedback=None):
-        seen.append(feedback)
+    await generate_module.generate_core(
+        "q",
+        [_hit("c1")],
+        [],
+        feedback=['"a 60-day window": no extract mentions 60 days.'],
+        previous_draft="Covered within a 60-day window [1].",
+    )
+
+    block = (
+        "<previous_draft>\nCovered within a 60-day window [1].\n</previous_draft>\n\n"
+        '<feedback>\n- "a 60-day window": no extract mentions 60 days.\n</feedback>'
+    )
+    assert block in prompts[0]
+
+
+async def test_node_revises_the_failed_draft_after_an_ungrounded_verdict(monkeypatch) -> None:
+    seen: list[tuple] = []
+
+    async def fake_core(query, policy_hits, case_hits, feedback=None, previous_draft=None):
+        seen.append((feedback, previous_draft))
         return "better draft [1]", []
 
     monkeypatch.setattr(generate_module, "generate_core", fake_core)
 
     update = await generate_module.generate(
-        {"query": "q", "grounded": False, "guard_reasons": ["uncited claim"]}
+        {
+            "query": "q",
+            "draft": "failed draft [1]",
+            "grounded": False,
+            "guard_reasons": ["uncited claim"],
+        }
     )
 
-    assert seen == [["uncited claim"]]
+    # `output_guard` leaves `draft` alone, so it is still the draft that failed.
+    assert seen == [(["uncited claim"], "failed draft [1]")]
+    assert update["draft"] == "better draft [1]"
     assert update["regenerated"] is True
