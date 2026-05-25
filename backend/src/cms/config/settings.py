@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     # A guard, not a shaper: 12 reranked chunks measure at ~2,400 tokens, so this
     # only trips if policy_rerank_top_n is raised or a chunk arrives oversized.
     generation_context_tokens: int = 4000
+    # How much of a chunk a citation carries for the UI's sources panel. Long
+    # enough to judge the match, short enough not to resend the context block.
+    citation_snippet_chars: int = 300
     # v4 revises the failed draft on a retry; v3 (feedback only), v2 (no feedback)
     # and v1 (policies only) are kept as the record and eval baselines.
     generate_prompt_version: str = "v4"
@@ -119,9 +122,9 @@ class Settings(BaseSettings):
     # --- Guardrails ---
     # Kill switches. The Guardrails AI checks run locally; the NeMo rails are LLM calls.
     guardrails_enabled: bool = True
-    nemo_rails_enabled: bool = True
+    nemo_rails_enabled: bool = False
     # Same bounds as `CreateTicketRequest.body`.
-    query_min_chars: int = 10
+    query_min_chars: int = 1
     query_max_chars: int = 8000
     # Presidio entities masked out of the complaint and flagged in drafts (privacy §2).
     pii_entities: list[str] = [
@@ -174,6 +177,13 @@ class Settings(BaseSettings):
     fact_check_prompt_version: str = "v1"
     # Enough to act on; more turns the retry feedback into a second draft.
     fact_check_max_claims: int = 5
+
+    # --- Chat ---
+    # Sent as the SSE `error` event when the graph raises mid-stream. The real
+    # cause is logged; the browser gets something a user can act on.
+    chat_error_message: str = (
+        "The assistant could not finish this answer. Please try again."
+    )
 
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a

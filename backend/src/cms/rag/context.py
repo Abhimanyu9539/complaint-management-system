@@ -17,6 +17,7 @@ from cms.schemas.generation import Citation, DocType
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONTEXT_TOKENS = get_settings().generation_context_tokens
+SNIPPET_CHARS = get_settings().citation_snippet_chars
 
 BLOCK_SEPARATOR = "\n\n"
 
@@ -33,6 +34,17 @@ def _section(document: Document) -> str:
     useful one-line label we have for it.
     """
     return document.page_content.split("\n", 1)[0].strip()
+
+
+def _snippet(document: Document) -> str:
+    """The chunk body under the breadcrumb, trimmed for the UI's sources panel.
+
+    Drops the first line because `_section` already shows it; a chunk that is a
+    single line has no body to drop, so it falls back to the whole thing.
+    """
+    parts = document.page_content.split("\n", 1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+    return (body or document.page_content.strip())[:SNIPPET_CHARS]
 
 
 def build_context(
@@ -89,6 +101,7 @@ def build_context(
                 chunk_id=str(metadata.get("chunk_id", "")),
                 title=str(metadata.get("title", "Untitled")),
                 section=_section(document),
+                snippet=_snippet(document),
                 doc_type=doc_type,
             )
         )

@@ -19,6 +19,11 @@ class Citation(_Base):
     `citations[2]` describe the same chunk. `section` is the heading breadcrumb
     the chunker prepends to every policy chunk — it is what makes a citation
     readable ("Warranty > 2.3 Charging Circuit") instead of a bare id.
+
+    `snippet` is the chunk body the UI shows under a citation, so a reader can
+    check the claim against the source without opening the document. It carries
+    no weight inside the graph — nothing prompts or validates on it — which is
+    why it defaults to empty rather than being required.
     """
 
     marker: int
@@ -26,4 +31,5 @@ class Citation(_Base):
     chunk_id: str
     title: str
     section: str
+    snippet: str = ""
     doc_type: DocType = "policy"
