@@ -34,6 +34,8 @@ function toChatEvent(record: RawRecord): ChatEvent | null {
         return { type: 'token', text: record.data };
       }
     }
+    case 'reset':
+      return { type: 'reset' };
     case 'citations': {
       try {
         const citations = JSON.parse(record.data);

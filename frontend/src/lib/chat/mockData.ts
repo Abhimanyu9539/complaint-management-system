@@ -174,9 +174,5 @@ Rather than guess, here's what I'd suggest:
 
 I'd rather tell you I don't have a grounded answer than make one up.`;
 
-export const SUGGESTED_PROMPTS: string[] = [
-  'My ProBlend 300 is showing ERR-22 and won\'t start — is this covered?',
-  'Customer says their toaster started smoking, what do I do?',
-  'A customer wants a refund because their order arrived 9 days late.',
-  'How do I decide which department a complaint should be routed to?',
-];
+// SUGGESTED_PROMPTS moved to ./prompts — the empty screen shows them on the
+// live path too, and it should not have to import the mock corpus to do it.

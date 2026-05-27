@@ -47,6 +47,13 @@ export function useChatStream(transport: ChatTransport) {
                 text += event.text;
                 setStreamingText(text);
                 break;
+              case 'reset':
+                // The server replaced the draft it was streaming — see ChatEvent.
+                text = '';
+                finalCitations = [];
+                setStreamingText('');
+                setCitations([]);
+                break;
               case 'citations':
                 finalCitations = event.citations;
                 setCitations(finalCitations);

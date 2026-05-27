@@ -1,5 +1,5 @@
 import { Sparkles } from 'lucide-react';
-import { SUGGESTED_PROMPTS } from '@/lib/chat/mockData';
+import { SUGGESTED_PROMPTS } from '@/lib/chat/prompts';
 import { useChat } from '@/state/ChatProvider';
 
 export function EmptyState() {

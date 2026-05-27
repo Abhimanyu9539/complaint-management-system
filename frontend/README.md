@@ -51,7 +51,7 @@ search and selected ticket (`?ticket=`) follow the same convention.
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | `http://localhost:8000` | Backend origin. The admin panel always calls it — there is no mock fallback. |
-| `VITE_CHAT_USE_MOCK` | `true` | Chat's own switch, independent of the admin panel. `false` requires a running chat backend, which does not exist yet (`/api/v1/chat`, `/sessions` are 404 today). |
+| `VITE_CHAT_USE_MOCK` | `true` | Chat's own switch, independent of the admin panel. `false` streams real answers from `POST /api/v1/chat`, which needs the backend running **and** its corpus seeded. `true` keeps the canned mock, which is what UI work wants. |
 | `VITE_ADMIN_POLL_MS` | `20000` | Admin base poll cadence. Panels multiply it — health 3×, Qdrant reads 2×. Values under 2000 are ignored. |
 
 ### The admin panel is real-only
@@ -66,8 +66,40 @@ instead of a "Simulated" badge over fabricated rows.
 See `backend/docs/admin-api.md` for which endpoints exist and what those two
 must eventually return.
 
-Chat is the one area that still has a mock, because it has no backend at all —
-see `VITE_CHAT_USE_MOCK` above.
+Chat keeps its mock as a convenience, not a necessity — `POST /api/v1/chat`
+now runs the real RAG graph. See `VITE_CHAT_USE_MOCK` above, and the chat
+section below for what the live transport does and does not do.
+
+### `/chat` streams from the RAG graph
+
+`POST /api/v1/chat` returns server-sent events, parsed by `lib/chat/sse.ts`:
+
+| Event | Payload | Meaning |
+| --- | --- | --- |
+| `token` | a JSON string | Append it to the answer. |
+| `reset` | `{}` | **Discard everything so far** and start the answer over. |
+| `citations` | `Citation[]` | The sources the final answer cited. |
+| `done` | `{message_id, session_id, langsmith_run_id}` | End of turn. |
+| `error` | `{message}` | Terminates the stream. |
+
+`reset` exists because the backend's output guard can reject a draft and
+regenerate it, and because three of its nodes write an answer with no LLM call
+at all (a blocked complaint, a no-match, and the caveat prefixed onto a draft
+that failed twice). Without it those would arrive appended to the draft they
+replace. `useChatStream` handles it by clearing the accumulated text and
+citations — nothing else needs to know.
+
+**Sessions are not persisted.** `chat_sessions` and `messages` are both RLS'd
+to `auth.uid()` and there is no auth yet, so the backend mints a `session_id`
+per conversation and stores nothing against it. `listSessions` and
+`getMessages` return empty rather than calling a route that does not exist;
+`ChatProvider` keeps the conversation in memory, so the sidebar works for the
+life of the page and resets on reload.
+
+**"Open document" does not resolve yet** — `getDocument` returns null and the
+sources panel says so, while still showing the title, doc type and the snippet
+the answer was grounded in. It needs a route that mints a Supabase Storage
+signed URL.
 
 ### `/ticket` is never mocked
 

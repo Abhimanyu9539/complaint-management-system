@@ -38,26 +38,18 @@ function createRealTransport(baseUrl: string): ChatTransport {
   return {
     streamChat,
 
+    // Sessions are not persisted server-side: `chat_sessions` and `messages`
+    // are both RLS'd to `auth.uid()` and there is no auth yet, so the backend
+    // mints a session id per conversation and stores nothing against it. Both
+    // of these return empty rather than calling a route that does not exist.
+    // ChatProvider handles that — it keeps the current conversation in memory,
+    // so the sidebar works for the life of the page and resets on reload.
     async listSessions(): Promise<SessionMeta[]> {
-      try {
-        const res = await fetch(`${baseUrl}/sessions`);
-        if (!res.ok) return [];
-        return await res.json();
-      } catch {
-        console.warn('listSessions: backend not available yet');
-        return [];
-      }
+      return [];
     },
 
-    async getMessages(sessionId: string): Promise<ChatMessage[]> {
-      try {
-        const res = await fetch(`${baseUrl}/sessions/${sessionId}/messages`);
-        if (!res.ok) return [];
-        return await res.json();
-      } catch {
-        console.warn('getMessages: backend not available yet');
-        return [];
-      }
+    async getMessages(): Promise<ChatMessage[]> {
+      return [];
     },
 
     async getDocument(docId: string, docType: 'case' | 'policy'): Promise<SourceDocument | null> {

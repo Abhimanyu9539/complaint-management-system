@@ -37,6 +37,12 @@ export interface SourceDocument {
 
 export type ChatEvent =
   | { type: 'token'; text: string }
+  /**
+   * Discard everything streamed so far and start the answer over. The backend
+   * sends this when its output guard rejected a draft and regenerated it —
+   * without it the two drafts would arrive back to back and read as one.
+   */
+  | { type: 'reset' }
   | { type: 'citations'; citations: Citation[] }
   | { type: 'done'; message_id: string; langsmith_run_id: string | null; session_id?: string }
   | { type: 'error'; message: string };
