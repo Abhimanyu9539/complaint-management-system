@@ -1,0 +1,28 @@
+# Local development dependencies. Mongo backs the LangGraph checkpointer that
+# stores chat transcripts (see backend/src/cms/db/mongo.py).
+#
+# No authentication: this binds to localhost for development only. A deployment
+# points MONGO_URL at a managed instance with credentials instead.
+
+services:
+  mongo:
+    image: mongo:8
+    container_name: cms-mongo
+    restart: unless-stopped
+    # Host port 27018, not 27017: a native mongod installed on the machine may
+    # already hold 127.0.0.1:27017, and Windows prefers that more specific bind
+    # over Docker's 0.0.0.0 one. Both would start, and the app would silently
+    # talk to the native install instead of this container.
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  mongo_data:
