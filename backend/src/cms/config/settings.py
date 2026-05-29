@@ -185,6 +185,29 @@ class Settings(BaseSettings):
         "The assistant could not finish this answer. Please try again."
     )
 
+    # --- Mongo / chat memory ---
+    # Mongo backs the LangGraph checkpointer, which is where a conversation is
+    # stored. Supabase cannot hold it yet: `chat_sessions` and `messages` are
+    # RLS'd to `auth.uid()` and this API holds the service-role key. Mongo has
+    # no RLS, so the transcript lands here until auth arrives.
+    # 27018 is the compose file's host port — see the note there about a native
+    # mongod shadowing 27017.
+    mongo_url: str = "mongodb://localhost:27018"
+    mongo_db_name: str = "cms_chat"
+    # Caps how long a down Mongo stalls a request. pymongo's own default is 30s,
+    # which is long enough to look like a hang.
+    mongo_timeout_ms: int = 5000
+    # Kill switch: False compiles the graph with no checkpointer, which is the
+    # pre-Mongo behaviour — chat works, nothing is stored.
+    chat_memory_enabled: bool = True
+    # Stands in for the authenticated user until JWT verification lands. It is
+    # recorded in checkpoint metadata, never used to authorise anything.
+    anonymous_user_id: str = "anonymous"
+    # `input_guard` only masks PII on the *allowed* path; a blocked message is
+    # still raw, and blocked is exactly when it holds a credential. Stored in its
+    # place so a replayed transcript never shows what was rejected.
+    blocked_message_placeholder: str = "[message withheld]"
+
     # --- Ingest recipes ---
     # The short-circuit key covers the source text *and* how we process it, so a
     # strategy change re-ingests instead of silently skipping. Per corpus, so a

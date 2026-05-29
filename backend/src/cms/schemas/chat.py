@@ -1,6 +1,10 @@
-"""Contracts for the chat endpoint: the request in, the `done` event out."""
+"""Contracts for the chat endpoint: the request in, the `done` event and replayed messages out."""
+
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from cms.schemas.generation import Citation
 
 
 class _Base(BaseModel):
@@ -34,3 +38,18 @@ class ChatDone(_Base):
     message_id: str
     session_id: str
     langsmith_run_id: str | None = None
+
+
+class ChatMessageOut(_Base):
+    """One stored message, replayed from the checkpointer when a session reopens.
+
+    `created_at` is a string because it is read back out of the message's
+    `additional_kwargs`, where it was written as an ISO timestamp — there is no
+    column to coerce it.
+    """
+
+    id: str
+    role: Literal["user", "assistant"]
+    content: str
+    citations: list[Citation] = Field(default_factory=list)
+    created_at: str
