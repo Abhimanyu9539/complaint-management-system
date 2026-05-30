@@ -33,6 +33,26 @@ interface ChatContextValue {
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
+// Which conversation to reopen on load. The transcript itself comes from the
+// server; this is only the pointer to it.
+const ACTIVE_KEY = 'cms.activeSession.v1';
+
+function loadActiveSessionId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveActiveSessionId(sessionId: string): void {
+  try {
+    localStorage.setItem(ACTIVE_KEY, sessionId);
+  } catch {
+    // storage unavailable — the conversation just won't reopen on reload
+  }
+}
+
 function titleFromMessage(message: string): string {
   const trimmed = message.trim().replace(/\s+/g, ' ');
   return trimmed.length > 40 ? `${trimmed.slice(0, 40)}…` : trimmed || 'New conversation';
@@ -47,13 +67,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    transport.listSessions().then((sessions) => {
-      if (!cancelled) dispatch({ type: 'SESSIONS_LOADED', sessions });
+    // Restore the sidebar, then reopen whichever conversation was last active.
+    // Without the second half a reload lists the sessions over a blank pane, and
+    // the next message would post `sessionId: null` and start a new thread —
+    // which is the reset-on-reload bug wearing a sidebar.
+    transport.listSessions().then(async (sessions) => {
+      if (cancelled) return;
+      dispatch({ type: 'SESSIONS_LOADED', sessions });
+
+      const lastActiveId = loadActiveSessionId();
+      if (!lastActiveId || !sessions.some((session) => session.id === lastActiveId)) return;
+
+      const messages = await transport.getMessages(lastActiveId);
+      if (cancelled) return;
+      messagesCache.current.set(lastActiveId, messages);
+      dispatch({ type: 'SESSION_SELECTED', sessionId: lastActiveId, messages });
     });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Remember the open conversation so the effect above can reopen it.
+  useEffect(() => {
+    if (state.activeSessionId) saveActiveSessionId(state.activeSessionId);
+  }, [state.activeSessionId]);
 
   const selectSession = useCallback(
     (id: string) => {
@@ -95,9 +133,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       chatStream.start(
         { sessionId: sessionIdAtSend, message: trimmed },
         {
-          onDone: async ({ text: answerText, citations, sessionId, interrupted }) => {
+          onDone: async ({ text: answerText, citations, sessionId, messageId, interrupted }) => {
             const assistantMessage: ChatMessage = {
-              id: newId(),
+              // The id the server stored this answer under, so the in-memory
+              // copy and a later replay agree.
+              id: messageId ?? newId(),
               role: 'assistant',
               content: answerText,
               citations,
