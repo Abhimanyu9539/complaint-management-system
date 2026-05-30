@@ -9,14 +9,21 @@ CITATION = Citation(
 )
 
 
-def _install_graph(monkeypatch, events: list) -> None:
-    """Stub the compiled graph with a scripted `astream`, so no model is called."""
+def _install_graph(monkeypatch, events: list) -> list[dict]:
+    """Stub the compiled graph with a scripted `astream`, so no model is called.
 
-    async def astream(_input, stream_mode=None):
+    Returns the list the stub records its call kwargs into, so a test can assert
+    on the thread config the service built.
+    """
+    calls: list[dict] = []
+
+    async def astream(graph_input, config=None, stream_mode=None, durability=None):
+        calls.append({"input": graph_input, "config": config, "durability": durability})
         for event in events:
             yield event
 
     monkeypatch.setattr(chat_service, "get_graph", lambda: SimpleNamespace(astream=astream))
+    return calls
 
 
 def _token(text: str, node: str = "generate", step: int = 1) -> tuple:
@@ -27,10 +34,12 @@ def _token(text: str, node: str = "generate", step: int = 1) -> tuple:
     )
 
 
-async def _collect(message: str = "my blender shows ERR-22", session_id=None) -> list[dict]:
+async def _collect(
+    message: str = "my blender shows ERR-22", session_id=None, user_id: str = "anonymous"
+) -> list[dict]:
     return [
         {"event": event["event"], "data": json.loads(event["data"])}
-        async for event in chat_service.stream_turn(message, session_id)
+        async for event in chat_service.stream_turn(message, session_id, user_id)
     ]
 
 
@@ -134,3 +143,49 @@ async def test_graph_failure_becomes_an_error_event(monkeypatch) -> None:
     # The response has already started, so the failure has to travel in the stream.
     assert [event["event"] for event in events] == ["error"]
     assert events[0]["data"]["message"]
+
+
+async def test_the_graph_is_run_on_a_thread_keyed_by_session(monkeypatch) -> None:
+    """`thread_id` is the session id as-is; `user_id` rides alongside it so
+    LangGraph copies it into the checkpoint metadata."""
+    calls = _install_graph(monkeypatch, [("values", {"draft": "d", "citations": []})])
+    await _collect(session_id="session-7", user_id="user-9")
+
+    configurable = calls[0]["config"]["configurable"]
+    assert configurable["thread_id"] == "session-7"
+    assert configurable["user_id"] == "user-9"
+    # One checkpoint per turn rather than one per super-step.
+    assert calls[0]["durability"] == "exit"
+
+
+async def test_the_turn_starts_from_a_cleared_state(monkeypatch) -> None:
+    """Without this the checkpointer hands the next turn the previous verdict."""
+    calls = _install_graph(monkeypatch, [("values", {"draft": "d", "citations": []})])
+    await _collect()
+
+    graph_input = calls[0]["input"]
+    assert graph_input["grounded"] is None
+    assert graph_input["regenerated"] is False
+    assert graph_input["draft"] == ""
+
+
+async def test_durability_is_off_when_chat_memory_is_disabled(monkeypatch) -> None:
+    """LangGraph warns if durability is set with no checkpointer behind it."""
+    calls = _install_graph(monkeypatch, [("values", {"draft": "d", "citations": []})])
+    settings = chat_service.get_settings()
+    monkeypatch.setattr(
+        chat_service, "get_settings", lambda: settings.model_copy(update={"chat_memory_enabled": False})
+    )
+    await _collect()
+
+    assert calls[0]["durability"] is None
+
+
+async def test_done_carries_the_id_the_turn_was_stored_under(monkeypatch) -> None:
+    _install_graph(
+        monkeypatch,
+        [("values", {"draft": "d", "citations": [], "message_id": "stored-id"})],
+    )
+    events = await _collect()
+
+    assert events[-1]["data"]["message_id"] == "stored-id"
