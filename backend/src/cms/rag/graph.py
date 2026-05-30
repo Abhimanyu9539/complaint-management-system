@@ -1,28 +1,34 @@
 """Graph assembly: guard the input, analyze the query, fork on intent, then guard the draft.
 
-    START -> input_guard -+-> blocked_input -> END
+    START -> input_guard -+-> blocked_input -> record_turn -> END
                           +-> analyze_query -+-> retrieve_policies -+
                                              |                      +-> join_retrieval -+
                                              +-> retrieve_cases ----+                   |
-                                             +-> smalltalk -> END                       |
+                                             +-> smalltalk -> record_turn -> END        |
                                                                                         |
-        +-- no_match -> END  <----------------------------------------------------------+
-        +-- generate -> output_guard -+-> END                  (grounded)
+        +-- no_match -> record_turn -> END  <-------------------------------------------+
+        +-- generate -> output_guard -+-> record_turn -> END   (grounded)
                ^                      +-> generate             (ungrounded, first time)
                |______________________|
-                                      +-> add_caveat -> END    (ungrounded after the retry)
+                                      +-> add_caveat -> record_turn -> END  (still ungrounded)
 
 A complaint runs retrieve_policies and retrieve_cases in parallel; join_retrieval
 waits for both, so generate gets policy and case hits.
+
+Every path ends at record_turn, which writes the turn into `chat_history` for the
+checkpointer. Exactly one of the four terminals runs per turn, so each gets its
+own edge — a list edge would build an AND-join and wait forever.
 """
 
 import logging
 from functools import lru_cache
 from pathlib import Path
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from cms.db.mongo import get_checkpointer
 from cms.rag.nodes.add_caveat import add_caveat
 from cms.rag.nodes.analyze_query import analyze_query
 from cms.rag.nodes.blocked_input import blocked_input
@@ -31,6 +37,7 @@ from cms.rag.nodes.input_guard import input_guard
 from cms.rag.nodes.join_retrieval import join_retrieval
 from cms.rag.nodes.no_match import no_match
 from cms.rag.nodes.output_guard import output_guard
+from cms.rag.nodes.record_turn import record_turn
 from cms.rag.nodes.retrieve_cases import retrieve_cases
 from cms.rag.nodes.retrieve_policies import retrieve_policies
 from cms.rag.nodes.smalltalk import smalltalk
@@ -50,6 +57,7 @@ NO_MATCH = "no_match"
 GENERATE = "generate"
 OUTPUT_GUARD = "output_guard"
 ADD_CAVEAT = "add_caveat"
+RECORD_TURN = "record_turn"
 
 COMPLAINT_QUERY = "complaint_query"
 OTHER_QUERY = "other_query"
@@ -85,8 +93,12 @@ def route_after_output_guard(state: GraphState) -> str:
     return "still_ungrounded"
 
 
-def build_graph() -> CompiledStateGraph:
-    """Wire the nodes and conditional branches using explicit path mappings."""
+def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
+    """Wire the nodes and conditional branches using explicit path mappings.
+
+    `checkpointer` defaults to None so a caller that only wants the shape — the
+    CLI renderer, the flow tests — gets a graph that touches no database.
+    """
     builder = StateGraph(GraphState)
 
     # Register nodes
@@ -101,6 +113,7 @@ def build_graph() -> CompiledStateGraph:
     builder.add_node(GENERATE, generate)
     builder.add_node(OUTPUT_GUARD, output_guard)
     builder.add_node(ADD_CAVEAT, add_caveat)
+    builder.add_node(RECORD_TURN, record_turn)
 
     # Linear and conditional edges
     builder.add_edge(START, INPUT_GUARD)
@@ -143,31 +156,35 @@ def build_graph() -> CompiledStateGraph:
         OUTPUT_GUARD,
         route_after_output_guard,
         {
-            "grounded": END,
+            "grounded": RECORD_TURN,
             "retry": GENERATE,
             "still_ungrounded": ADD_CAVEAT,
         },
     )
 
-    builder.add_edge(ADD_CAVEAT, END)
-    builder.add_edge(BLOCKED_INPUT, END)
-    builder.add_edge(NO_MATCH, END)
-    builder.add_edge(SMALLTALK, END)
-    
-    return builder.compile()
+    # One edge each, never `add_edge([...], RECORD_TURN)`: a list start is an
+    # AND-join, and only one of these four ever runs.
+    builder.add_edge(ADD_CAVEAT, RECORD_TURN)
+    builder.add_edge(BLOCKED_INPUT, RECORD_TURN)
+    builder.add_edge(NO_MATCH, RECORD_TURN)
+    builder.add_edge(SMALLTALK, RECORD_TURN)
+    builder.add_edge(RECORD_TURN, END)
+
+    return builder.compile(checkpointer=checkpointer)
 
 
 @lru_cache
 def get_graph() -> CompiledStateGraph:
-    """The process-wide compiled graph."""
-    return build_graph()
+    """The process-wide compiled graph, checkpointing to Mongo unless disabled."""
+    return build_graph(get_checkpointer())
 
 
 def render_graph() -> None:
     """Print the graph as Mermaid and save it as a PNG next to this module."""
     target = Path(__file__).with_suffix(".png")
     try:
-        graph = get_graph().get_graph()
+        # `build_graph`, not `get_graph`: drawing the shape needs no database.
+        graph = build_graph().get_graph()
         graph.draw_mermaid_png(output_file_path=str(target))
         logger.info("Graph png saved to %s", target)
     except Exception:
