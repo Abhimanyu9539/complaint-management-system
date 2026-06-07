@@ -20,7 +20,7 @@ from sse_starlette.sse import EventSourceResponse
 from cms.api.deps import get_user_id
 from cms.db.mongo import get_checkpointer
 from cms.schemas.chat import ChatMessageOut, ChatRequest
-from cms.services.chat_service import session_messages, stream_turn
+from cms.services.chat_service import delete_session, session_messages, stream_turn
 
 logger = logging.getLogger(__name__)
 
@@ -59,3 +59,11 @@ async def session_transcript(
         logger.warning("chat: transcript requested for %s but chat memory is off", session_id)
         return []
     return await session_messages(session_id, user_id)
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_chat_session(session_id: str = Path(max_length=64)) -> None:
+    """Delete a stored conversation. Idempotent: an unknown session is still a 204."""
+    if get_checkpointer() is None:
+        logger.warning("chat: delete requested for %s but chat memory is off", session_id)
+        return
+    await delete_session(session_id)

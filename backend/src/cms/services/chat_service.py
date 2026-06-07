@@ -23,6 +23,7 @@ from typing import Any
 from langchain_core.messages import BaseMessage
 
 from cms.config.settings import get_settings
+from cms.db.mongo import get_checkpointer
 from cms.rag.graph import GENERATE, SMALLTALK, get_graph
 from cms.rag.state import new_turn
 from cms.schemas.chat import ChatDone, ChatMessageOut
@@ -173,3 +174,13 @@ async def session_messages(session_id: str, user_id: str) -> list[ChatMessageOut
     messages = [out for out in (_to_message(message) for message in history) if out]
     logger.info("chat: replayed %d message(s) for session %s", len(messages), session_id)
     return messages
+
+
+async def delete_session(session_id: str) -> None:
+    """Remove every stored checkpoint of one session. An unknown id is a no-op."""
+    try:
+        await get_checkpointer().adelete_thread(session_id)
+    except Exception:
+        logger.exception("chat: could not delete session %s", session_id)
+        raise
+    logger.info("chat: deleted session %s", session_id)
