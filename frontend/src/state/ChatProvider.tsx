@@ -29,6 +29,7 @@ interface ChatContextValue {
   stopStreaming(): void;
   selectSession(id: string): void;
   newChat(): void;
+  deleteSession(id: string): void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -116,6 +117,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'NEW_CHAT' });
   }, [chatStream]);
 
+  const deleteSession = useCallback(
+    async (id: string) => {
+      if (id === activeSessionIdRef.current && chatStream.status === 'streaming') chatStream.stop();
+      if (!(await transport.deleteSession(id))) return;
+      messagesCache.current.delete(id);
+      dispatch({ type: 'SESSION_DELETED', sessionId: id });
+    },
+    [chatStream],
+  );
+
   const sendMessage = useCallback(
     (text: string) => {
       const trimmed = text.trim();
@@ -192,8 +203,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       stopStreaming: chatStream.stop,
       selectSession,
       newChat,
+      deleteSession,
     }),
-    [state, chatStream, sendMessage, selectSession, newChat],
+    [state, chatStream, sendMessage, selectSession, newChat, deleteSession],
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

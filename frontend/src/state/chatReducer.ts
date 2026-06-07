@@ -12,6 +12,7 @@ export type ChatAction =
   | { type: 'SESSIONS_LOADED'; sessions: SessionMeta[] }
   | { type: 'SESSION_SELECTED'; sessionId: string; messages: ChatMessage[] }
   | { type: 'NEW_CHAT' }
+  | { type: 'SESSION_DELETED'; sessionId: string }
   | { type: 'USER_MESSAGE_SENT'; message: ChatMessage }
   | {
       type: 'TURN_COMMITTED';
@@ -44,6 +45,13 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case 'NEW_CHAT':
       return { ...state, activeSessionId: null, messages: [], pendingUserMessage: null };
+
+    case 'SESSION_DELETED': {
+      const sessions = state.sessions.filter((s) => s.id !== action.sessionId);
+      // Deleting the open conversation leaves an empty pane, as if "New chat" was pressed.
+      if (action.sessionId !== state.activeSessionId) return { ...state, sessions };
+      return { ...state, sessions, activeSessionId: null, messages: [], pendingUserMessage: null };
+    }
 
     case 'USER_MESSAGE_SENT':
       return { ...state, pendingUserMessage: action.message };

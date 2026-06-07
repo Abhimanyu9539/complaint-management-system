@@ -100,6 +100,26 @@ function createRealTransport(baseUrl: string): ChatTransport {
       }
     },
 
+    async deleteSession(sessionId: string): Promise<boolean> {
+      try {
+        const res = await fetch(
+          `${baseUrl}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}`,
+          { method: 'DELETE' },
+        );
+        if (!res.ok) {
+          console.warn(`deleteSession(${sessionId}): backend responded ${res.status}`);
+          return false;
+        }
+      } catch (err) {
+        console.warn(`deleteSession(${sessionId}): request failed`, err);
+        return false;
+      }
+      // Only drop it from the index once the server has, so a failed delete
+      // never hides a transcript that is still stored.
+      saveSessions(loadSessions().filter((s) => s.id !== sessionId));
+      return true;
+    },
+
     async getDocument(docId: string, docType: 'case' | 'policy'): Promise<SourceDocument | null> {
       // Cases and policies are separate tables (and separate Qdrant
       // collections) now, so there is no single `/documents/{id}` route —

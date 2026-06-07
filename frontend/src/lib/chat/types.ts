@@ -72,6 +72,8 @@ export interface ChatTransport {
   streamChat(req: StreamChatRequest, signal: AbortSignal): AsyncGenerator<ChatEvent>;
   listSessions(): Promise<SessionMeta[]>;
   getMessages(sessionId: string): Promise<ChatMessage[]>;
+  /** Removes a conversation. Resolves false when it could not be deleted, so the UI keeps it. */
+  deleteSession(sessionId: string): Promise<boolean>;
   /**
    * Resolves the source document behind a citation so the user can open the
    * original policy or case. `docType` picks which corpus to look in — cases

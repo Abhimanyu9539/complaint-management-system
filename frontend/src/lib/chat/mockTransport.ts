@@ -124,6 +124,14 @@ async function getMessages(sessionId: string): Promise<ChatMessage[]> {
   return store.messages[sessionId] ?? [];
 }
 
+async function deleteSession(sessionId: string): Promise<boolean> {
+  const store = loadStore();
+  store.sessions = store.sessions.filter((s) => s.id !== sessionId);
+  delete store.messages[sessionId];
+  saveStore(store);
+  return true;
+}
+
 async function getDocument(docId: string, _docType: 'case' | 'policy'): Promise<SourceDocument | null> {
   // Mock ids are still globally unique via the `pol-`/`case-` prefix
   // convention, so a flat lookup is enough here — docType is unused, kept
@@ -157,5 +165,5 @@ async function saveTurn(sessionId: string, user: ChatMessage, assistant: ChatMes
 }
 
 export function createMockTransport(): ChatTransport {
-  return { streamChat, listSessions, getMessages, getDocument, saveTurn };
+  return { streamChat, listSessions, getMessages, deleteSession, getDocument, saveTurn };
 }

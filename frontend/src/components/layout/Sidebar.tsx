@@ -12,7 +12,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onCloseMobile, onCollapse }: SidebarProps) {
-  const { sessions, activeSessionId, sessionsLoaded, selectSession, newChat, isMock } = useChat();
+  const { sessions, activeSessionId, sessionsLoaded, selectSession, newChat, deleteSession, isMock } =
+    useChat();
 
   return (
     <div className="flex h-full flex-col bg-surface">
@@ -64,6 +65,7 @@ export function Sidebar({ onCloseMobile, onCollapse }: SidebarProps) {
                   selectSession(session.id);
                   onCloseMobile?.();
                 }}
+                onDelete={() => deleteSession(session.id)}
               />
             ))}
           </div>
