@@ -70,3 +70,42 @@ async def test_no_risk_flags_needs_no_lead_review(monkeypatch) -> None:
 
     assert update["risk_flags"] == []
     assert update["requires_lead_review"] is False
+
+
+def test_build_policy_queries_prepends_the_original_for_a_lookup() -> None:
+    analysis = QueryAnalysis(
+        intent="knowledge_lookup",
+        lookup_target="policies",
+        policy_queries=["return window eligibility for electronics"],
+    )
+
+    assert analyze_query_module.build_policy_queries("what's the return window?", analysis) == [
+        "what's the return window?",
+        "return window eligibility for electronics",
+    ]
+
+
+async def test_lookup_target_is_written_to_state(monkeypatch) -> None:
+    async def fake_core(query: str) -> QueryAnalysis:
+        return QueryAnalysis(intent="knowledge_lookup", lookup_target="cases")
+
+    monkeypatch.setattr(analyze_query_module, "analyze_query_core", fake_core)
+
+    update = await analyze_query_module.analyze_query({"query": "cases where a refund was issued"})
+
+    assert update["intent"] == "knowledge_lookup"
+    assert update["lookup_target"] == "cases"
+
+
+async def test_risk_flags_on_a_lookup_are_dropped(monkeypatch) -> None:
+    """A lookup has no reply for a lead to review, whatever the model flagged."""
+
+    async def fake_core(query: str) -> QueryAnalysis:
+        return QueryAnalysis(intent="knowledge_lookup", risk_flags=["legal", "safety"])
+
+    monkeypatch.setattr(analyze_query_module, "analyze_query_core", fake_core)
+
+    update = await analyze_query_module.analyze_query({"query": "policy on injury claims?"})
+
+    assert update["risk_flags"] == []
+    assert update["requires_lead_review"] is False
