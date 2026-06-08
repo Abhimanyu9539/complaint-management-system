@@ -108,8 +108,10 @@ class Settings(BaseSettings):
     # v4 revises the failed draft on a retry; v3 (feedback only), v2 (no feedback)
     # and v1 (policies only) are kept as the record and eval baselines.
     generate_prompt_version: str = "v4"
-    # v2 adds risk flags.
-    analyze_query_prompt_version: str = "v2"
+    # v3 adds the knowledge_lookup intent and its lookup_target; v2 adds risk flags.
+    analyze_query_prompt_version: str = "v3"
+    # v2 mentions policy and case lookups in the "what can you do?" answer.
+    smalltalk_prompt_version: str = "v2"
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (
@@ -117,6 +119,20 @@ class Settings(BaseSettings):
         "nothing to base a response on. Please check the policy library directly "
         "or escalate to the responsible department — I'd rather say this than "
         "guess at an entitlement the customer may not have."
+    )
+
+    # --- Knowledge lookup (the agent's own policy and case questions) ---
+    lookup_prompt_version: str = "v1"
+    # Cases fetched by hybrid search before the rerank. The seed corpus is 20 cases.
+    lookup_case_pool_k: int = 20
+    # Cases kept after the rerank — enough to list, few enough to read.
+    lookup_case_top_n: int = 8
+    # No case match when the best reranked case scores below this. Same kind of
+    # gate as `policy_relevance_threshold`; unmeasured, tune it with cms-graph probes.
+    lookup_case_relevance_threshold: float = 0.50
+    lookup_no_match_message: str = (
+        "I couldn't find a policy or past case that answers this. Try rewording the "
+        "question, or check the policy library directly."
     )
 
     # --- Guardrails ---
@@ -146,8 +162,10 @@ class Settings(BaseSettings):
         "assistant, abusive content, or text the checks could not accept. Please "
         "read it and handle it manually."
     )
+    # Worded for both branches: a complaint draft gets here after one retry, a
+    # lookup answer on its first failure.
     grounding_caveat: str = (
-        "CAUTION — this draft failed the guardrail checks twice. Verify every claim "
+        "CAUTION — this answer failed the guardrail checks. Verify every claim "
         "against the cited sources before using any of it:"
     )
     # Recorded when a guard itself errors; the flow fails closed.

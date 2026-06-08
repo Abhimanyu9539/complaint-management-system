@@ -17,7 +17,7 @@ async def smalltalk_core(query: str) -> str:
     """A short conversational reply to `query`.
     """
     settings = get_settings()
-    prompt = load_prompt("smalltalk")
+    prompt = load_prompt("smalltalk", settings.smalltalk_prompt_version)
     chain = prompt | get_chat_model(settings.openrouter_model_cheap)
 
     try:
