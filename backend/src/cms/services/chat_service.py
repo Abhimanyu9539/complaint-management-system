@@ -24,7 +24,7 @@ from langchain_core.messages import BaseMessage
 
 from cms.config.settings import get_settings
 from cms.db.mongo import get_checkpointer
-from cms.rag.graph import GENERATE, SMALLTALK, get_graph
+from cms.rag.graph import GENERATE, LOOKUP_GENERATE, SMALLTALK, get_graph
 from cms.rag.state import new_turn
 from cms.schemas.chat import ChatDone, ChatMessageOut
 from cms.schemas.generation import Citation
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 # The only nodes that write the answer with an LLM. Tokens from the cheap models
 # in analyze_query and the guards run through the same stream and are not shown.
-ANSWER_NODES = frozenset({GENERATE, SMALLTALK})
+ANSWER_NODES = frozenset({GENERATE, LOOKUP_GENERATE, SMALLTALK})
 
 
 def _event(name: str, data: Any) -> dict[str, str]:
