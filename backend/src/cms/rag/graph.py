@@ -1,23 +1,36 @@
 """Graph assembly: guard the input, analyze the query, fork on intent, then guard the draft.
 
     START -> input_guard -+-> blocked_input -> record_turn -> END
-                          +-> analyze_query -+-> retrieve_policies -+
-                                             |                      +-> join_retrieval -+
-                                             +-> retrieve_cases ----+                   |
-                                             +-> smalltalk -> record_turn -> END        |
-                                                                                        |
-        +-- no_match -> record_turn -> END  <-------------------------------------------+
-        +-- generate -> output_guard -+-> record_turn -> END   (grounded)
-               ^                      +-> generate             (ungrounded, first time)
-               |______________________|
-                                      +-> add_caveat -> record_turn -> END  (still ungrounded)
+                          +-> analyze_query -+-> complaint lane
+                                             +-> lookup lane
+                                             +-> smalltalk -> record_turn -> END
+
+    Complaint lane:
+        retrieve_policies -+
+                           +-> join_retrieval -+-> no_match -> record_turn -> END
+        retrieve_cases ----+                   +-> generate -> output_guard -+-> record_turn -> END     (grounded)
+                                                      ^                      +-> generate               (ungrounded, first time)
+                                                      |______________________|
+                                                                             +-> add_caveat -> record_turn -> END  (still ungrounded)
+
+    Lookup lane:
+        lookup_retrieve_policies -+
+                                  +-> lookup_join_retrieval -+-> lookup_no_match -> record_turn -> END       (nothing relevant)
+        lookup_retrieve_cases ----+                          +-> lookup_generate -> lookup_guard -+-> record_turn -> END  (grounded)
+                                                                                                  +-> lookup_caveat -> record_turn -> END
 
 A complaint runs retrieve_policies and retrieve_cases in parallel; join_retrieval
-waits for both, so generate gets policy and case hits.
+waits for both, so generate gets policy and case hits. A knowledge lookup is the
+agent's own policy or case question, and its lane has the same shape: both
+retrievals always run (the one `lookup_target` excludes returns empty), and
+lookup_join_retrieval decides whether anything was found. Its guard does not
+demand a policy citation, and it has no retry.
 
-Every path ends at record_turn, which writes the turn into `chat_history` for the
-checkpointer. Exactly one of the four terminals runs per turn, so each gets its
-own edge — a list edge would build an AND-join and wait forever.
+The two lanes share no node: each has its own retrieval, no-match and caveat, so
+either can change without touching the other. Every path ends at record_turn,
+which writes the turn into `chat_history` for the checkpointer. Exactly one
+terminal runs per turn, so each gets its own edge — a list edge would build an
+AND-join and wait forever.
 """
 
 import logging
@@ -35,6 +48,13 @@ from cms.rag.nodes.blocked_input import blocked_input
 from cms.rag.nodes.generate import generate
 from cms.rag.nodes.input_guard import input_guard
 from cms.rag.nodes.join_retrieval import join_retrieval
+from cms.rag.nodes.lookup_caveat import lookup_caveat
+from cms.rag.nodes.lookup_generate import lookup_generate
+from cms.rag.nodes.lookup_guard import lookup_guard
+from cms.rag.nodes.lookup_join_retrieval import lookup_join_retrieval
+from cms.rag.nodes.lookup_no_match import lookup_no_match
+from cms.rag.nodes.lookup_retrieve_cases import lookup_retrieve_cases
+from cms.rag.nodes.lookup_retrieve_policies import lookup_retrieve_policies
 from cms.rag.nodes.no_match import no_match
 from cms.rag.nodes.output_guard import output_guard
 from cms.rag.nodes.record_turn import record_turn
@@ -58,8 +78,16 @@ GENERATE = "generate"
 OUTPUT_GUARD = "output_guard"
 ADD_CAVEAT = "add_caveat"
 RECORD_TURN = "record_turn"
+LOOKUP_RETRIEVE_POLICIES = "lookup_retrieve_policies"
+LOOKUP_RETRIEVE_CASES = "lookup_retrieve_cases"
+LOOKUP_JOIN_RETRIEVAL = "lookup_join_retrieval"
+LOOKUP_NO_MATCH = "lookup_no_match"
+LOOKUP_GENERATE = "lookup_generate"
+LOOKUP_GUARD = "lookup_guard"
+LOOKUP_CAVEAT = "lookup_caveat"
 
 COMPLAINT_QUERY = "complaint_query"
+KNOWLEDGE_LOOKUP = "knowledge_lookup"
 OTHER_QUERY = "other_query"
 
 
@@ -69,9 +97,12 @@ def route_after_input_guard(state: GraphState) -> str:
 
 
 def route_by_intent(state: GraphState) -> list[str] | str:
-    """Determine the branch(es) after `analyze_query`: a complaint searches policies and cases in parallel."""
-    if state.get("intent") == "complaint_query":
+    """Determine the branch(es) after `analyze_query`: a complaint or a lookup searches policies and cases in parallel."""
+    intent = state.get("intent")
+    if intent == COMPLAINT_QUERY:
         return ["policy_search", "case_search"]
+    if intent == KNOWLEDGE_LOOKUP:
+        return ["lookup_policy_search", "lookup_case_search"]
     return "other_query"
 
 
@@ -91,6 +122,16 @@ def route_after_output_guard(state: GraphState) -> str:
     if not state.get("regenerated"):
         return "retry"
     return "still_ungrounded"
+
+
+def route_after_lookup_retrieval(state: GraphState) -> str:
+    """Determine the branch after `lookup_join_retrieval`: nothing relevant in either corpus, or an answer."""
+    return "no_match_found" if state.get("no_match") else "match_found"
+
+
+def route_after_lookup_guard(state: GraphState) -> str:
+    """Determine the branch after `lookup_guard`: pass, or caveat. No retry on this branch."""
+    return "grounded" if state.get("grounded") is not False else "ungrounded"
 
 
 def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
@@ -114,6 +155,13 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
     builder.add_node(OUTPUT_GUARD, output_guard)
     builder.add_node(ADD_CAVEAT, add_caveat)
     builder.add_node(RECORD_TURN, record_turn)
+    builder.add_node(LOOKUP_RETRIEVE_POLICIES, lookup_retrieve_policies)
+    builder.add_node(LOOKUP_RETRIEVE_CASES, lookup_retrieve_cases)
+    builder.add_node(LOOKUP_JOIN_RETRIEVAL, lookup_join_retrieval)
+    builder.add_node(LOOKUP_NO_MATCH, lookup_no_match)
+    builder.add_node(LOOKUP_GENERATE, lookup_generate)
+    builder.add_node(LOOKUP_GUARD, lookup_guard)
+    builder.add_node(LOOKUP_CAVEAT, lookup_caveat)
 
     # Linear and conditional edges
     builder.add_edge(START, INPUT_GUARD)
@@ -134,6 +182,8 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
         {
             "policy_search": RETRIEVE_POLICIES,
             "case_search": RETRIEVE_CASES,
+            "lookup_policy_search": LOOKUP_RETRIEVE_POLICIES,
+            "lookup_case_search": LOOKUP_RETRIEVE_CASES,
             "other_query": SMALLTALK,
         }
     )
@@ -162,12 +212,37 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
         },
     )
 
+    # Lookup lane: same shape as the complaint lane, with its own nodes throughout.
+    builder.add_edge([LOOKUP_RETRIEVE_POLICIES, LOOKUP_RETRIEVE_CASES], LOOKUP_JOIN_RETRIEVAL)
+
+    builder.add_conditional_edges(
+        LOOKUP_JOIN_RETRIEVAL,
+        route_after_lookup_retrieval,
+        {
+            "match_found": LOOKUP_GENERATE,
+            "no_match_found": LOOKUP_NO_MATCH,
+        },
+    )
+
+    builder.add_edge(LOOKUP_GENERATE, LOOKUP_GUARD)
+
+    builder.add_conditional_edges(
+        LOOKUP_GUARD,
+        route_after_lookup_guard,
+        {
+            "grounded": RECORD_TURN,
+            "ungrounded": LOOKUP_CAVEAT,
+        },
+    )
+
     # One edge each, never `add_edge([...], RECORD_TURN)`: a list start is an
-    # AND-join, and only one of these four ever runs.
+    # AND-join, and only one of these ever runs.
     builder.add_edge(ADD_CAVEAT, RECORD_TURN)
     builder.add_edge(BLOCKED_INPUT, RECORD_TURN)
     builder.add_edge(NO_MATCH, RECORD_TURN)
     builder.add_edge(SMALLTALK, RECORD_TURN)
+    builder.add_edge(LOOKUP_NO_MATCH, RECORD_TURN)
+    builder.add_edge(LOOKUP_CAVEAT, RECORD_TURN)
     builder.add_edge(RECORD_TURN, END)
 
     return builder.compile(checkpointer=checkpointer)

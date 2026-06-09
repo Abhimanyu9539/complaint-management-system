@@ -7,7 +7,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 from cms.schemas.generation import Citation
-from cms.schemas.query_analysis import Intent, RiskFlag
+from cms.schemas.query_analysis import Intent, LookupTarget, RiskFlag
 
 
 class _RequiredState(TypedDict):
@@ -29,6 +29,7 @@ class GraphState(_RequiredState, total=False):
 
     # --- query analysis (analyze_query — this slice) ---
     intent: Intent
+    lookup_target: LookupTarget  # read only on the knowledge_lookup branch
     policy_queries: list[str]
     risk_flags: list[RiskFlag]
     requires_lead_review: bool
@@ -78,6 +79,7 @@ def new_turn(query: str, session_id: str, user_id: str) -> GraphState:
         # Defence, and keeps a smalltalk turn from checkpointing the previous
         # complaint's retrieved chunks.
         input_blocked=False,
+        lookup_target="both",
         policy_queries=[],
         risk_flags=[],
         requires_lead_review=False,
