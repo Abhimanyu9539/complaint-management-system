@@ -189,3 +189,19 @@ async def test_done_carries_the_id_the_turn_was_stored_under(monkeypatch) -> Non
     events = await _collect()
 
     assert events[-1]["data"]["message_id"] == "stored-id"
+
+
+async def test_lookup_answers_stream(monkeypatch) -> None:
+    _install_graph(
+        monkeypatch,
+        [
+            _token("- A duplicate charge was refunded ", node="lookup_generate"),
+            _token("[1].", node="lookup_generate"),
+            ("values", {"draft": "- A duplicate charge was refunded [1].", "citations": []}),
+        ],
+    )
+
+    events = await _collect("cases where a refund was issued")
+
+    # Streamed token by token — no reset and no whole-draft resend.
+    assert [event["event"] for event in events] == ["token", "token", "citations", "done"]

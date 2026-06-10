@@ -1,10 +1,16 @@
 """The real guards, end to end. Presidio runs locally, so no network — but it loads spaCy."""
 
-from cms.guardrails.guards import run_input_guard, run_output_guard
+from cms.guardrails.guards import run_input_guard, run_lookup_guard, run_output_guard
 from cms.schemas.generation import Citation
 
 CITATIONS = [Citation(marker=1, doc_id="p", chunk_id="p1", title="Warranty", section="2.3")]
 CONTEXT = "[1] Warranty\nCharging failures within 12 months get a free replacement."
+
+CASE_CITATIONS = [
+    Citation(marker=1, doc_id="c", chunk_id="c1", title="C-1001", section="COMPLAINT:", doc_type="case")
+]
+CASE_CONTEXT = "[1] C-1001\nCOMPLAINT:\nDouble charge.\n\nRESOLUTION:\nDuplicate charge refunded."
+CASE_ONLY_DRAFT = "A duplicate charge was refunded [1]."
 
 
 async def test_input_guard_masks_every_sensitive_value_together() -> None:
@@ -44,3 +50,24 @@ async def test_output_guard_reports_every_failed_check() -> None:
     assert not result.passed
     # Unknown marker, invented figure, and personal data — one reason each.
     assert len(result.reasons) == 3
+
+
+async def test_a_case_only_complaint_draft_fails_the_output_guard() -> None:
+    result = await run_output_guard(CASE_ONLY_DRAFT, CASE_CITATIONS, CASE_CONTEXT)
+
+    assert not result.passed
+
+
+async def test_a_case_only_lookup_answer_passes_the_lookup_guard() -> None:
+    result = await run_lookup_guard(CASE_ONLY_DRAFT, CASE_CITATIONS, CASE_CONTEXT)
+
+    assert result.passed
+    assert result.reasons == []
+
+
+async def test_lookup_guard_still_checks_grounding() -> None:
+    result = await run_lookup_guard("Refunded within 60 days [3].", CASE_CITATIONS, CASE_CONTEXT)
+
+    assert not result.passed
+    # Unknown marker and invented figure.
+    assert len(result.reasons) == 2
