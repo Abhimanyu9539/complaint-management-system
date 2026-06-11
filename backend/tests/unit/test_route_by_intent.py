@@ -1,25 +1,17 @@
-from cms.rag.graph import (
-    route_after_input_guard,
+from cms.rag.graph import route_after_input_guard, route_by_intent
+from cms.rag.subgraphs.complaint import route_after_output_guard, route_after_retrieval
+from cms.rag.subgraphs.lookup import (
     route_after_lookup_guard,
     route_after_lookup_retrieval,
-    route_after_output_guard,
-    route_after_retrieval,
-    route_by_intent,
 )
 
 
-def test_complaint_searches_policies_and_cases() -> None:
-    assert route_by_intent({"query": "q", "intent": "complaint_query"}) == [
-        "policy_search",
-        "case_search",
-    ]
+def test_complaint_goes_to_the_complaint_lane() -> None:
+    assert route_by_intent({"query": "q", "intent": "complaint_query"}) == "complaint"
 
 
-def test_knowledge_lookup_searches_policies_and_cases_in_its_own_lane() -> None:
-    assert route_by_intent({"query": "q", "intent": "knowledge_lookup"}) == [
-        "lookup_policy_search",
-        "lookup_case_search",
-    ]
+def test_knowledge_lookup_goes_to_the_lookup_lane() -> None:
+    assert route_by_intent({"query": "q", "intent": "knowledge_lookup"}) == "lookup"
 
 
 def test_smalltalk_goes_to_smalltalk() -> None:

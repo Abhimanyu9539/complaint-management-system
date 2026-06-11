@@ -1,6 +1,8 @@
 from langchain_core.documents import Document
 
 from cms.rag import graph as graph_module
+from cms.rag.subgraphs import complaint as complaint_module
+from cms.rag.subgraphs import lookup as lookup_module
 
 POLICY_HIT = (Document(page_content="policy clause"), 0.9)
 CASE_HIT = (Document(page_content="past case"), 0.8)
@@ -15,8 +17,10 @@ def _install_nodes(
 ) -> list[str]:
     """Stub the LLM, retrieval and guard nodes, so `build_graph` wires the real edges with no network.
 
-    `join_retrieval` stays real — it is part of the wiring under test. `verdicts`
-    are the output (or lookup) guard's `grounded` results, one per draft.
+    Parent nodes are patched on the graph module, lane nodes on their subgraph's
+    module — `build_graph` builds the lanes, so it picks both up. The joins stay
+    real: they are part of the wiring under test. `verdicts` are the output (or
+    lookup) guard's `grounded` results, one per draft.
     """
     ran: list[str] = []
     verdicts = list(verdicts if verdicts is not None else [True])
@@ -96,18 +100,18 @@ def _install_nodes(
     monkeypatch.setattr(graph_module, "input_guard", input_guard)
     monkeypatch.setattr(graph_module, "blocked_input", blocked_input)
     monkeypatch.setattr(graph_module, "analyze_query", analyze_query)
-    monkeypatch.setattr(graph_module, "retrieve_policies", retrieve_policies)
-    monkeypatch.setattr(graph_module, "retrieve_cases", retrieve_cases)
-    monkeypatch.setattr(graph_module, "generate", generate)
-    monkeypatch.setattr(graph_module, "output_guard", output_guard)
-    monkeypatch.setattr(graph_module, "add_caveat", add_caveat)
-    monkeypatch.setattr(graph_module, "no_match", no_match_node)
-    monkeypatch.setattr(graph_module, "lookup_retrieve_policies", lookup_retrieve_policies)
-    monkeypatch.setattr(graph_module, "lookup_retrieve_cases", lookup_retrieve_cases)
-    monkeypatch.setattr(graph_module, "lookup_generate", lookup_generate)
-    monkeypatch.setattr(graph_module, "lookup_guard", lookup_guard)
-    monkeypatch.setattr(graph_module, "lookup_no_match", lookup_no_match)
-    monkeypatch.setattr(graph_module, "lookup_caveat", lookup_caveat)
+    monkeypatch.setattr(complaint_module, "retrieve_policies", retrieve_policies)
+    monkeypatch.setattr(complaint_module, "retrieve_cases", retrieve_cases)
+    monkeypatch.setattr(complaint_module, "generate", generate)
+    monkeypatch.setattr(complaint_module, "output_guard", output_guard)
+    monkeypatch.setattr(complaint_module, "add_caveat", add_caveat)
+    monkeypatch.setattr(complaint_module, "no_match", no_match_node)
+    monkeypatch.setattr(lookup_module, "lookup_retrieve_policies", lookup_retrieve_policies)
+    monkeypatch.setattr(lookup_module, "lookup_retrieve_cases", lookup_retrieve_cases)
+    monkeypatch.setattr(lookup_module, "lookup_generate", lookup_generate)
+    monkeypatch.setattr(lookup_module, "lookup_guard", lookup_guard)
+    monkeypatch.setattr(lookup_module, "lookup_no_match", lookup_no_match)
+    monkeypatch.setattr(lookup_module, "lookup_caveat", lookup_caveat)
     return ran
 
 
@@ -205,3 +209,11 @@ async def test_ungrounded_lookup_answer_gets_its_own_caveat_without_a_retry(monk
     assert ran[-1] == "lookup_caveat"
     assert not COMPLAINT_NODES & set(ran)
     assert state["draft"] == "CAUTION\nlookup answer"
+
+
+def test_the_drawing_expands_both_lanes() -> None:
+    """`graph.png` shows each lane's nodes, not a collapsed box per lane."""
+    nodes = set(graph_module.build_drawing().nodes)
+
+    assert {"complaint_lane:generate", "complaint_lane:output_guard"} <= nodes
+    assert {"lookup_lane:lookup_generate", "lookup_lane:lookup_guard"} <= nodes
