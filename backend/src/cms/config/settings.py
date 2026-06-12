@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     analyze_query_prompt_version: str = "v3"
     # v2 mentions policy and case lookups in the "what can you do?" answer.
     smalltalk_prompt_version: str = "v2"
+    # Ticket triage: department candidates, suggested severity, category, entities.
+    classify_ticket_prompt_version: str = "v1"
+    # Intake §7: a top department at or above this routes directly; below goes to human review.
+    routing_confidence_floor: float = 0.60
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (
