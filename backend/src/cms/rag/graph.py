@@ -47,6 +47,9 @@ LOOKUP_LANE = "lookup_lane"
 SMALLTALK = "smalltalk"
 RECORD_TURN = "record_turn"
 
+# Root run name in LangSmith; compile() defaults to "LangGraph".
+GRAPH_NAME = "chat_turn"
+
 COMPLAINT_QUERY = "complaint_query"
 KNOWLEDGE_LOOKUP = "knowledge_lookup"
 
@@ -116,7 +119,7 @@ def build_graph(
     builder.add_edge(SMALLTALK, RECORD_TURN)
     builder.add_edge(RECORD_TURN, END)
 
-    return builder.compile(checkpointer=checkpointer)
+    return builder.compile(checkpointer=checkpointer, name=GRAPH_NAME)
 
 
 @lru_cache
