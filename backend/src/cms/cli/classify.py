@@ -17,7 +17,7 @@ import sys
 # client (openai, supabase) is constructed.
 from cms.config.logging_config import setup_logging
 from cms.config.settings import get_settings
-from cms.rag.nodes.classify_ticket import classify_ticket_core
+from cms.rag.nodes.classify_ticket import classify_ticket_core, join_complaint
 
 logger = logging.getLogger("cms.cli.classify")
 
@@ -49,7 +49,7 @@ async def _main() -> int:
     args = parser.parse_args()
 
     try:
-        result = await classify_ticket_core(args.subject, args.body)
+        result = await classify_ticket_core(join_complaint(args.subject, args.body))
     except Exception:
         logger.exception("classify_ticket probe failed")
         return 1

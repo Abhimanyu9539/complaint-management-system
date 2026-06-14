@@ -1,4 +1,4 @@
-"""Ticket triage: rank the departments that could own a complaint, suggest a severity,
+"""Ticket-graph node: rank the departments that could own a complaint, suggest a severity,
 and pull out its category and identifiers. One structured call per ticket.
 """
 
@@ -11,6 +11,7 @@ from cms.config.settings import get_settings
 from cms.db.repositories.departments import list_department_descriptions
 from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
+from cms.rag.ticket_state import TicketState
 from cms.schemas.ticket_classification import (
     DepartmentCandidate,
     DepartmentId,
@@ -58,8 +59,13 @@ def normalize_candidates(candidates: list[DepartmentCandidate]) -> list[Departme
     return [DepartmentCandidate(department=dept, score=score / total) for dept, score in ranked]
 
 
+def join_complaint(subject: str, body: str | None) -> str:
+    """Subject and body as the one text the classifier and the ticket graph read."""
+    return f"{subject}\n\n{body or ''}".strip()
+
+
 @traceable(name="classify_ticket")
-async def classify_ticket_core(subject: str, body: str) -> TicketClassification:
+async def classify_ticket_core(complaint: str) -> TicketClassification:
     """Classify one ticket. Candidates come back normalised, so `confidence` is a share of 1."""
     settings = get_settings()
     prompt = load_prompt("classify_ticket", settings.classify_ticket_prompt_version)
@@ -67,10 +73,11 @@ async def classify_ticket_core(subject: str, body: str) -> TicketClassification:
         TicketClassification
     )
     chain = prompt | model
+    subject = complaint.splitlines()[0] if complaint else ""
 
     try:
         departments = await _departments_text()
-        raw = await chain.ainvoke({"departments": departments, "subject": subject, "body": body})
+        raw = await chain.ainvoke({"departments": departments, "complaint": complaint})
     except Exception:
         logger.exception("classify_ticket failed for subject %r", subject)
         raise
@@ -86,3 +93,8 @@ async def classify_ticket_core(subject: str, body: str) -> TicketClassification:
         subject,
     )
     return classification
+
+
+async def classify_ticket(state: TicketState) -> dict:
+    """The ticket-graph node: classify the (masked) ticket text."""
+    return {"classification": await classify_ticket_core(state["query"])}

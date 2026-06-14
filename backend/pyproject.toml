@@ -45,6 +45,7 @@ cms-create-collections = "cms.cli.create_collections:main"
 cms-reindex = "cms.cli.reindex:main"
 cms-analyze = "cms.cli.analyze:main"
 cms-classify = "cms.cli.classify:main"
+cms-triage = "cms.cli.triage:main"
 cms-retrieve = "cms.cli.retrieve:main"
 cms-graph = "cms.cli.graph:main"
 
