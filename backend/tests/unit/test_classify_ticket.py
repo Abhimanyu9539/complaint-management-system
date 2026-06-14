@@ -83,16 +83,37 @@ async def test_core_returns_normalised_candidates_and_renders_the_prompt(monkeyp
 
     monkeypatch.setattr(classify_module, "_departments_text", fake_departments)
 
-    result = await classify_module.classify_ticket_core(
+    complaint = classify_module.join_complaint(
         "X200 won't power on", "My X200 stopped turning on after two weeks."
     )
+    result = await classify_module.classify_ticket_core(complaint)
 
     assert result.department == "warranty"
     assert result.confidence == pytest.approx(0.8)
     assert [c.department for c in result.candidates] == ["warranty", "tech_support"]
-    assert "X200 won't power on" in model.prompts[0]
-    assert "My X200 stopped turning on after two weeks." in model.prompts[0]
+    assert "X200 won't power on\n\nMy X200 stopped turning on after two weeks." in model.prompts[0]
     assert "- warranty (Warranty): Warranty claims." in model.prompts[0]
+
+
+def test_join_complaint_puts_the_subject_first() -> None:
+    assert classify_module.join_complaint("Charged twice", "Order #6120") == "Charged twice\n\nOrder #6120"
+    assert classify_module.join_complaint("Subject only", None) == "Subject only"
+
+
+async def test_node_classifies_the_state_query(monkeypatch) -> None:
+    seen: list[str] = []
+    canned = _classification([_candidate("billing", 1.0)])
+
+    async def fake_core(complaint: str) -> TicketClassification:
+        seen.append(complaint)
+        return canned
+
+    monkeypatch.setattr(classify_module, "classify_ticket_core", fake_core)
+
+    update = await classify_module.classify_ticket({"ticket_id": "t1", "query": "masked text"})
+
+    assert seen == ["masked text"]
+    assert update == {"classification": canned}
 
 
 def test_schema_rejects_a_department_outside_the_twelve() -> None:
