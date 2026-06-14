@@ -11,6 +11,15 @@ interface ComplaintPaneProps {
   loading: boolean;
 }
 
+// The classifier's entity keys (backend `TicketEntities`), in display order.
+const ENTITY_LABELS: Record<string, string> = {
+  order_no: 'Order',
+  invoice_no: 'Invoice',
+  product: 'Product',
+  amount: 'Amount',
+  error_code: 'Error code',
+};
+
 /**
  * The complaint itself: what the customer said, and where it has got to.
  *
@@ -29,6 +38,9 @@ export function ComplaintPane({ detail, loading }: ComplaintPaneProps) {
   }
 
   const { ticket, events } = detail;
+  const entityChips = Object.entries(ENTITY_LABELS).flatMap(([key, label]) =>
+    ticket.entities[key] ? [[label, ticket.entities[key]] as const] : [],
+  );
 
   return (
     <div className={`flex flex-col gap-5 p-4 ${loading ? 'opacity-60' : ''}`}>
@@ -58,6 +70,18 @@ export function ComplaintPane({ detail, loading }: ComplaintPaneProps) {
           <p className="text-[12px] text-text-faint">
             No body recorded. Tickets created before the web intake landed carry a subject only.
           </p>
+        )}
+        {entityChips.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {entityChips.map(([label, value]) => (
+              <span
+                key={label}
+                className="rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] text-text-muted"
+              >
+                {label} <b className="font-semibold text-text">{value}</b>
+              </span>
+            ))}
+          </div>
         )}
       </section>
 

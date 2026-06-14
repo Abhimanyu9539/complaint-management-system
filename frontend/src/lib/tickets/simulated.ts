@@ -1,19 +1,15 @@
 /**
  * Deterministic fixtures for the workbench's Draft and Evidence panes.
  *
- * The backend has no classifier, no retriever and no drafter yet — `rag/` holds
- * only the query-analysis node and `guardrails/` is an empty package. These panes
- * render a labelled simulation instead of an empty state so the intended shape
- * of the finished product is visible. Three containment rules make that safe:
+ * The ticket graph classifies tickets (the routing in the Evidence pane is real),
+ * but it does not retrieve or draft for them yet. The draft, cited cases and
+ * policy render as a labelled simulation instead of an empty state so the
+ * intended shape of the finished product is visible. Two rules make that safe:
  *
  *   1. Deterministic in `ticket.id` — the queue polls every 20s; a random
  *      draft would reshuffle itself out from under the operator mid-read.
  *   2. Templated from the ticket's own fields — a fixture picked wholesale
  *      would show a vacuum-cleaner reply on a billing complaint.
- *   3. Department names are never invented here — callers resolve the ids
- *      this module returns against the live `/admin/departments` list. The
- *      prototype's own hardcoded department names had already drifted from
- *      the real seed data, which is exactly the failure mode this avoids.
  *
  * When the drafting pipeline lands (lld.md §6.3, `0013_drafts.sql`), the panes
  * that call these keep their markup; only the import changes, from here to a
@@ -47,9 +43,6 @@ export interface SimulatedDraft {
 }
 
 export interface SimulatedEvidence {
-  predictedDeptId: string | null;
-  confidence: number | null;
-  alternativeDeptId: string | null;
   cases: SimulatedCitedCase[];
   policyRef: string;
   policyText: string;
@@ -133,37 +126,14 @@ export function simulatedDraft(ticket: Ticket): SimulatedDraft {
   };
 }
 
-/** Deterministic, ticket-shaped evidence — department ids only; names resolve via the live list. */
-export function simulatedEvidence(
-  ticket: Ticket,
-  departmentIds: readonly string[],
-): SimulatedEvidence {
+/** Deterministic, ticket-shaped cases and policy. Routing is real — it comes off the ticket. */
+export function simulatedEvidence(ticket: Ticket): SimulatedEvidence {
   const seed = hashString(ticket.id);
   const noMatch = seed % 5 === 0;
   const policy = pick(seed, POLICY_POOL);
-  const cases = simulatedCases(seed, noMatch);
-
-  if (departmentIds.length === 0) {
-    return {
-      predictedDeptId: null,
-      confidence: null,
-      alternativeDeptId: null,
-      cases,
-      policyRef: policy.ref,
-      policyText: policy.text,
-      noMatch,
-    };
-  }
-
-  const predicted = pick(seed, departmentIds);
-  const remaining = departmentIds.filter((id) => id !== predicted);
-  const alternative = remaining.length > 0 ? pick(seed + 13, remaining) : null;
 
   return {
-    predictedDeptId: predicted,
-    confidence: 0.55 + (seed % 40) / 100,
-    alternativeDeptId: alternative,
-    cases,
+    cases: simulatedCases(seed, noMatch),
     policyRef: policy.ref,
     policyText: policy.text,
     noMatch,

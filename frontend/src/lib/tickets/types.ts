@@ -41,6 +41,11 @@ export type TicketSource = 'email' | 'web' | 'agent';
  */
 export type ResolutionPath = 'direct' | 'escalated';
 
+export interface DeptCandidate {
+  department: string;
+  score: number;
+}
+
 export interface Ticket {
   id: string;
   /** The customer-facing reference, rendered as `T-1042`. */
@@ -52,9 +57,15 @@ export interface Ticket {
   body: string | null;
   source: TicketSource;
   customerEmail: string | null;
-  /** The classifier's guess. Null until a classifier exists. */
+  /** The classifier's top department. Null until the ticket graph has run. */
   predictedDept: string | null;
   deptConfidence: number | null;
+  /** Every department the classifier considered, best first, scores summing to 1. */
+  deptCandidates: DeptCandidate[];
+  /** The classifier's suggestion; `severity` changes only when a person confirms it. */
+  suggestedSeverity: TicketSeverity | null;
+  /** Identifiers copied from the complaint, keyed `order_no`, `product`, ... */
+  entities: Record<string, string>;
   /** The department actually escalated to. Non-null implies Path B. */
   escalatedDept: string | null;
   category: string | null;
