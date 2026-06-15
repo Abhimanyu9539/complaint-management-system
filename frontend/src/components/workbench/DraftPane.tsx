@@ -42,7 +42,7 @@ export function DraftPane({
         </h3>
         <MockBadge
           variant="banner"
-          reason="Simulated. No classifier, retriever or drafter exists yet — this text is a deterministic fixture, not generated from this ticket by a model."
+          reason="Simulated. Tickets are classified, but no retriever or drafter runs for them yet — this text is a deterministic fixture, not generated from this ticket by a model."
           className="mb-2.5"
         />
         <div className="rounded-lg border border-warn/30 bg-bg-elevated p-3.5 text-[12.5px] leading-relaxed whitespace-pre-wrap text-text">
