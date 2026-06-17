@@ -33,6 +33,8 @@ async def generate_core(
     case_hits: list[tuple[Document, float]],
     feedback: list[str] | None = None,
     previous_draft: str | None = None,
+    prompt_name: str = "generate",
+    prompt_version: str | None = None,
 ) -> tuple[str, list[Citation]]:
     """A grounded draft for `query`, plus the citations it actually used.
 
@@ -49,10 +51,13 @@ async def generate_core(
     `feedback` is the output guard's reasons on a regeneration and `previous_draft`
     the draft they apply to, so the model revises it rather than starting over.
     Prompt versions before v3 have no slot for either and ignore them.
+
+    `prompt_name` lets the ticket graph write to the customer with the same
+    context and citations; `prompt_version` None means `generate_prompt_version`.
     """
     settings = get_settings()
     context, cases, citations = build_generation_context(policy_hits, case_hits)
-    prompt = load_prompt("generate", settings.generate_prompt_version)
+    prompt = load_prompt(prompt_name, prompt_version or settings.generate_prompt_version)
     chain = prompt | get_chat_model(settings.openrouter_model_main)
 
     try:
@@ -65,13 +70,16 @@ async def generate_core(
             }
         )
     except Exception:
-        logger.exception("generate failed for query %r (%d chunk(s))", query, len(citations))
+        logger.exception(
+            "%s failed for query %r (%d chunk(s))", prompt_name, query, len(citations)
+        )
         raise
 
     draft = message.content
     cited = used_citations(draft, citations)
     logger.info(
-        "generate: %d policy + %d case chunk(s) in, %d cited, %d chars out",
+        "%s: %d policy + %d case chunk(s) in, %d cited, %d chars out",
+        prompt_name,
         len(policy_hits),
         len(case_hits),
         len(cited),
