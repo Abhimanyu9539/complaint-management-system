@@ -183,11 +183,57 @@ class TicketEvent(_Base):
     created_at: str
 
 
+class CaseEvidence(_Base):
+    """A past case the drafter was offered. `marker` is its `[n]` in the draft."""
+
+    marker: int
+    case_id: str
+    chunk_id: str
+    title: str
+    snippet: str = ""
+    resolution: str | None = None
+    score: float = Field(description="Hybrid (RRF) score: ranks cases within one ticket, not a similarity.")
+    cited: bool
+
+
+class PolicyEvidence(_Base):
+    """A policy chunk the drafter was offered. `marker` is its `[n]` in the draft."""
+
+    marker: int
+    policy_id: str
+    chunk_id: str
+    title: str
+    section: str = ""
+    snippet: str = ""
+    score: float = Field(description="Reranker score, 0-1.")
+    cited: bool
+
+
+class TicketDraft(_Base):
+    """The latest reply drafted for the customer, with the evidence it was written from."""
+
+    id: str
+    version: int
+    draft_text: str = Field(description="Keeps its [n] markers; they are removed when the reply is sent.")
+    no_match: bool = Field(description="No policy matched, so this is the holding reply.")
+    grounded: bool | None = Field(
+        default=None,
+        description="False: still failed the output guard after one retry. Null: not checked.",
+    )
+    guard_reasons: list[str] = Field(default_factory=list)
+    retrieved_cases: list[CaseEvidence] = Field(default_factory=list)
+    policy_refs: list[PolicyEvidence] = Field(default_factory=list)
+    model: str
+    prompt_version: str
+    created_at: str
+
+
 class TicketDetail(_Base):
-    """A ticket plus its history — one request backs the whole drawer."""
+    """A ticket plus its history and latest draft — one request backs the whole drawer."""
 
     ticket: Ticket
     events: list[TicketEvent]
+    draft: TicketDraft | None = Field(default=None, description="Null until the ticket graph has drafted.")
 
 
 class TicketPage(_Base):
