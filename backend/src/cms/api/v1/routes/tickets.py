@@ -75,8 +75,8 @@ async def create_ticket(
     rather than echoed from the request.
 
     The ticket exists by the time this responds. The ticket graph then runs in
-    the background (`ticket_pipeline.process_ticket`) and fills in the
-    classification; the customer does not wait for it, and a ticket it never
+    the background (`ticket_pipeline.process_ticket`) and adds the
+    classification and a draft reply; the customer does not wait for it, and a ticket it never
     reaches is still a complete ticket at `new`.
     """
     try:

@@ -37,7 +37,7 @@ async def _main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="Run the ticket graph on stored tickets and save the classification."
+        description="Run the ticket graph on stored tickets and save the classification and draft."
     )
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("ticket_id", nargs="?", help="One ticket's id.")

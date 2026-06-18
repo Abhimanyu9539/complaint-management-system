@@ -30,6 +30,7 @@ Files run in filename order, which is FK dependency order.
 | `0018_policy_files_bucket.sql` | — | creates the private `policy-files` Storage bucket seeded policies upload into |
 | `0019_rename_ingest_key.sql` | `cases`, `policies` | `content_hash` → `ingest_key`; the chunk tables keep `content_hash` |
 | `0020_tickets_classification.sql` | `tickets` | adds `suggested_severity` + `dept_candidates` for the ticket graph's classifier |
+| `0021_drafts_guard.sql` | `drafts` | adds `grounded` + `guard_reasons`: the output guard's verdict on a ticket draft |
 
 `0017` breaks the "one file per table" rule in the only way that keeps it
 meaningful: `0004` is the file that *creates* `tickets`, and editing it in place
