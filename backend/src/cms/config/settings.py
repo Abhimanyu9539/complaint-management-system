@@ -117,6 +117,19 @@ class Settings(BaseSettings):
     classify_ticket_prompt_version: str = "v2"
     # Intake §7: a top department at or above this routes directly; below goes to human review.
     routing_confidence_floor: float = 0.60
+    # The ticket graph's reply written to the customer (the chat's `generate` writes to the agent).
+    customer_reply_prompt_version: str = "v1"
+    # The ticket draft when no policy matches. No model call, so no claim to check.
+    holding_reply_message: str = (
+        "Dear customer,\n\n"
+        "Thank you for contacting us. We have received your complaint (reference "
+        "T-{ticket_no}) and a specialist is looking into it. We will come back to you "
+        "with next steps as soon as we can.\n\n"
+        "Kind regards,\nCustomer Care"
+    )
+    # Stored as `drafts.model` / `drafts.prompt_version` for a holding reply; both columns are NOT NULL.
+    holding_reply_model: str = "template"
+    holding_reply_prompt_version: str = "holding_reply"
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (
@@ -189,6 +202,17 @@ class Settings(BaseSettings):
         "self check output": (
             "The draft is not written to the support agent. Write to the agent, with no "
             "greeting or sign-off, and in a neutral tone about the customer."
+        ),
+    }
+    # The same feedback for a ticket's customer reply, whose rails check the opposite audience.
+    customer_rail_feedback: dict[str, str] = {
+        "self check facts": (
+            "A reviewer found claims the extracts do not support. Tell the customer only "
+            "what the extracts say, and cite each claim."
+        ),
+        "self check output": (
+            "The reply is not fit to send to the customer. Write to the customer, never "
+            "mention past cases, other customers or internal scores, and do not blame them."
         ),
     }
     # Model for NeMo's output rails (fact check, tone). Measured on the 30 eval goldens

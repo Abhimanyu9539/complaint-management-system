@@ -19,11 +19,12 @@ downstream of an adapter handles Pydantic models.
 import asyncio
 import logging
 
-from cms.db.repositories import departments, ticket_events, tickets
+from cms.db.repositories import departments, drafts, ticket_events, tickets
 from cms.schemas.tickets import (
     Ticket,
     TicketCreated,
     TicketDetail,
+    TicketDraft,
     TicketEvent,
     TicketPage,
 )
@@ -52,7 +53,7 @@ class UnknownDepartment(Exception):
 # silently permitting nothing.
 #
 # `processing`, `drafted`, `needs_review` and `processing_failed` have no writer
-# yet — they belong to the drafting pipeline, which does not exist. They are
+# yet — they belong to the gate that runs after drafting, which does not exist. They are
 # kept because deleting them would mean re-deriving the machine later from a
 # diagram, and a state machine with holes is worse than one with unused states.
 ALLOWED: dict[str, frozenset[str]] = {
@@ -127,6 +128,32 @@ def _to_event(row: dict) -> TicketEvent:
         actor_id=row.get("actor_id"),
         created_at=row["created_at"],
     )
+
+
+def _to_draft(row: dict) -> TicketDraft:
+    return TicketDraft(
+        id=row["id"],
+        version=row["version"],
+        draft_text=row["draft_text"],
+        no_match=row.get("no_match", False),
+        grounded=row.get("grounded"),
+        guard_reasons=row.get("guard_reasons") or [],
+        retrieved_cases=row.get("retrieved_cases") or [],
+        policy_refs=row.get("policy_refs") or [],
+        model=row["model"],
+        prompt_version=row["prompt_version"],
+        created_at=row["created_at"],
+    )
+
+
+async def _latest_draft(ticket_id: str) -> TicketDraft | None:
+    """The ticket's latest draft, or None. A failed read must not take the ticket down with it."""
+    try:
+        row = await drafts.fetch_latest_draft(ticket_id)
+        return _to_draft(row) if row else None
+    except Exception:
+        logger.exception("Could not read the draft for ticket %s; showing the ticket without it", ticket_id)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -226,19 +253,21 @@ async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
 
 
 async def get_ticket(ticket_id: str) -> TicketDetail:
-    """One ticket and its whole audit trail — the drawer's single request.
+    """One ticket, its whole audit trail and its latest draft — the drawer's single request.
 
-    The two reads are independent, so they go out together. `fetch_ticket` still
+    The three reads are independent, so they go out together. `fetch_ticket` still
     raises `LookupError` for a missing id and `gather` propagates it unchanged,
     so the route's 404 mapping is unaffected.
     """
-    row, events = await asyncio.gather(
+    row, events, draft = await asyncio.gather(
         tickets.fetch_ticket(ticket_id),
         ticket_events.list_events(ticket_id),
+        _latest_draft(ticket_id),
     )
     return TicketDetail(
         ticket=_to_ticket(row),
         events=[_to_event(event) for event in events],
+        draft=draft,
     )
 
 
