@@ -105,3 +105,27 @@ def test_input_and_output_rails_use_their_own_models(monkeypatch) -> None:
         (settings.openrouter_model_cheap, {"input": {"flows": ["self check input"]}}),
         (settings.guard_judge_model, {"output": {"flows": ["self check facts", "self check output"]}}),
     ]
+
+
+async def test_customer_reply_block_uses_the_customer_feedback(monkeypatch) -> None:
+    result = RailsResult(status=RailStatus.BLOCKED, content="", rail="self check output")
+    monkeypatch.setattr(nemo_module, "get_ticket_output_rails", lambda: _FakeRails(result))
+
+    checked = await nemo_module.check_customer_reply("q", DRAFT, CONTEXT)
+
+    assert not checked.passed
+    assert checked.reasons == [get_settings().customer_rail_feedback["self check output"]]
+
+
+def test_ticket_rails_build_from_the_ticket_prompts(monkeypatch) -> None:
+    built: list[tuple] = []
+    monkeypatch.setattr(
+        nemo_module, "_build_rails", lambda model, rails, prompts_file=None: built.append(prompts_file)
+    )
+    nemo_module.get_ticket_output_rails.cache_clear()
+    try:
+        nemo_module.get_ticket_output_rails()
+    finally:
+        nemo_module.get_ticket_output_rails.cache_clear()
+
+    assert built == [nemo_module.TICKET_PROMPTS_FILE]
