@@ -28,7 +28,13 @@ import type {
   TriggerIngestionRequest,
   TriggerIngestionResponse,
 } from './types';
-import type { Ticket, TicketDetail, TicketEvent, TicketQuery } from '@/lib/tickets/types';
+import type {
+  Ticket,
+  TicketDetail,
+  TicketDraft,
+  TicketEvent,
+  TicketQuery,
+} from '@/lib/tickets/types';
 import { AdminRequestError } from './errors';
 
 function isAbort(err: unknown): boolean {
@@ -232,6 +238,42 @@ interface WireTicketEvent {
   created_at: string;
 }
 
+interface WireCaseEvidence {
+  marker: number;
+  case_id: string;
+  chunk_id: string;
+  title: string;
+  snippet: string;
+  resolution: string | null;
+  score: number;
+  cited: boolean;
+}
+
+interface WirePolicyEvidence {
+  marker: number;
+  policy_id: string;
+  chunk_id: string;
+  title: string;
+  section: string;
+  snippet: string;
+  score: number;
+  cited: boolean;
+}
+
+interface WireTicketDraft {
+  id: string;
+  version: number;
+  draft_text: string;
+  no_match: boolean;
+  grounded: boolean | null;
+  guard_reasons: string[];
+  retrieved_cases: WireCaseEvidence[];
+  policy_refs: WirePolicyEvidence[];
+  model: string;
+  prompt_version: string;
+  created_at: string;
+}
+
 function toTicket(wire: WireTicket): Ticket {
   return {
     id: wire.id,
@@ -262,6 +304,40 @@ function toTicketEvent(wire: WireTicketEvent): TicketEvent {
     event: wire.event,
     payload: wire.payload,
     actorId: wire.actor_id,
+    createdAt: wire.created_at,
+  };
+}
+
+function toTicketDraft(wire: WireTicketDraft): TicketDraft {
+  return {
+    id: wire.id,
+    version: wire.version,
+    draftText: wire.draft_text,
+    noMatch: wire.no_match,
+    grounded: wire.grounded,
+    guardReasons: wire.guard_reasons ?? [],
+    retrievedCases: (wire.retrieved_cases ?? []).map((item) => ({
+      marker: item.marker,
+      caseId: item.case_id,
+      chunkId: item.chunk_id,
+      title: item.title,
+      snippet: item.snippet,
+      resolution: item.resolution,
+      score: item.score,
+      cited: item.cited,
+    })),
+    policyRefs: (wire.policy_refs ?? []).map((item) => ({
+      marker: item.marker,
+      policyId: item.policy_id,
+      chunkId: item.chunk_id,
+      title: item.title,
+      section: item.section,
+      snippet: item.snippet,
+      score: item.score,
+      cited: item.cited,
+    })),
+    model: wire.model,
+    promptVersion: wire.prompt_version,
     createdAt: wire.created_at,
   };
 }
@@ -562,14 +638,16 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     ticketId: string,
     signal: AbortSignal,
   ): Promise<AdminResult<TicketDetail>> {
-    const wire = await getJson<{ ticket: WireTicket; events: WireTicketEvent[] }>(
-      `${tickets}/${encodeURIComponent(ticketId)}`,
-      signal,
-    );
+    const wire = await getJson<{
+      ticket: WireTicket;
+      events: WireTicketEvent[];
+      draft?: WireTicketDraft | null;
+    }>(`${tickets}/${encodeURIComponent(ticketId)}`, signal);
 
     return live<TicketDetail>({
       ticket: toTicket(wire.ticket),
       events: wire.events.map(toTicketEvent),
+      draft: wire.draft ? toTicketDraft(wire.draft) : null,
     });
   }
 

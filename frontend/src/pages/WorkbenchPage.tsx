@@ -20,9 +20,9 @@ const QUEUE_LIMIT = 100;
  *
  * Triages one ticket at a time: a queue organised by status on the left
  * (`QueueRail`), and three panes on the right — the complaint and its real
- * progress (`ComplaintPane`), a simulated draft (`DraftPane`), and simulated
- * evidence (`EvidencePane`). Escalate/resolve are real; nothing here can send
- * a message to a customer.
+ * progress (`ComplaintPane`), the drafted reply (`DraftPane`), and the evidence
+ * it cites (`EvidencePane`). Escalate/resolve are real; nothing here can send
+ * a message to a customer yet.
  *
  * Deliberately does not mount `ChatProvider` — same rule as `/ticket`, stated
  * once in `App.tsx`.
@@ -127,6 +127,8 @@ export function WorkbenchPage() {
             {detail && (
               <DraftPane
                 ticket={detail.ticket}
+                draft={detail.draft}
+                onRefresh={() => void openTicket(detail.ticket.id)}
                 departments={departments.data ?? []}
                 onEscalate={escalate}
                 onResolve={resolve}
@@ -139,6 +141,7 @@ export function WorkbenchPage() {
             {detail && (
               <EvidencePane
                 ticket={detail.ticket}
+                draft={detail.draft}
                 departmentLabel={departmentLabel}
               />
             )}

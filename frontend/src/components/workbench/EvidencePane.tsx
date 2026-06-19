@@ -1,11 +1,10 @@
 import { ConfidenceChip, StatusPill } from '@/components/ui/StatusPill';
-import { MockBadge } from '@/components/ui/MockBadge';
 import { severityLabel, severityTone } from '@/lib/status';
-import { simulatedEvidence } from '@/lib/tickets/simulated';
-import type { Ticket } from '@/lib/tickets/types';
+import type { Ticket, TicketDraft } from '@/lib/tickets/types';
 
 interface EvidencePaneProps {
   ticket: Ticket;
+  draft: TicketDraft | null;
   departmentLabel(id: string | null): string;
 }
 
@@ -17,13 +16,14 @@ function percent(score: number): string {
 }
 
 /**
- * Predicted department — real, written by the ticket graph — then cited cases
- * and policy context, which are still simulated (same caveat as `DraftPane`).
- * Department names resolve through `departmentLabel`, backed by the live
- * `/admin/departments` list.
+ * Predicted department, then the past cases and policy the draft cited — all
+ * written by the ticket graph. Only cited evidence is shown: that is what the
+ * draft rests on. Department names resolve through `departmentLabel`, backed by
+ * the live `/admin/departments` list.
  */
-export function EvidencePane({ ticket, departmentLabel }: EvidencePaneProps) {
-  const evidence = simulatedEvidence(ticket);
+export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePaneProps) {
+  const citedCases = draft?.retrievedCases.filter((item) => item.cited) ?? [];
+  const citedPolicies = draft?.policyRefs.filter((ref) => ref.cited) ?? [];
   const runnerUps = ticket.deptCandidates.slice(1);
   const lowConfidence = ticket.deptConfidence !== null && ticket.deptConfidence < ROUTING_FLOOR;
 
@@ -65,36 +65,40 @@ export function EvidencePane({ ticket, departmentLabel }: EvidencePaneProps) {
         )}
       </section>
 
-      <MockBadge
-        variant="banner"
-        reason="Simulated — same caveat as the draft. The cited cases and policy are placeholders until retrieval runs for tickets."
-      />
-
       <section className="rounded-lg border border-border bg-surface p-3">
         <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Cited historical cases
         </h3>
-        {evidence.noMatch ? (
+        {!draft ? (
+          <p className="text-[12px] text-text-faint">Not drafted yet.</p>
+        ) : draft.noMatch ? (
           <p className="rounded-lg bg-warn-soft px-3 py-2 text-[12px] leading-relaxed text-warn">
-            No case above the similarity threshold. The draft is a cautious holding reply, not a
-            resolution.
+            No policy matched this complaint. The draft is a holding reply, not a resolution.
           </p>
+        ) : citedCases.length === 0 ? (
+          <p className="text-[12px] text-text-faint">The draft cites no past case.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {evidence.cases.map((citedCase) => (
-              <details key={citedCase.id} className="rounded-lg border border-border px-2.5 py-2">
+            {citedCases.map((citedCase) => (
+              <details key={citedCase.chunkId} className="rounded-lg border border-border px-2.5 py-2">
                 <summary className="flex cursor-pointer items-center gap-2 text-[12px] text-text">
-                  <span className="font-mono text-text-muted">#{citedCase.id}</span>
-                  <span className="ml-auto rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-text-muted">
-                    {citedCase.similarity.toFixed(2)}
+                  <span className="font-mono text-[11px] text-accent">[{citedCase.marker}]</span>
+                  <span className="min-w-0 truncate">{citedCase.title}</span>
+                  <span
+                    title="Hybrid search score. It ranks cases for this ticket only; it is not a similarity."
+                    className="ml-auto rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-text-muted"
+                  >
+                    {citedCase.score.toFixed(2)}
                   </span>
                 </summary>
                 <p className="mt-1.5 text-[11.5px] leading-relaxed text-text-muted">
                   "{citedCase.snippet}"
                 </p>
-                <p className="mt-1.5 rounded bg-surface-2 px-2 py-1.5 text-[11.5px] leading-relaxed text-text">
-                  <span className="font-medium text-ok">Resolution:</span> {citedCase.resolution}
-                </p>
+                {citedCase.resolution && (
+                  <p className="mt-1.5 rounded bg-surface-2 px-2 py-1.5 text-[11.5px] leading-relaxed text-text">
+                    <span className="font-medium text-ok">Resolution:</span> {citedCase.resolution}
+                  </p>
+                )}
               </details>
             ))}
           </div>
@@ -105,10 +109,29 @@ export function EvidencePane({ ticket, departmentLabel }: EvidencePaneProps) {
         <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Policy context
         </h3>
-        <p className="text-[12px] leading-relaxed text-text-muted">
-          <span className="font-mono text-[11px] text-accent">{evidence.policyRef}</span> —{' '}
-          {evidence.policyText}
-        </p>
+        {citedPolicies.length === 0 ? (
+          <p className="text-[12px] text-text-faint">
+            {draft ? 'The draft cites no policy.' : 'Not drafted yet.'}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {citedPolicies.map((ref) => (
+              <div key={ref.chunkId} className="text-[12px] leading-relaxed text-text-muted">
+                <p className="flex items-center gap-2 text-text">
+                  <span className="font-mono text-[11px] text-accent">[{ref.marker}]</span>
+                  <span className="min-w-0 truncate">{ref.section || ref.title}</span>
+                  <span
+                    title="Reranker score, 0–1."
+                    className="ml-auto rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-text-muted"
+                  >
+                    {ref.score.toFixed(2)}
+                  </span>
+                </p>
+                <p className="mt-1 text-[11.5px]">{ref.snippet}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

@@ -91,9 +91,55 @@ export interface TicketEvent {
   createdAt: string;
 }
 
+/** A past case the drafter was offered. `marker` is its `[n]` in the draft. */
+export interface CaseEvidence {
+  marker: number;
+  caseId: string;
+  chunkId: string;
+  title: string;
+  snippet: string;
+  resolution: string | null;
+  /** Hybrid (RRF) score: ranks cases within one ticket, not a similarity. */
+  score: number;
+  cited: boolean;
+}
+
+/** A policy chunk the drafter was offered. `marker` is its `[n]` in the draft. */
+export interface PolicyEvidence {
+  marker: number;
+  policyId: string;
+  chunkId: string;
+  title: string;
+  section: string;
+  snippet: string;
+  /** Reranker score, 0–1. */
+  score: number;
+  cited: boolean;
+}
+
+/** The latest reply drafted for the customer (`drafts`, kind `customer_reply`). */
+export interface TicketDraft {
+  id: string;
+  version: number;
+  /** Keeps its `[n]` markers; they are removed when the reply is sent. */
+  draftText: string;
+  /** No policy matched, so this is the holding reply. */
+  noMatch: boolean;
+  /** False: still failed the output guard after one retry. Null: not checked. */
+  grounded: boolean | null;
+  guardReasons: string[];
+  retrievedCases: CaseEvidence[];
+  policyRefs: PolicyEvidence[];
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+}
+
 export interface TicketDetail {
   ticket: Ticket;
   events: TicketEvent[];
+  /** Null until the ticket graph has drafted. */
+  draft: TicketDraft | null;
 }
 
 export interface TicketQuery {

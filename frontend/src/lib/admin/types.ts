@@ -21,8 +21,8 @@ import type { Ticket, TicketDetail, TicketQuery } from '@/lib/tickets/types';
  * true?" without the call site special-casing anything.
  *
  * The admin transport is real-only — there is no mock fallback, so every
- * value here is a measurement, never a simulation. (Chat and the workbench
- * keep their own mocks; see `lib/chat/transport.ts` and `lib/tickets/simulated.ts`.)
+ * value here is a measurement, never a simulation. (Chat keeps its own mock;
+ * see `lib/chat/transport.ts`.)
  */
 export interface AdminResult<T> {
   data: T;
