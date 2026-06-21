@@ -4,6 +4,7 @@ Usage (from anywhere, once the project is installed):
 
     cms-triage 3f2c...-ticket-uuid
     cms-triage --unclassified        # backfill every ticket with no predicted_dept
+    cms-triage --new                 # re-run every ticket still at `new` (before the gate existed)
 """
 
 import argparse
@@ -15,7 +16,7 @@ import sys
 # which injects the OS trust store into ssl. That has to happen before any HTTPS
 # client (openai, supabase) is constructed.
 from cms.config.logging_config import setup_logging
-from cms.db.repositories.tickets import list_unclassified_ticket_ids
+from cms.db.repositories.tickets import list_ticket_ids_by_status, list_unclassified_ticket_ids
 from cms.services.ticket_pipeline import process_ticket
 
 logger = logging.getLogger("cms.cli.triage")
@@ -44,10 +45,16 @@ async def _main() -> int:
     target.add_argument(
         "--unclassified", action="store_true", help="Every ticket with no predicted department."
     )
+    target.add_argument("--new", action="store_true", help="Every ticket still at status `new`.")
     args = parser.parse_args()
 
     try:
-        ticket_ids = await list_unclassified_ticket_ids() if args.unclassified else [args.ticket_id]
+        if args.unclassified:
+            ticket_ids = await list_unclassified_ticket_ids()
+        elif args.new:
+            ticket_ids = await list_ticket_ids_by_status("new")
+        else:
+            ticket_ids = [args.ticket_id]
     except Exception:
         logger.exception("Could not list the tickets to triage")
         return 1

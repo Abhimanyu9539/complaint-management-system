@@ -39,14 +39,18 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from cms.schemas.tickets import (
     CreateTicketRequest,
+    DiscardDraftRequest,
     EscalateTicketRequest,
     ResolveTicketRequest,
+    SendReplyRequest,
     Ticket,
     TicketCreated,
     TicketDetail,
     TicketPage,
 )
-from cms.services import ticket_pipeline, ticket_service
+from cms.services import reply_service, ticket_pipeline, ticket_service
+from cms.services.email_sender import EmailSendError
+from cms.services.reply_service import DraftConflict, InvalidReply
 from cms.services.ticket_service import IllegalTransition, UnknownDepartment
 
 logger = logging.getLogger(__name__)
@@ -54,6 +58,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 UNAVAILABLE = "Tickets are unavailable right now. Check the server log."
+
+# The email did not leave, and nothing was recorded, so a retry is safe.
+SEND_FAILED = "The email could not be sent. Nothing was recorded — try again in a moment."
 
 # What a customer sees when the insert fails. Deliberately actionable: a
 # complaint they typed and lost is the worst outcome this endpoint has, so the
@@ -172,3 +179,64 @@ async def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticke
     except Exception:
         logger.exception("Failed to resolve ticket %s", ticket_id)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.post("/{ticket_id}/send", response_model=Ticket)
+async def send_reply(ticket_id: str, payload: SendReplyRequest) -> Ticket:
+    """Email the (possibly edited) draft to the customer and resolve the ticket.
+
+    409 for a stale or already-handled draft, an unedited holding reply, or a
+    ticket that can't be resolved; 502 when the email itself fails.
+    """
+    try:
+        return await reply_service.send_reply(ticket_id, payload.draft_id, payload.final_text)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="No such ticket or draft.") from None
+    except (IllegalTransition, DraftConflict) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except InvalidReply as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except EmailSendError:
+        raise HTTPException(status_code=502, detail=SEND_FAILED) from None
+    except Exception:
+        logger.exception("Failed to send the reply for ticket %s", ticket_id)
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.post("/{ticket_id}/discard", response_model=Ticket)
+async def discard_draft(ticket_id: str, payload: DiscardDraftRequest) -> Ticket:
+    """Reject the latest draft with a reason. The ticket's status does not change."""
+    try:
+        return await reply_service.discard_draft(
+            ticket_id, payload.draft_id, payload.reason, payload.note
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="No such ticket or draft.") from None
+    except DraftConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        logger.exception("Failed to discard the draft for ticket %s", ticket_id)
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.post("/{ticket_id}/regenerate", response_model=Ticket, status_code=202)
+async def regenerate_draft(ticket_id: str, background_tasks: BackgroundTasks) -> Ticket:
+    """Run the ticket graph again in the background; a new draft version follows.
+
+    The ticket moves to `processing` before this responds, so the workbench shows
+    the run as soon as it reloads the ticket.
+    """
+    try:
+        ticket = ticket_service.to_ticket(
+            await ticket_service.start_processing(ticket_id, resume=False)
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="No such ticket.") from None
+    except IllegalTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        logger.exception("Failed to regenerate the draft for ticket %s", ticket_id)
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+    background_tasks.add_task(ticket_pipeline.process_ticket, ticket_id)
+    return ticket
