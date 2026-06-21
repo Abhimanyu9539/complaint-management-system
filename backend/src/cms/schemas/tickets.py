@@ -111,6 +111,27 @@ class ResolveTicketRequest(_Base):
     note: str | None = Field(default=None, max_length=2000)
 
 
+class SendReplyRequest(_Base):
+    """Send the (possibly edited) draft to the customer by email.
+
+    `final_text` may still carry the draft's [n] markers; they are removed before sending.
+    """
+
+    draft_id: str = Field(min_length=1, max_length=64)
+    final_text: str = Field(min_length=1, max_length=8000)
+
+
+DiscardReason = Literal["wrong_case", "wrong_tone", "wrong_policy", "other"]
+
+
+class DiscardDraftRequest(_Base):
+    """Reject a draft. The reason is the training label (`draft_feedback.edit_reason`)."""
+
+    draft_id: str = Field(min_length=1, max_length=64)
+    reason: DiscardReason
+    note: str | None = Field(default=None, max_length=2000)
+
+
 # ---------------------------------------------------------------------------
 # Responses
 # ---------------------------------------------------------------------------
@@ -157,6 +178,10 @@ class Ticket(_Base):
     dept_candidates: list[dict] = Field(
         default_factory=list,
         description="[{department, score}], best first, scores summing to 1. Empty until classified.",
+    )
+    review_reasons: list[str] = Field(
+        default_factory=list,
+        description="Why the gate sent this ticket to `needs_review`, in plain words. Empty otherwise.",
     )
     resolution_path: ResolutionPath | None = Field(
         default=None,
@@ -209,6 +234,15 @@ class PolicyEvidence(_Base):
     cited: bool
 
 
+class DraftFeedback(_Base):
+    """What an agent did with a draft: sent it as-is, sent it edited, or rejected it."""
+
+    action: Literal["accepted", "edited", "rejected"]
+    final_text: str | None = Field(default=None, description="Exactly what was emailed. Null when rejected.")
+    edit_reason: DiscardReason | None = None
+    created_at: str
+
+
 class TicketDraft(_Base):
     """The latest reply drafted for the customer, with the evidence it was written from."""
 
@@ -226,6 +260,9 @@ class TicketDraft(_Base):
     model: str
     prompt_version: str
     created_at: str
+    feedback: DraftFeedback | None = Field(
+        default=None, description="Null until the draft is sent or discarded."
+    )
 
 
 class TicketDetail(_Base):

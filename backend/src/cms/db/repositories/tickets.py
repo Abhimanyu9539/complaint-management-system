@@ -26,7 +26,7 @@ TABLE = "tickets"
 TICKET_COLUMNS = (
     "id,ticket_no,status,severity,subject,body,source,customer_email,"
     "predicted_dept,dept_confidence,escalated_dept,category,resolution_path,"
-    "entities,suggested_severity,dept_candidates,"
+    "entities,suggested_severity,dept_candidates,review_reasons,"
     "created_at,updated_at,resolved_at"
 )
 
@@ -126,6 +126,24 @@ async def list_unclassified_ticket_ids(limit: int = 500) -> list[str]:
         )
     except Exception:
         logger.exception("Failed to list unclassified %s rows", TABLE)
+        raise
+    return [row["id"] for row in response.data or []]
+
+
+async def list_ticket_ids_by_status(status: str, limit: int = 500) -> list[str]:
+    """Ids of tickets at `status`, oldest first — the re-run's input."""
+    try:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select("id")
+            .eq("status", status)
+            .order("created_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to list %s rows at status %s", TABLE, status)
         raise
     return [row["id"] for row in response.data or []]
 

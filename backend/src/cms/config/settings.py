@@ -130,6 +130,23 @@ class Settings(BaseSettings):
     # Stored as `drafts.model` / `drafts.prompt_version` for a holding reply; both columns are NOT NULL.
     holding_reply_model: str = "template"
     holding_reply_prompt_version: str = "holding_reply"
+
+    # --- Email (the reply to the customer) ---
+    # Defaults point at Mailpit from docker-compose: it catches every message and delivers none.
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_starttls: bool = False
+    smtp_timeout_seconds: float = 10.0
+    support_email_from: str = "Customer Care <support@example.com>"
+    support_reply_to: str = "support@example.com"
+    # The [T-n] tag lets incoming replies be matched to their ticket later (step 7).
+    reply_subject_template: str = "Re: {subject} [T-{ticket_no}]"
+    # The API has no login yet, so an open send endpoint could mail anyone. Until
+    # it does, only a local SMTP server (Mailpit) is allowed.
+    email_real_delivery_enabled: bool = False
+    local_smtp_hosts: list[str] = ["localhost", "127.0.0.1", "mailpit"]
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (

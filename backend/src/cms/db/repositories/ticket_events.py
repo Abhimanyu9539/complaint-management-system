@@ -33,6 +33,9 @@ EVENTS: tuple[str, ...] = (
     "reopened",
     "assigned",
     "failed",
+    # Added with the gate and the send action; not in 0016's comment.
+    "gated",
+    "discarded",
 )
 
 

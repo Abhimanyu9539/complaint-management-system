@@ -19,8 +19,9 @@ downstream of an adapter handles Pydantic models.
 import asyncio
 import logging
 
-from cms.db.repositories import departments, drafts, ticket_events, tickets
+from cms.db.repositories import departments, draft_feedback, drafts, ticket_events, tickets
 from cms.schemas.tickets import (
+    DraftFeedback,
     Ticket,
     TicketCreated,
     TicketDetail,
@@ -52,15 +53,15 @@ class UnknownDepartment(Exception):
 # new status added to the CHECK constraint fails loudly here rather than
 # silently permitting nothing.
 #
-# `processing`, `drafted`, `needs_review` and `processing_failed` have no writer
-# yet — they belong to the gate that runs after drafting, which does not exist. They are
-# kept because deleting them would mean re-deriving the machine later from a
-# diagram, and a state machine with holes is worse than one with unused states.
+# `processing` and the three statuses after it are written by the ticket
+# pipeline: `start_processing` on the way in, the gate (`finish_processing`) on
+# the way out. `drafted` and `needs_review` may go back to `processing` so a
+# ticket can be drafted again (Regenerate, `cms-triage`).
 ALLOWED: dict[str, frozenset[str]] = {
     "new": frozenset({"processing", "escalated", "resolved"}),
     "processing": frozenset({"drafted", "needs_review", "processing_failed"}),
-    "drafted": frozenset({"escalated", "resolved"}),
-    "needs_review": frozenset({"escalated", "resolved"}),
+    "drafted": frozenset({"escalated", "resolved", "processing"}),
+    "needs_review": frozenset({"escalated", "resolved", "processing"}),
     "escalated": frozenset({"dept_responded", "resolved"}),
     "dept_responded": frozenset({"escalated", "resolved"}),
     # Reopening: lld.md has resolved → drafted when a customer replies again.
@@ -69,7 +70,7 @@ ALLOWED: dict[str, frozenset[str]] = {
 }
 
 
-def _assert_transition(current: str, target: str) -> None:
+def assert_transition(current: str, target: str) -> None:
     """Raise unless `current → target` is an edge in the machine."""
     if target not in ALLOWED.get(current, frozenset()):
         raise IllegalTransition(current, target)
@@ -96,7 +97,7 @@ def _resolution_path_for(row: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _to_ticket(row: dict) -> Ticket:
+def to_ticket(row: dict) -> Ticket:
     return Ticket(
         id=row["id"],
         ticket_no=row["ticket_no"],
@@ -113,6 +114,7 @@ def _to_ticket(row: dict) -> Ticket:
         entities=row.get("entities") or {},
         suggested_severity=row.get("suggested_severity"),
         dept_candidates=row.get("dept_candidates") or [],
+        review_reasons=row.get("review_reasons") or [],
         resolution_path=row.get("resolution_path"),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -130,7 +132,7 @@ def _to_event(row: dict) -> TicketEvent:
     )
 
 
-def _to_draft(row: dict) -> TicketDraft:
+def _to_draft(row: dict, feedback: dict | None = None) -> TicketDraft:
     return TicketDraft(
         id=row["id"],
         version=row["version"],
@@ -143,6 +145,14 @@ def _to_draft(row: dict) -> TicketDraft:
         model=row["model"],
         prompt_version=row["prompt_version"],
         created_at=row["created_at"],
+        feedback=DraftFeedback(
+            action=feedback["action"],
+            final_text=feedback.get("final_text"),
+            edit_reason=feedback.get("edit_reason"),
+            created_at=feedback["created_at"],
+        )
+        if feedback
+        else None,
     )
 
 
@@ -150,7 +160,9 @@ async def _latest_draft(ticket_id: str) -> TicketDraft | None:
     """The ticket's latest draft, or None. A failed read must not take the ticket down with it."""
     try:
         row = await drafts.fetch_latest_draft(ticket_id)
-        return _to_draft(row) if row else None
+        if not row:
+            return None
+        return _to_draft(row, await draft_feedback.fetch_feedback(row["id"]))
     except Exception:
         logger.exception("Could not read the draft for ticket %s; showing the ticket without it", ticket_id)
         return None
@@ -197,6 +209,34 @@ async def create_ticket(
     )
 
 
+async def start_processing(ticket_id: str, resume: bool = True) -> dict:
+    """Move a ticket to `processing` before the pipeline runs, and return its row.
+
+    With `resume`, a ticket already at `processing` is returned unchanged: the
+    Regenerate route moved it there before queueing the run, and a run that died
+    half-way can be recovered with `cms-triage`. Without it, `processing` is
+    refused, so a second Regenerate click can't start a parallel run. Raises
+    `IllegalTransition` for a ticket a person has already escalated or resolved.
+    """
+    row = await tickets.fetch_ticket(ticket_id)
+    if row["status"] == "processing" and resume:
+        logger.info("Ticket %s is already processing; continuing", ticket_id)
+        return row
+
+    assert_transition(row["status"], "processing")
+    return await tickets.update_ticket(ticket_id, {"status": "processing", "review_reasons": []})
+
+
+async def finish_processing(ticket_id: str, status: str, reasons: list[str]) -> None:
+    """The gate's outcome: `drafted`, `needs_review` or `processing_failed`, with the reasons."""
+    current = await tickets.fetch_ticket(ticket_id)
+    assert_transition(current["status"], status)
+
+    await tickets.update_ticket(ticket_id, {"status": status, "review_reasons": reasons})
+    await ticket_events.append_event(ticket_id, "gated", {"status": status, "reasons": reasons})
+    logger.info("Ticket %s gated to %s: %s", ticket_id, status, reasons)
+
+
 async def escalate_ticket(ticket_id: str, department_id: str, note: str | None = None) -> Ticket:
     """Hand a ticket to a specialist department (Path B).
 
@@ -209,7 +249,7 @@ async def escalate_ticket(ticket_id: str, department_id: str, note: str | None =
         raise UnknownDepartment(f"'{department_id}' is not one of the {len(valid)} departments.")
 
     current = await tickets.fetch_ticket(ticket_id)
-    _assert_transition(current["status"], "escalated")
+    assert_transition(current["status"], "escalated")
 
     row = await tickets.update_ticket(
         ticket_id,
@@ -222,7 +262,7 @@ async def escalate_ticket(ticket_id: str, department_id: str, note: str | None =
     )
 
     logger.info("Ticket %s escalated to %s", ticket_id, department_id)
-    return _to_ticket(row)
+    return to_ticket(row)
 
 
 async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
@@ -233,7 +273,7 @@ async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
     the north-star metric by hand.
     """
     current = await tickets.fetch_ticket(ticket_id)
-    _assert_transition(current["status"], "resolved")
+    assert_transition(current["status"], "resolved")
 
     path = _resolution_path_for(current)
     row = await tickets.mark_resolved(ticket_id, path)
@@ -244,7 +284,7 @@ async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
     )
 
     logger.info("Ticket %s resolved via the %s path", ticket_id, path)
-    return _to_ticket(row)
+    return to_ticket(row)
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +305,7 @@ async def get_ticket(ticket_id: str) -> TicketDetail:
         _latest_draft(ticket_id),
     )
     return TicketDetail(
-        ticket=_to_ticket(row),
+        ticket=to_ticket(row),
         events=[_to_event(event) for event in events],
         draft=draft,
     )
@@ -288,7 +328,7 @@ async def build_ticket_page(
         offset=offset,
     )
     return TicketPage(
-        items=[_to_ticket(row) for row in rows],
+        items=[to_ticket(row) for row in rows],
         total=total,
         limit=limit,
         offset=offset,

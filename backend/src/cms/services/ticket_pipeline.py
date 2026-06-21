@@ -2,9 +2,11 @@
 
 Runs as a background task after a ticket is created, so it never raises: a
 failure is logged and written as a `failed` event, and the ticket stays visible
-at `new` for a person to handle. The classification and the draft are saved
-separately, so one failing never loses the other. It changes no status — the
-gate that moves a drafted ticket on is the next step.
+for a person to handle. The classification and the draft are saved separately,
+so one failing never loses the other.
+
+The ticket moves `processing` → `drafted` | `needs_review` | `processing_failed`;
+`ticket_gate.review_reasons` decides between the first two.
 """
 
 import logging
@@ -20,6 +22,8 @@ from cms.rag.ticket_graph import DRAFT_REPLY, get_ticket_graph
 from cms.rag.ticket_state import TicketState
 from cms.schemas.generation import Citation
 from cms.schemas.ticket_classification import TicketClassification
+from cms.services import ticket_service
+from cms.services.ticket_gate import review_reasons
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +124,11 @@ async def _save_classification(ticket_id: str, result: TicketClassification) -> 
     logger.info("Ticket %s classified: %s (%.2f)", ticket_id, result.department, result.confidence)
 
 
-async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> None:
-    """Add the draft as the ticket's next `customer_reply` version, then the `drafted` event."""
+async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> bool:
+    """Add the draft as the ticket's next `customer_reply` version, then the `drafted` event.
+
+    Returns whether the draft was saved.
+    """
     settings = get_settings()
     no_match = bool(state.get("no_match"))
     model = settings.holding_reply_model if no_match else settings.openrouter_model_main
@@ -155,7 +162,7 @@ async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> None:
     except Exception as exc:
         logger.exception("Ticket %s: saving the draft failed", ticket_id)
         await _fail(ticket_id, "save_draft", {"error": _error_text(exc)})
-        return
+        return False
 
     await ticket_events.append_event(
         ticket_id,
@@ -173,17 +180,34 @@ async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> None:
     logger.info(
         "Ticket %s drafted: version %d, no_match=%s, grounded=%s", ticket_id, version, no_match, grounded
     )
+    return True
+
+
+async def _finish(ticket_id: str, status: str, reasons: list[str]) -> None:
+    """Hand the outcome to the gate's status change. Never raises."""
+    try:
+        await ticket_service.finish_processing(ticket_id, status, reasons)
+    except Exception as exc:
+        logger.exception("Ticket %s: could not move it to %s", ticket_id, status)
+        await _fail(ticket_id, "gate", {"error": _error_text(exc)})
 
 
 async def process_ticket(ticket_id: str) -> None:
-    """Guard, classify and draft one ticket, then save what each part produced."""
+    """Guard, classify and draft one ticket, save what each part produced, then gate it."""
+    try:
+        row = await ticket_service.start_processing(ticket_id)
+    except ticket_service.IllegalTransition as exc:
+        # Escalated or resolved by a person: nothing left to draft for.
+        logger.info("Ticket %s not processed: %s", ticket_id, exc)
+        return
+    except Exception as exc:
+        logger.exception("Ticket %s: could not start processing", ticket_id)
+        await _fail(ticket_id, "fetch", {"error": _error_text(exc)})
+        return
+
     # The root run's id in LangSmith, stored on the draft so feedback can find the trace.
     run_id = uuid4()
-    stage = "fetch"
     try:
-        row = await tickets.fetch_ticket(ticket_id)
-
-        stage = "ticket_graph"
         state = await get_ticket_graph().ainvoke(
             {
                 "ticket_id": ticket_id,
@@ -193,22 +217,39 @@ async def process_ticket(ticket_id: str) -> None:
             config={"run_id": run_id},
         )
     except Exception as exc:
-        logger.exception("Ticket %s: processing failed at stage %s", ticket_id, stage)
-        await _fail(ticket_id, stage, {"error": _error_text(exc)})
+        logger.exception("Ticket %s: the ticket graph failed", ticket_id)
+        await _fail(ticket_id, "ticket_graph", {"error": _error_text(exc)})
+        await _finish(ticket_id, "processing_failed", [])
         return
 
     if state.get("input_blocked"):
-        logger.warning("Ticket %s blocked by the input guard: %s", ticket_id, state.get("guard_reasons"))
-        await _fail(ticket_id, "input_guard", {"reasons": state.get("guard_reasons", [])})
+        reasons = state.get("guard_reasons", [])
+        logger.warning("Ticket %s blocked by the input guard: %s", ticket_id, reasons)
+        await _fail(ticket_id, "input_guard", {"reasons": reasons})
+        await _finish(ticket_id, "needs_review", [f"Blocked by the input guard: {'; '.join(reasons)}"])
         return
 
     errors = state.get("errors", {})
     for failed_stage, error in errors.items():
         await _fail(ticket_id, failed_stage, {"error": error})
 
-    if "classification" in state:
-        await _save_classification(ticket_id, state["classification"])
+    classification = state.get("classification")
+    if classification:
+        await _save_classification(ticket_id, classification)
 
     # If drafting failed on a retry, `draft` holds the attempt that failed its checks; it is not saved.
+    saved = False
     if state.get("draft") and DRAFT_REPLY not in errors:
-        await _save_draft(ticket_id, state, run_id)
+        saved = await _save_draft(ticket_id, state, run_id)
+    if not saved:
+        await _finish(ticket_id, "processing_failed", [])
+        return
+
+    reasons = review_reasons(
+        classification,
+        row.get("severity", "normal"),
+        bool(state.get("no_match")),
+        state.get("grounded"),
+        state.get("risk_flags", []),
+    )
+    await _finish(ticket_id, "needs_review" if reasons else "drafted", reasons)

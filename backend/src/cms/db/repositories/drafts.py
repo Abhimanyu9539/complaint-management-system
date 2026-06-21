@@ -54,3 +54,19 @@ async def fetch_latest_draft(ticket_id: str, kind: str = CUSTOMER_REPLY) -> dict
 
     rows = response.data or []
     return rows[0] if rows else None
+
+
+async def fetch_draft(draft_id: str) -> dict:
+    """One draft by id. Raises `LookupError` when it does not exist."""
+    try:
+        response = await (
+            get_supabase().table(TABLE).select(DRAFT_COLUMNS).eq("id", draft_id).limit(1).execute()
+        )
+    except Exception:
+        logger.exception("Failed to fetch %s row %s", TABLE, draft_id)
+        raise
+
+    rows = response.data or []
+    if not rows:
+        raise LookupError(f"No draft with id {draft_id}")
+    return rows[0]
