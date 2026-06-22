@@ -10,6 +10,7 @@ from cms.schemas.ticket_classification import (
     TicketEntities,
 )
 from cms.services import ticket_pipeline
+from cms.services.ticket_service import IllegalTransition
 
 CLASSIFICATION = TicketClassification(
     candidates=[
@@ -66,20 +67,37 @@ class _FakeGraph:
         return self.result
 
 
-def _install(monkeypatch, graph_result: dict | Exception, latest_draft: dict | None = None, insert_error=None):
-    """Stub the ticket read, the graph and every write. Returns (graph, updates, events, inserted)."""
+def _install(
+    monkeypatch,
+    graph_result: dict | Exception,
+    latest_draft: dict | None = None,
+    insert_error=None,
+    severity: str = "normal",
+    start_error: Exception | None = None,
+):
+    """Stub the status changes, the graph and every write. Returns (graph, updates, events, inserted).
+
+    `finishes` (the gate's outcomes) is attached to the graph as `graph.finishes`.
+    """
     graph = _FakeGraph(graph_result)
+    graph.finishes = []
     updates: list[tuple[str, dict]] = []
     events: list[tuple[str, str, dict]] = []
     inserted: list[dict] = []
 
-    async def fetch_ticket(ticket_id):
+    async def start_processing(ticket_id):
+        if start_error:
+            raise start_error
         return {
             "id": ticket_id,
             "ticket_no": 1042,
+            "severity": severity,
             "subject": "X200 won't charge",
             "body": "Order #4521, dead after 3 months.",
         }
+
+    async def finish_processing(ticket_id, status, reasons):
+        graph.finishes.append((status, reasons))
 
     async def update_ticket(ticket_id, patch):
         updates.append((ticket_id, patch))
@@ -97,7 +115,8 @@ def _install(monkeypatch, graph_result: dict | Exception, latest_draft: dict | N
         inserted.append(row)
         return {"id": "d1", **row}
 
-    monkeypatch.setattr(ticket_pipeline.tickets, "fetch_ticket", fetch_ticket)
+    monkeypatch.setattr(ticket_pipeline.ticket_service, "start_processing", start_processing)
+    monkeypatch.setattr(ticket_pipeline.ticket_service, "finish_processing", finish_processing)
     monkeypatch.setattr(ticket_pipeline.tickets, "update_ticket", update_ticket)
     monkeypatch.setattr(ticket_pipeline.ticket_events, "append_event", append_event)
     monkeypatch.setattr(ticket_pipeline.drafts, "fetch_latest_draft", fetch_latest_draft)
@@ -158,6 +177,26 @@ async def test_classified_and_drafted_ticket_is_saved(monkeypatch) -> None:
     assert _event_names(events) == ["classified", "drafted"]
     assert events[1][2]["draft_id"] == "d1"
     assert events[1][2]["risk_flags"] == ["safety"]
+    # Confidence 0.75 clears the floor, but the safety flag sends it to review.
+    assert graph.finishes == [("needs_review", ["Risk flagged: safety."])]
+
+
+async def test_clean_draft_is_gated_to_drafted(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, {**DRAFTED, "risk_flags": []})
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.finishes == [("drafted", [])]
+
+
+async def test_ticket_that_cannot_be_processed_is_left_alone(monkeypatch) -> None:
+    graph, updates, events, _ = _install(
+        monkeypatch, DRAFTED, start_error=IllegalTransition("resolved", "processing")
+    )
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.inputs == [] and updates == [] and events == [] and graph.finishes == []
 
 
 async def test_a_rerun_saves_the_next_version(monkeypatch) -> None:
@@ -212,6 +251,15 @@ async def test_drafting_failure_keeps_the_classification(monkeypatch) -> None:
     assert _event_names(events) == ["failed", "classified"]
 
 
+async def test_drafting_failure_ends_at_processing_failed(monkeypatch) -> None:
+    failed = {**DRAFTED, "errors": {"draft_reply": "TimeoutError: slow"}}
+    graph, _, _, _ = _install(monkeypatch, failed)
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.finishes == [("processing_failed", [])]
+
+
 async def test_classification_failure_still_saves_the_draft(monkeypatch) -> None:
     result = {**DRAFTED, "errors": {"classify_ticket": "ValueError: bad json"}}
     del result["classification"]
@@ -245,6 +293,14 @@ async def test_blocked_ticket_is_left_alone_with_a_failed_event(monkeypatch) -> 
     assert events == [("t1", "failed", {"stage": "input_guard", "reasons": ["injection"]})]
 
 
+async def test_blocked_ticket_goes_to_review(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, {"input_blocked": True, "guard_reasons": ["injection"]})
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.finishes == [("needs_review", ["Blocked by the input guard: injection"])]
+
+
 async def test_graph_failure_is_recorded_and_not_raised(monkeypatch) -> None:
     _, updates, events, _ = _install(monkeypatch, ConnectionError("getaddrinfo failed"))
 
@@ -254,6 +310,22 @@ async def test_graph_failure_is_recorded_and_not_raised(monkeypatch) -> None:
     assert events == [
         ("t1", "failed", {"stage": "ticket_graph", "error": "ConnectionError: getaddrinfo failed"})
     ]
+
+
+async def test_graph_failure_ends_at_processing_failed(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, ConnectionError("getaddrinfo failed"))
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.finishes == [("processing_failed", [])]
+
+
+async def test_draft_save_failure_ends_at_processing_failed(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, DRAFTED, insert_error=ConnectionError("down"))
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.finishes == [("processing_failed", [])]
 
 
 def test_case_resolution_reads_the_resolution_section() -> None:
