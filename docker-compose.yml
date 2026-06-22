@@ -1,5 +1,6 @@
 # Local development dependencies. Mongo backs the LangGraph checkpointer that
-# stores chat transcripts (see backend/src/cms/db/mongo.py).
+# stores chat transcripts (see backend/src/cms/db/mongo.py). Mailpit catches the
+# replies the workbench sends (see backend/src/cms/services/email_sender.py).
 #
 # No authentication: this binds to localhost for development only. A deployment
 # points MONGO_URL at a managed instance with credentials instead.
@@ -23,6 +24,16 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # Catches every email the API sends (customer replies) and delivers none.
+  # SMTP on 1025 matches the SMTP_* defaults in settings; read the mail at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: cms-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   mongo_data:
