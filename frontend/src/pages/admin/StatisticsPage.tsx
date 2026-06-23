@@ -131,7 +131,7 @@ export function StatisticsPage() {
               // Completed is throughput, so it follows the palette; failed is a
               // status and stays red. See the rule in lib/status.ts.
               { label: 'Completed', swatchClass: 'bg-accent' },
-              { label: 'Failed', swatchClass: 'bg-danger' },
+              { label: 'Failed', swatchClass: 'bg-danger-dot' },
             ]}
             dataTable={{
               columns: ['Date', 'Completed', 'Failed'],
@@ -158,7 +158,7 @@ export function StatisticsPage() {
                   {
                     key: 'failed',
                     label: 'Failed',
-                    strokeClass: 'stroke-danger',
+                    strokeClass: 'stroke-danger-dot',
                     values: perDay.map((bucket) => bucket.values.failed ?? 0),
                   },
                 ]}

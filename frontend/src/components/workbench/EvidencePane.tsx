@@ -1,5 +1,5 @@
-import { ConfidenceChip, StatusPill } from '@/components/ui/StatusPill';
-import { severityLabel, severityTone } from '@/lib/status';
+import { SeverityBadge } from '@/components/tickets/SeverityBadge';
+import { ConfidenceChip } from '@/components/ui/StatusPill';
 import type { Ticket, TicketDraft } from '@/lib/tickets/types';
 
 interface EvidencePaneProps {
@@ -54,10 +54,7 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
             {ticket.suggestedSeverity && (
               <div className="mt-2 flex items-center gap-2 text-[11.5px] text-text-muted">
                 Suggested severity
-                <StatusPill
-                  label={severityLabel(ticket.suggestedSeverity)}
-                  tone={severityTone(ticket.suggestedSeverity)}
-                />
+                <SeverityBadge severity={ticket.suggestedSeverity} />
               </div>
             )}
           </>

@@ -32,7 +32,7 @@ export function StatusPill({ label, tone, dot = true, pulse = false, title }: St
   return (
     <span
       title={title}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ${classes.soft}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap ring-1 ring-inset ${classes.soft} ${classes.ring}`}
     >
       {dot && (
         <span
@@ -98,7 +98,7 @@ export function ConfidenceChip({ value }: { value: number | null }) {
           ? 'Below the 0.60 routing threshold — this department is a guess.'
           : undefined
       }
-      className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${TONE_CLASSES[tone].soft}`}
+      className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 font-mono text-[11px] tabular-nums ring-1 ring-inset ${TONE_CLASSES[tone].soft} ${TONE_CLASSES[tone].ring}`}
     >
       {Math.round(value * 100)}%
     </span>

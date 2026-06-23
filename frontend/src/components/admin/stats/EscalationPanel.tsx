@@ -28,7 +28,7 @@ interface EscalationPanelProps {
  *    the two would double-count. Two figures, labelled, never summed.
  *
  * Colours follow the semantic ramp rather than the palette: direct/escalated is
- * a genuine status split, so `ok`/`warn` carry meaning that must survive a
+ * a genuine status split, so `ok`/`danger` carry meaning that must survive a
  * palette change. See the rule on `Tone` in `lib/status.ts`.
  */
 export function EscalationPanel({ days }: EscalationPanelProps) {
@@ -68,7 +68,7 @@ export function EscalationPanel({ days }: EscalationPanelProps) {
 
             {(data?.openEscalated ?? 0) > 0 && (
               <div>
-                <p className="text-[18px] leading-none font-semibold tabular-nums text-warn">
+                <p className="text-[18px] leading-none font-semibold tabular-nums text-danger">
                   {formatCount(data?.openEscalated)}
                 </p>
                 <p className="mt-1 text-[11px] text-text-faint">
@@ -85,13 +85,13 @@ export function EscalationPanel({ days }: EscalationPanelProps) {
                   key: 'direct',
                   label: 'Resolved directly',
                   value: data?.resolvedDirect ?? 0,
-                  className: 'bg-ok',
+                  className: 'bg-ok-dot',
                 },
                 {
                   key: 'escalated',
                   label: 'Escalated to a department',
                   value: data?.resolvedEscalated ?? 0,
-                  className: 'bg-warn',
+                  className: 'bg-danger-dot',
                 },
               ]}
             />
@@ -107,8 +107,8 @@ export function EscalationPanel({ days }: EscalationPanelProps) {
             emptyLabel="No complaints have been resolved in this period."
             onRetry={escalation.refresh}
             legend={[
-              { label: 'Resolved', swatchClass: 'bg-ok' },
-              { label: 'Of which escalated', swatchClass: 'bg-warn' },
+              { label: 'Resolved', swatchClass: 'bg-ok-dot' },
+              { label: 'Of which escalated', swatchClass: 'bg-danger-dot' },
             ]}
             dataTable={{
               columns: ['Date', 'Resolved', 'Escalated'],
@@ -128,14 +128,14 @@ export function EscalationPanel({ days }: EscalationPanelProps) {
                   {
                     key: 'resolved',
                     label: 'Resolved',
-                    strokeClass: 'stroke-ok',
-                    areaClass: 'fill-ok/10',
+                    strokeClass: 'stroke-ok-dot',
+                    areaClass: 'fill-ok-dot/10',
                     values: perDay.map((bucket) => bucket.values.resolved ?? 0),
                   },
                   {
                     key: 'escalated',
                     label: 'Escalated',
-                    strokeClass: 'stroke-warn',
+                    strokeClass: 'stroke-danger-dot',
                     values: perDay.map((bucket) => bucket.values.escalated ?? 0),
                   },
                 ]}
@@ -228,8 +228,8 @@ function CorpusSplit({ direct, escalated }: { direct: number; escalated: number 
           </p>
           <StackedBar
             segments={[
-              { key: 'direct', label: 'Direct', value: direct, className: 'bg-ok' },
-              { key: 'escalated', label: 'Escalated', value: escalated, className: 'bg-warn' },
+              { key: 'direct', label: 'Direct', value: direct, className: 'bg-ok-dot' },
+              { key: 'escalated', label: 'Escalated', value: escalated, className: 'bg-danger-dot' },
             ]}
           />
         </>

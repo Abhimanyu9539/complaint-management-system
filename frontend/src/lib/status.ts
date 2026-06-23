@@ -31,15 +31,26 @@ import type { ResolutionPath, TicketSeverity, TicketStatus } from '@/lib/tickets
  * palette and the chart stays green. Throughput, counts and volumes are not
  * statuses, and must not borrow status colours.
  */
-export type Tone = 'neutral' | 'accent' | 'ok' | 'warn' | 'info' | 'danger';
+export type Tone =
+  | 'neutral'
+  | 'accent'
+  | 'ok'
+  | 'warn'
+  | 'info'
+  | 'danger'
+  | 'cyan'
+  | 'violet'
+  | 'pink';
 
 interface ToneClasses {
   /** Soft background + readable foreground. Pills, chips, callout blocks. */
   soft: string;
   /** Foreground only. Icons and numbers sitting on the page background. */
   text: string;
-  /** Solid fill. Chart bars and the dot inside a pill. */
+  /** Brighter solid fill. Chart bars and the dot inside a pill. */
   dot: string;
+  /** Hairline ring colour that gives a soft pill a crisp edge. */
+  ring: string;
   /** SVG stroke utility for chart series. */
   stroke: string;
   /** SVG / element fill utility for chart marks. */
@@ -59,6 +70,7 @@ export const TONE_CLASSES: Record<Tone, ToneClasses> = {
     soft: 'bg-surface-2 text-text-muted',
     text: 'text-text-muted',
     dot: 'bg-text-faint',
+    ring: 'ring-text-faint/25',
     stroke: 'stroke-text-faint',
     fill: 'fill-text-faint',
   },
@@ -66,36 +78,65 @@ export const TONE_CLASSES: Record<Tone, ToneClasses> = {
     soft: 'bg-accent-soft text-accent',
     text: 'text-accent',
     dot: 'bg-accent',
+    ring: 'ring-accent/25',
     stroke: 'stroke-accent',
     fill: 'fill-accent',
   },
   ok: {
     soft: 'bg-ok-soft text-ok',
     text: 'text-ok',
-    dot: 'bg-ok',
-    stroke: 'stroke-ok',
-    fill: 'fill-ok',
+    dot: 'bg-ok-dot',
+    ring: 'ring-ok-dot/25',
+    stroke: 'stroke-ok-dot',
+    fill: 'fill-ok-dot',
   },
   warn: {
     soft: 'bg-warn-soft text-warn',
     text: 'text-warn',
-    dot: 'bg-warn',
-    stroke: 'stroke-warn',
-    fill: 'fill-warn',
+    dot: 'bg-warn-dot',
+    ring: 'ring-warn-dot/25',
+    stroke: 'stroke-warn-dot',
+    fill: 'fill-warn-dot',
   },
   info: {
     soft: 'bg-info-soft text-info',
     text: 'text-info',
-    dot: 'bg-info',
-    stroke: 'stroke-info',
-    fill: 'fill-info',
+    dot: 'bg-info-dot',
+    ring: 'ring-info-dot/25',
+    stroke: 'stroke-info-dot',
+    fill: 'fill-info-dot',
   },
   danger: {
     soft: 'bg-danger-soft text-danger',
     text: 'text-danger',
-    dot: 'bg-danger',
-    stroke: 'stroke-danger',
-    fill: 'fill-danger',
+    dot: 'bg-danger-dot',
+    ring: 'ring-danger-dot/25',
+    stroke: 'stroke-danger-dot',
+    fill: 'fill-danger-dot',
+  },
+  cyan: {
+    soft: 'bg-cyan-soft text-cyan',
+    text: 'text-cyan',
+    dot: 'bg-cyan-dot',
+    ring: 'ring-cyan-dot/25',
+    stroke: 'stroke-cyan-dot',
+    fill: 'fill-cyan-dot',
+  },
+  violet: {
+    soft: 'bg-violet-soft text-violet',
+    text: 'text-violet',
+    dot: 'bg-violet-dot',
+    ring: 'ring-violet-dot/25',
+    stroke: 'stroke-violet-dot',
+    fill: 'fill-violet-dot',
+  },
+  pink: {
+    soft: 'bg-pink-soft text-pink',
+    text: 'text-pink',
+    dot: 'bg-pink-dot',
+    ring: 'ring-pink-dot/25',
+    stroke: 'stroke-pink-dot',
+    fill: 'fill-pink-dot',
   },
 };
 
@@ -204,21 +245,20 @@ export const JOB_STATUS_ORDER: readonly JobStatus[] = ['done', 'running', 'queue
 // Tickets
 // ---------------------------------------------------------------------------
 
+/**
+ * One distinct colour per status. Gray/cyan while the system works, violet and
+ * amber when the agent has something to look at, red while a department owns
+ * it, blue when its answer is back, green when done, pink when the pipeline broke.
+ */
 const TICKET_TONES: Record<TicketStatus, Tone> = {
-  new: 'accent',
-  processing: 'accent',
-  drafted: 'info',
+  new: 'neutral',
+  processing: 'cyan',
+  drafted: 'violet',
   needs_review: 'warn',
-  /**
-   * `warn`, not `danger`. An escalation is the system working as designed —
-   * cms.md wants the *rate* pushed down, but an individual ticket that needed a
-   * specialist is not a fault, and colouring it red would train an operator to
-   * treat correct behaviour as breakage. Amber says "this one costs more".
-   */
-  escalated: 'warn',
+  escalated: 'danger',
   dept_responded: 'info',
   resolved: 'ok',
-  processing_failed: 'danger',
+  processing_failed: 'pink',
 };
 
 const TICKET_LABELS: Record<TicketStatus, string> = {
@@ -252,14 +292,10 @@ export const TICKET_STATUS_ORDER: readonly TicketStatus[] = [
   'processing_failed',
 ];
 
-/**
- * Severity is an ordered scale, so it gets a ramp rather than arbitrary hues.
- * `normal` is deliberately neutral: it is the default and the majority, and
- * colouring the common case makes the uncommon ones harder to spot.
- */
+/** Every severity gets its own hue so low, normal and high are told apart at a glance. */
 const SEVERITY_TONES: Record<TicketSeverity, Tone> = {
-  low: 'neutral',
-  normal: 'neutral',
+  low: 'ok',
+  normal: 'info',
   high: 'warn',
   critical: 'danger',
 };
@@ -279,15 +315,9 @@ export function severityLabel(severity: TicketSeverity): string {
   return SEVERITY_LABELS[severity] ?? severity;
 }
 
-/**
- * Path A / Path B (cms.md §1.2).
- *
- * A genuine status split, so both sides stay on the semantic ramp and neither
- * follows the palette — see the rule on `Tone`. `escalated` is `warn` rather
- * than `danger` for the same reason as the status above.
- */
+/** Path A / Path B (cms.md §1.2), coloured to match the `escalated` / `resolved` statuses. */
 export function resolutionPathTone(path: ResolutionPath): Tone {
-  return path === 'escalated' ? 'warn' : 'ok';
+  return path === 'escalated' ? 'danger' : 'ok';
 }
 
 // ---------------------------------------------------------------------------

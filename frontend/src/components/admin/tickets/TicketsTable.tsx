@@ -3,8 +3,9 @@ import { Link } from 'react-router';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { SeverityBadge } from '@/components/tickets/SeverityBadge';
 import { formatRelativeTime } from '@/lib/format';
-import { severityLabel, severityTone, ticketStatusLabel, ticketStatusTone } from '@/lib/status';
+import { ticketStatusLabel, ticketStatusTone } from '@/lib/status';
 import type { AsyncData } from '@/hooks/useAsyncData';
 import type { Page } from '@/lib/admin/types';
 import type { Ticket } from '@/lib/tickets/types';
@@ -76,7 +77,7 @@ export function TicketsTable({
       width: 'w-[100px]',
       secondary: true,
       render: (ticket) => (
-        <StatusPill label={severityLabel(ticket.severity)} tone={severityTone(ticket.severity)} />
+        <SeverityBadge severity={ticket.severity} />
       ),
     },
     {

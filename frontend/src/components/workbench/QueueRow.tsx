@@ -1,5 +1,6 @@
+import { SeverityBadge } from '@/components/tickets/SeverityBadge';
 import { formatRelativeTime } from '@/lib/format';
-import type { Ticket, TicketSeverity } from '@/lib/tickets/types';
+import type { Ticket } from '@/lib/tickets/types';
 
 interface QueueRowProps {
   ticket: Ticket;
@@ -8,16 +9,8 @@ interface QueueRowProps {
   departmentLabel(id: string | null): string;
 }
 
-/** Complete literal classes — the status group heading already carries status colour. */
-const SEVERITY_SPINE: Record<TicketSeverity, string> = {
-  low: 'bg-transparent',
-  normal: 'bg-transparent',
-  high: 'bg-warn',
-  critical: 'bg-danger',
-};
-
 /**
- * One queue row: a severity spine, subject, reference, department, and age.
+ * One queue row: a severity icon, subject, reference, department, and age.
  *
  * No status pill here — the row lives inside a status group heading, and
  * repeating the status on every row it already labels would be noise, unlike
@@ -35,10 +28,9 @@ export function QueueRow({ ticket, active, onSelect, departmentLabel }: QueueRow
           : 'border-transparent hover:bg-surface-hover'
       }`}
     >
-      <span
-        aria-hidden="true"
-        className={`w-[3px] shrink-0 rounded-full ${SEVERITY_SPINE[ticket.severity]}`}
-      />
+      <span className="shrink-0 self-start pt-0.5">
+        <SeverityBadge severity={ticket.severity} iconOnly />
+      </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[12.5px] font-medium text-text">
           {ticket.subject}

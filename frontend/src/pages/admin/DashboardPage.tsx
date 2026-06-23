@@ -22,9 +22,19 @@ const RECENT_JOBS_LIMIT = 5;
 const TREND_DAYS = 14;
 
 // Worst-of ordering for combining several collections' individual tones into
-// one card. `ok`/`neutral`/`accent`/`info` never appear from `collectionTone`,
-// so they are equally "nothing to report" here.
-const TONE_SEVERITY: Record<Tone, number> = { neutral: 0, accent: 0, ok: 0, info: 0, warn: 1, danger: 2 };
+// one card. Only `warn`/`danger` come from `collectionTone`; the rest are
+// equally "nothing to report" here.
+const TONE_SEVERITY: Record<Tone, number> = {
+  neutral: 0,
+  accent: 0,
+  ok: 0,
+  info: 0,
+  cyan: 0,
+  violet: 0,
+  pink: 0,
+  warn: 1,
+  danger: 2,
+};
 
 export function DashboardPage() {
   const { openMobileNav } = useAdminLayout();

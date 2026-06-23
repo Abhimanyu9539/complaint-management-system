@@ -130,7 +130,7 @@ export function TicketsPage() {
             label="Awaiting a department"
             value={formatCount(summary?.openEscalated)}
             hint="escalated, no reply yet"
-            tone={(summary?.openEscalated ?? 0) > 0 ? 'warn' : 'neutral'}
+            tone={(summary?.openEscalated ?? 0) > 0 ? 'danger' : 'neutral'}
             status={escalation.status}
           />
           <StatCard

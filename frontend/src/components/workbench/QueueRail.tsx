@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Select } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { ticketStatusLabel } from '@/lib/status';
+import { TONE_CLASSES, ticketStatusLabel, ticketStatusTone } from '@/lib/status';
 import { QUEUE_GROUP_ORDER, groupTicketsByStatus } from '@/lib/tickets/queue';
 import type { AsyncData } from '@/hooks/useAsyncData';
 import type { Page } from '@/lib/admin/types';
@@ -117,7 +117,11 @@ export function QueueRail({
               {groupTicketsByStatus(items).map((group) => (
                 <section key={group.status}>
                   <div className="flex items-center justify-between px-1.5 pb-1">
-                    <h2 className="text-[10.5px] font-semibold tracking-[0.06em] text-text-faint uppercase">
+                    <h2 className="flex items-center gap-2 text-[10.5px] font-semibold tracking-[0.06em] text-text-muted uppercase">
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 w-2 rounded-full ${TONE_CLASSES[ticketStatusTone(group.status)].dot}`}
+                      />
                       {ticketStatusLabel(group.status)}
                     </h2>
                     <span className="text-[10.5px] text-text-faint tabular-nums">

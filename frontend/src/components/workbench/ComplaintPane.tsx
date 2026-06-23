@@ -1,8 +1,9 @@
 import { SkeletonLines } from '@/components/ui/Skeleton';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { SeverityBadge } from '@/components/tickets/SeverityBadge';
 import { TicketTimeline } from '@/components/tickets/TicketTimeline';
 import { formatTimestamp } from '@/lib/format';
-import { severityLabel, severityTone, ticketStatusLabel, ticketStatusTone } from '@/lib/status';
+import { ticketStatusLabel, ticketStatusTone } from '@/lib/status';
 import type { TicketDetail } from '@/lib/tickets/types';
 import { ProgressTracker } from './ProgressTracker';
 
@@ -50,7 +51,7 @@ export function ComplaintPane({ detail, loading }: ComplaintPaneProps) {
             T-{ticket.ticketNo}
           </span>
           <StatusPill label={ticketStatusLabel(ticket.status)} tone={ticketStatusTone(ticket.status)} />
-          <StatusPill label={severityLabel(ticket.severity)} tone={severityTone(ticket.severity)} />
+          <SeverityBadge severity={ticket.severity} />
         </div>
         <h2 className="text-[15px] leading-snug font-semibold text-text">{ticket.subject}</h2>
         <p className="mt-1 text-[11.5px] text-text-faint">

@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { formatTimestamp } from '@/lib/format';
-import { resolutionPathTone, severityLabel, severityTone } from '@/lib/status';
+import { resolutionPathTone } from '@/lib/status';
 import type { TicketDetail } from '@/lib/tickets/types';
+import { SeverityBadge } from './SeverityBadge';
 import { TicketTimeline } from './TicketTimeline';
 
 /**
@@ -26,7 +27,7 @@ export function TicketBody({ detail }: { detail: TicketDetail }) {
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-[11.5px]">
         <Detail label="Severity">
-          <StatusPill label={severityLabel(ticket.severity)} tone={severityTone(ticket.severity)} />
+          <SeverityBadge severity={ticket.severity} />
         </Detail>
         <Detail label="Source">
           <span className="text-text capitalize">{ticket.source}</span>
