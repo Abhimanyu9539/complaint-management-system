@@ -29,6 +29,7 @@ import type {
   TriggerIngestionResponse,
 } from './types';
 import type {
+  DiscardReason,
   Ticket,
   TicketDetail,
   TicketDraft,
@@ -145,6 +146,10 @@ async function postJson<T>(url: string, body: unknown, signal: AbortSignal): Pro
       // rarely what actually renders.
       throw new AdminRequestError(detail ?? 'That item no longer exists.', 404, detail);
     }
+    if (response.status === 502) {
+      // An upstream (the mail server) failed; the backend says whether a retry is safe.
+      throw new AdminRequestError(detail ?? 'An upstream service failed.', 502, detail);
+    }
     throw new AdminRequestError(
       response.status >= 500
         ? 'The API could not complete that action right now.'
@@ -221,6 +226,7 @@ interface WireTicket {
   dept_confidence: number | null;
   dept_candidates: Ticket['deptCandidates'];
   suggested_severity: Ticket['suggestedSeverity'];
+  review_reasons?: string[];
   entities: Ticket['entities'];
   escalated_dept: string | null;
   category: string | null;
@@ -272,6 +278,12 @@ interface WireTicketDraft {
   model: string;
   prompt_version: string;
   created_at: string;
+  feedback?: {
+    action: 'accepted' | 'edited' | 'rejected';
+    final_text: string | null;
+    edit_reason: DiscardReason | null;
+    created_at: string;
+  } | null;
 }
 
 function toTicket(wire: WireTicket): Ticket {
@@ -288,6 +300,7 @@ function toTicket(wire: WireTicket): Ticket {
     deptConfidence: wire.dept_confidence,
     deptCandidates: wire.dept_candidates ?? [],
     suggestedSeverity: wire.suggested_severity ?? null,
+    reviewReasons: wire.review_reasons ?? [],
     entities: wire.entities ?? {},
     escalatedDept: wire.escalated_dept,
     category: wire.category,
@@ -339,6 +352,14 @@ function toTicketDraft(wire: WireTicketDraft): TicketDraft {
     model: wire.model,
     promptVersion: wire.prompt_version,
     createdAt: wire.created_at,
+    feedback: wire.feedback
+      ? {
+          action: wire.feedback.action,
+          finalText: wire.feedback.final_text ?? null,
+          editReason: wire.feedback.edit_reason,
+          createdAt: wire.feedback.created_at,
+        }
+      : null,
   };
 }
 
@@ -680,6 +701,44 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     return live(toTicket(wire));
   }
 
+  async function sendReply(
+    ticketId: string,
+    draftId: string,
+    finalText: string,
+    signal: AbortSignal,
+  ): Promise<AdminResult<Ticket>> {
+    const wire = await postJson<WireTicket>(
+      `${tickets}/${encodeURIComponent(ticketId)}/send`,
+      { draft_id: draftId, final_text: finalText },
+      signal,
+    );
+    return live(toTicket(wire));
+  }
+
+  async function discardDraft(
+    ticketId: string,
+    draftId: string,
+    reason: DiscardReason,
+    note: string | null,
+    signal: AbortSignal,
+  ): Promise<AdminResult<Ticket>> {
+    const wire = await postJson<WireTicket>(
+      `${tickets}/${encodeURIComponent(ticketId)}/discard`,
+      { draft_id: draftId, reason, note },
+      signal,
+    );
+    return live(toTicket(wire));
+  }
+
+  async function regenerateDraft(ticketId: string, signal: AbortSignal): Promise<AdminResult<Ticket>> {
+    const wire = await postJson<WireTicket>(
+      `${tickets}/${encodeURIComponent(ticketId)}/regenerate`,
+      {},
+      signal,
+    );
+    return live(toTicket(wire));
+  }
+
   async function getEscalationSummary(
     rangeDays: number,
     signal: AbortSignal,
@@ -732,6 +791,9 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     getTicket,
     escalateTicket,
     resolveTicket,
+    sendReply,
+    discardDraft,
+    regenerateDraft,
     getEscalationSummary,
     listDepartments,
   };

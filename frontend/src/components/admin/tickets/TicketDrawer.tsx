@@ -52,7 +52,9 @@ export function TicketDrawer({
       }
       footer={
         ticket && (
+          // Keyed on id + status: a finished escalate/resolve, or another ticket, starts a fresh form.
           <TicketActions
+            key={`${ticket.id}:${ticket.status}`}
             ticket={ticket}
             departments={departments}
             onEscalate={onEscalate}

@@ -21,8 +21,8 @@ const QUEUE_LIMIT = 100;
  * Triages one ticket at a time: a queue organised by status on the left
  * (`QueueRail`), and three panes on the right — the complaint and its real
  * progress (`ComplaintPane`), the drafted reply (`DraftPane`), and the evidence
- * it cites (`EvidencePane`). Escalate/resolve are real; nothing here can send
- * a message to a customer yet.
+ * it cites (`EvidencePane`). Sending the reply emails the customer and resolves
+ * the ticket; escalate/resolve are the ticket-level actions.
  *
  * Deliberately does not mount `ChatProvider` — same rule as `/ticket`, stated
  * once in `App.tsx`.
@@ -59,8 +59,19 @@ export function WorkbenchPage() {
   );
 
   const ticketActions = useTicketActions(() => queue.refresh());
-  const { detail, detailLoading, acting, actionError, openTicket, escalate, resolve, clear } =
-    ticketActions;
+  const {
+    detail,
+    detailLoading,
+    acting,
+    actionError,
+    openTicket,
+    escalate,
+    resolve,
+    sendReply,
+    discard,
+    regenerate,
+    clear,
+  } = ticketActions;
 
   // The selected ticket lives in the URL, so loading it is a side effect of
   // that value changing rather than of a click — a shared link, the back
@@ -74,6 +85,26 @@ export function WorkbenchPage() {
     // `openTicket`/`clear` are stable (useCallback with empty deps in the hook).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticketId]);
+
+  // The latest escalation, for the Draft pane's banner. Events come oldest first.
+  const escalation = useMemo(() => {
+    const event = detail?.events.filter((entry) => entry.event === 'escalated').at(-1);
+    if (!detail || !event) return null;
+    const note = event.payload.note;
+    return {
+      department: departmentLabel(detail.ticket.escalatedDept),
+      question: typeof note === 'string' && note.trim() ? note : null,
+      at: event.createdAt,
+    };
+  }, [detail, departmentLabel]);
+
+  // While the ticket graph runs, reload the ticket so its draft appears on its own.
+  const processingId = detail?.ticket.status === 'processing' ? detail.ticket.id : null;
+  useEffect(() => {
+    if (!processingId) return;
+    const timer = setInterval(() => void openTicket(processingId), 5_000);
+    return () => clearInterval(timer);
+  }, [processingId, openTicket]);
 
   const select = useCallback((id: string) => setTicketId(id), [setTicketId]);
 
@@ -128,7 +159,11 @@ export function WorkbenchPage() {
               <DraftPane
                 ticket={detail.ticket}
                 draft={detail.draft}
+                escalation={escalation}
                 onRefresh={() => void openTicket(detail.ticket.id)}
+                onSend={sendReply}
+                onDiscard={discard}
+                onRegenerate={regenerate}
                 departments={departments.data ?? []}
                 onEscalate={escalate}
                 onResolve={resolve}
@@ -141,7 +176,8 @@ export function WorkbenchPage() {
             {detail && (
               <EvidencePane
                 ticket={detail.ticket}
-                draft={detail.draft}
+                // While a new draft is being written, the old one's evidence is stale.
+                draft={detail.ticket.status === 'processing' ? null : detail.draft}
                 departmentLabel={departmentLabel}
               />
             )}

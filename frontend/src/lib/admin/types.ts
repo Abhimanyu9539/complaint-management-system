@@ -10,7 +10,7 @@
  * (`realTransport.ts`), exactly as `lib/chat/` does.
  */
 
-import type { Ticket, TicketDetail, TicketQuery } from '@/lib/tickets/types';
+import type { DiscardReason, Ticket, TicketDetail, TicketQuery } from '@/lib/tickets/types';
 
 // ---------------------------------------------------------------------------
 // Envelope
@@ -515,6 +515,29 @@ export interface AdminTransport {
     note: string | null,
     signal: AbortSignal,
   ): Promise<AdminResult<Ticket>>;
+
+  /**
+   * LIVE. Email the (possibly edited) draft to the customer and resolve the
+   * ticket. `finalText` may keep its [n] markers; the backend removes them.
+   */
+  sendReply(
+    ticketId: string,
+    draftId: string,
+    finalText: string,
+    signal: AbortSignal,
+  ): Promise<AdminResult<Ticket>>;
+
+  /** LIVE. Reject the latest draft with a reason; the ticket's status does not change. */
+  discardDraft(
+    ticketId: string,
+    draftId: string,
+    reason: DiscardReason,
+    note: string | null,
+    signal: AbortSignal,
+  ): Promise<AdminResult<Ticket>>;
+
+  /** LIVE. Run the ticket graph again in the background; a new draft version follows. */
+  regenerateDraft(ticketId: string, signal: AbortSignal): Promise<AdminResult<Ticket>>;
 
   /** LIVE. The escalation rate, funnel, trend and per-department split. */
   getEscalationSummary(

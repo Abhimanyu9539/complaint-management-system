@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { AdminRequestError } from '@/lib/admin/errors';
 import { adminTransport } from '@/lib/admin/transport';
-import type { TicketDetail } from '@/lib/tickets/types';
+import type { DiscardReason, TicketDetail } from '@/lib/tickets/types';
 
 export interface UseTicketActionsResult {
   detail: TicketDetail | null;
@@ -12,6 +12,10 @@ export interface UseTicketActionsResult {
   openTicket(ticketId: string): Promise<void>;
   escalate(departmentId: string, note: string): Promise<void>;
   resolve(note: string): Promise<void>;
+  /** Email the (possibly edited) draft to the customer; resolves the ticket. */
+  sendReply(draftId: string, finalText: string): Promise<void>;
+  discard(draftId: string, reason: DiscardReason, note: string): Promise<void>;
+  regenerate(): Promise<void>;
   clear(): void;
 }
 
@@ -107,11 +111,54 @@ export function useTicketActions(onChanged?: () => void): UseTicketActionsResult
     [detail, runAction],
   );
 
+  const sendReply = useCallback(
+    async (draftId: string, finalText: string) => {
+      const ticketId = detail?.ticket.id;
+      if (!ticketId) return;
+      await runAction(
+        (signal) => adminTransport.sendReply(ticketId, draftId, finalText, signal),
+        ticketId,
+      );
+    },
+    [detail, runAction],
+  );
+
+  const discard = useCallback(
+    async (draftId: string, reason: DiscardReason, note: string) => {
+      const ticketId = detail?.ticket.id;
+      if (!ticketId) return;
+      await runAction(
+        (signal) =>
+          adminTransport.discardDraft(ticketId, draftId, reason, note.trim() || null, signal),
+        ticketId,
+      );
+    },
+    [detail, runAction],
+  );
+
+  const regenerate = useCallback(async () => {
+    const ticketId = detail?.ticket.id;
+    if (!ticketId) return;
+    await runAction((signal) => adminTransport.regenerateDraft(ticketId, signal), ticketId);
+  }, [detail, runAction]);
+
   const clear = useCallback(() => {
     detailAbortRef.current?.abort();
     setDetail(null);
     setActionError(null);
   }, []);
 
-  return { detail, detailLoading, actionError, acting, openTicket, escalate, resolve, clear };
+  return {
+    detail,
+    detailLoading,
+    actionError,
+    acting,
+    openTicket,
+    escalate,
+    resolve,
+    sendReply,
+    discard,
+    regenerate,
+    clear,
+  };
 }

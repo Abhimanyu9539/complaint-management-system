@@ -27,6 +27,27 @@ export function canResolve(status: TicketStatus): boolean {
   return CAN_RESOLVE.has(status);
 }
 
+// The draft is read-only while a department owns the ticket, and once it is closed.
+// Mirrors `reply_service.DRAFT_LOCKED_STATUSES`.
+const DRAFT_LOCKED = new Set<TicketStatus>(['escalated', 'resolved']);
+
+/** True when the draft can't be edited, discarded or sent. */
+export function isDraftLocked(status: TicketStatus): boolean {
+  return DRAFT_LOCKED.has(status);
+}
+
+/** Sending the reply resolves the ticket, so it needs resolving to be allowed — and an unlocked draft. */
+export function canSend(status: TicketStatus): boolean {
+  return canResolve(status) && !isDraftLocked(status);
+}
+
+const CAN_REGENERATE = new Set<TicketStatus>(['new', 'drafted', 'needs_review', 'processing_failed']);
+
+/** Where the backend lets the ticket graph run again (`ticket_service.ALLOWED` → `processing`). */
+export function canRegenerate(status: TicketStatus): boolean {
+  return CAN_REGENERATE.has(status);
+}
+
 /** True once a ticket can no longer be escalated or resolved from here. */
 export function hasNoActions(status: TicketStatus): boolean {
   return !canEscalate(status) && !canResolve(status);

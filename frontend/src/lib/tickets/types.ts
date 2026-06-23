@@ -64,6 +64,8 @@ export interface Ticket {
   deptCandidates: DeptCandidate[];
   /** The classifier's suggestion; `severity` changes only when a person confirms it. */
   suggestedSeverity: TicketSeverity | null;
+  /** Why the gate sent this ticket to `needs_review`, in plain words. Empty otherwise. */
+  reviewReasons: string[];
   /** Identifiers copied from the complaint, keyed `order_no`, `product`, ... */
   entities: Record<string, string>;
   /** The department actually escalated to. Non-null implies Path B. */
@@ -117,6 +119,18 @@ export interface PolicyEvidence {
   cited: boolean;
 }
 
+/** Why an agent rejected a draft (`draft_feedback.edit_reason`). */
+export type DiscardReason = 'wrong_case' | 'wrong_tone' | 'wrong_policy' | 'other';
+
+/** What an agent did with a draft: sent it as-is, sent it edited, or rejected it. */
+export interface DraftFeedback {
+  action: 'accepted' | 'edited' | 'rejected';
+  /** Exactly what was emailed. Null when rejected. */
+  finalText: string | null;
+  editReason: DiscardReason | null;
+  createdAt: string;
+}
+
 /** The latest reply drafted for the customer (`drafts`, kind `customer_reply`). */
 export interface TicketDraft {
   id: string;
@@ -133,6 +147,8 @@ export interface TicketDraft {
   model: string;
   promptVersion: string;
   createdAt: string;
+  /** Null until the draft is sent or discarded. */
+  feedback: DraftFeedback | null;
 }
 
 export interface TicketDetail {
