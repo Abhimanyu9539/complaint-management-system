@@ -9,7 +9,7 @@ from cms.config.settings import get_settings
 from cms.guardrails.guards import run_output_guard
 from cms.guardrails.nemo_rails import check_customer_reply
 from cms.rag.context import BLOCK_SEPARATOR, build_generation_context
-from cms.rag.ticket_state import TicketState
+from cms.rag.ticket_state import TicketState, drafting_sources
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,9 @@ async def ticket_output_guard(state: TicketState) -> dict:
         return {"grounded": None}
 
     draft = state.get("draft", "")
+    # Rebuilt exactly as the drafter saw it, department answers included.
     policy_context, case_context, offered = build_generation_context(
-        state.get("policy_hits", []), state.get("case_hits", [])
+        drafting_sources(state), state.get("case_hits", [])
     )
     context = BLOCK_SEPARATOR.join(part for part in (policy_context, case_context) if part)
     context_with_complaint = BLOCK_SEPARATOR.join((context, state["query"]))

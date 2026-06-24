@@ -1,4 +1,5 @@
-"""Ticket-graph node: write the reply to the customer from the retrieved policies and cases.
+"""Ticket-graph node: write the reply to the customer from the retrieved policies and cases,
+and from the department's answer once the ticket has been escalated.
 """
 
 import logging
@@ -7,7 +8,7 @@ from langsmith import traceable
 
 from cms.config.settings import get_settings
 from cms.rag.nodes.generate import generate_core
-from cms.rag.ticket_state import TicketState
+from cms.rag.ticket_state import TicketState, drafting_sources
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,10 @@ async def draft_reply(state: TicketState) -> dict:
     if retry:
         logger.info("draft_reply: revising the failed draft with %d guard reason(s)", len(feedback or []))
 
+    # A department's answer goes first, so it is cited as [1].
     draft, citations = await generate_core(
         state["query"],
-        state.get("policy_hits", []),
+        drafting_sources(state),
         state.get("case_hits", []),
         feedback=feedback,
         previous_draft=previous_draft,

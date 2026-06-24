@@ -5,7 +5,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 # Which corpus a citation's `doc_id` resolves in — cases and policies are separate tables.
-DocType = Literal["policy", "case"]
+# `guidance` is a department's answer to an escalated ticket (`dept_responses`).
+DocType = Literal["policy", "case", "guidance"]
 
 
 class _Base(BaseModel):
