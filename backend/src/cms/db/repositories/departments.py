@@ -16,6 +16,28 @@ TABLE = "departments"
 
 DEPARTMENT_COLUMNS = "id,name"
 DEPARTMENT_DESCRIPTION_COLUMNS = "id,name,description"
+DEPARTMENT_FULL_COLUMNS = "id,name,mailbox,description"
+
+
+async def fetch_department(department_id: str) -> dict:
+    """One department with its mailbox. Raises `LookupError` when it does not exist."""
+    try:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select(DEPARTMENT_FULL_COLUMNS)
+            .eq("id", department_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to fetch %s row %s", TABLE, department_id)
+        raise
+
+    rows = response.data or []
+    if not rows:
+        raise LookupError(f"No department with id {department_id}")
+    return rows[0]
 
 
 async def list_departments() -> list[dict]:

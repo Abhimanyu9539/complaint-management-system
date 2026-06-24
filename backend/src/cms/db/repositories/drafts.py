@@ -13,13 +13,14 @@ logger = logging.getLogger(__name__)
 
 TABLE = "drafts"
 
-# `grounded` and `guard_reasons` arrive with migration 0021.
+# `grounded` and `guard_reasons` arrive with migration 0021, `guidance_refs` with 0023.
 DRAFT_COLUMNS = (
-    "id,ticket_id,version,kind,draft_text,retrieved_cases,policy_refs,no_match,"
+    "id,ticket_id,version,kind,draft_text,retrieved_cases,policy_refs,guidance_refs,no_match,"
     "grounded,guard_reasons,model,prompt_version,langsmith_run_id,created_at"
 )
 
 CUSTOMER_REPLY = "customer_reply"
+DEPT_QUESTION = "dept_question"
 
 
 async def insert_draft(row: dict) -> dict:

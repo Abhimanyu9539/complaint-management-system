@@ -118,7 +118,12 @@ class Settings(BaseSettings):
     # Intake §7: a top department at or above this routes directly; below goes to human review.
     routing_confidence_floor: float = 0.60
     # The ticket graph's reply written to the customer (the chat's `generate` writes to the agent).
-    customer_reply_prompt_version: str = "v1"
+    # v2 adds the department's answer as a source after an escalation.
+    customer_reply_prompt_version: str = "v2"
+    # The question emailed to a department when a ticket is escalated.
+    dept_question_prompt_version: str = "v1"
+    # Title of a department's answer when it is offered to the drafter as a source.
+    guidance_title_template: str = "Department guidance — {department}"
     # The ticket draft when no policy matches. No model call, so no claim to check.
     holding_reply_message: str = (
         "Dear customer,\n\n"
@@ -143,6 +148,15 @@ class Settings(BaseSettings):
     support_reply_to: str = "support@example.com"
     # The [T-n] tag lets incoming replies be matched to their ticket later (step 7).
     reply_subject_template: str = "Re: {subject} [T-{ticket_no}]"
+    # The escalation email to a department. Its reply comes back to `support_reply_to`.
+    dept_question_subject_template: str = "[T-{ticket_no}] Question from Customer Care: {subject}"
+    dept_question_body_template: str = (
+        "{question}\n\n"
+        "---\n"
+        "Complaint T-{ticket_no}: {subject}\n\n"
+        "{body}\n\n"
+        "Please reply to this email and keep [T-{ticket_no}] in the subject."
+    )
     # The API has no login yet, so an open send endpoint could mail anyone. Until
     # it does, only a local SMTP server (Mailpit) is allowed.
     email_real_delivery_enabled: bool = False

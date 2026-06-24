@@ -93,11 +93,28 @@ class EscalateTicketRequest(_Base):
     """
 
     department_id: str = Field(min_length=1, max_length=64)
-    note: str | None = Field(
-        default=None,
+    note: str = Field(
+        min_length=1,
         max_length=2000,
-        description="Optional context for the department. Stored on the ticket_events row.",
+        description="The question emailed to the department. Stored on the ticket_events row.",
     )
+    question_draft_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="The drafted question this started from, so an edit can be recorded.",
+    )
+
+
+class DraftDeptQuestionRequest(_Base):
+    """Ask the model for a question to send the department. Nothing is sent."""
+
+    department_id: str = Field(min_length=1, max_length=64)
+
+
+class DeptResponseRequest(_Base):
+    """The department's answer, pasted in by the agent until incoming email is read (step 7)."""
+
+    answer_text: str = Field(min_length=1, max_length=4000)
 
 
 class ResolveTicketRequest(_Base):
@@ -234,6 +251,25 @@ class PolicyEvidence(_Base):
     cited: bool
 
 
+class GuidanceEvidence(_Base):
+    """A department's answer the drafter was offered. `marker` is its `[n]` in the draft."""
+
+    marker: int
+    dept_response_id: str
+    department_id: str
+    title: str
+    snippet: str = ""
+    cited: bool
+
+
+class DeptQuestion(_Base):
+    """A drafted question for the department. The agent edits it before escalating."""
+
+    draft_id: str
+    department_id: str
+    text: str
+
+
 class DraftFeedback(_Base):
     """What an agent did with a draft: sent it as-is, sent it edited, or rejected it."""
 
@@ -257,6 +293,7 @@ class TicketDraft(_Base):
     guard_reasons: list[str] = Field(default_factory=list)
     retrieved_cases: list[CaseEvidence] = Field(default_factory=list)
     policy_refs: list[PolicyEvidence] = Field(default_factory=list)
+    guidance_refs: list[GuidanceEvidence] = Field(default_factory=list)
     model: str
     prompt_version: str
     created_at: str
