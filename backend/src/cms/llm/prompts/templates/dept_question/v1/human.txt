@@ -1,0 +1,15 @@
+<department>
+{department}
+</department>
+
+<complaint>
+{complaint}
+</complaint>
+
+<current_draft>
+{current_draft}
+</current_draft>
+
+<review_reasons>
+{review_reasons}
+</review_reasons>
