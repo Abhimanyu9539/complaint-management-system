@@ -39,7 +39,10 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from cms.schemas.tickets import (
     CreateTicketRequest,
+    DeptQuestion,
+    DeptResponseRequest,
     DiscardDraftRequest,
+    DraftDeptQuestionRequest,
     EscalateTicketRequest,
     ResolveTicketRequest,
     SendReplyRequest,
@@ -48,7 +51,12 @@ from cms.schemas.tickets import (
     TicketDetail,
     TicketPage,
 )
-from cms.services import reply_service, ticket_pipeline, ticket_service
+from cms.services import (
+    escalation_service,
+    reply_service,
+    ticket_pipeline,
+    ticket_service,
+)
 from cms.services.email_sender import EmailSendError
 from cms.services.reply_service import DraftConflict, InvalidReply
 from cms.services.ticket_service import IllegalTransition, UnknownDepartment
@@ -61,6 +69,8 @@ UNAVAILABLE = "Tickets are unavailable right now. Check the server log."
 
 # The email did not leave, and nothing was recorded, so a retry is safe.
 SEND_FAILED = "The email could not be sent. Nothing was recorded — try again in a moment."
+
+QUESTION_FAILED = "Could not draft a question. Write it yourself, or try again in a moment."
 
 # What a customer sees when the insert fails. Deliberately actionable: a
 # complaint they typed and lost is the worst outcome this endpoint has, so the
@@ -141,16 +151,11 @@ async def get_ticket(ticket_id: str) -> TicketDetail:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
-@router.post("/{ticket_id}/escalate", response_model=Ticket)
-async def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Ticket:
-    """Hand a ticket to a specialist department (Path B).
-
-    409 on an illegal transition, per lld.md §2. Not 400: the request is
-    well-formed and would succeed against the same ticket in another state, so
-    the conflict is with the resource, not the payload.
-    """
+@router.post("/{ticket_id}/dept-question", response_model=DeptQuestion)
+async def draft_dept_question(ticket_id: str, payload: DraftDeptQuestionRequest) -> DeptQuestion:
+    """Draft the question to send the department. Nothing is sent or changed on the ticket."""
     try:
-        return await ticket_service.escalate_ticket(ticket_id, payload.department_id, payload.note)
+        return await escalation_service.draft_question(ticket_id, payload.department_id)
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket.") from None
     except UnknownDepartment as exc:
@@ -158,8 +163,59 @@ async def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Tic
     except IllegalTransition as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
     except Exception:
+        logger.exception("Failed to draft the department question for ticket %s", ticket_id)
+        raise HTTPException(status_code=503, detail=QUESTION_FAILED) from None
+
+
+@router.post("/{ticket_id}/escalate", response_model=Ticket)
+async def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Ticket:
+    """Email the question to a specialist department and hand the ticket over (Path B).
+
+    409 on an illegal transition, per lld.md §2. Not 400: the request is
+    well-formed and would succeed against the same ticket in another state, so
+    the conflict is with the resource, not the payload. 502 when the email fails.
+    """
+    try:
+        return await escalation_service.escalate(
+            ticket_id, payload.department_id, payload.note, payload.question_draft_id
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="No such ticket.") from None
+    except UnknownDepartment as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except IllegalTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except EmailSendError:
+        raise HTTPException(status_code=502, detail=SEND_FAILED) from None
+    except Exception:
         logger.exception("Failed to escalate ticket %s", ticket_id)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.post("/{ticket_id}/dept-response", response_model=Ticket, status_code=202)
+async def record_dept_response(
+    ticket_id: str, payload: DeptResponseRequest, background_tasks: BackgroundTasks
+) -> Ticket:
+    """Save the department's answer; the ticket graph then redrafts from it in the background.
+
+    Like `/regenerate`, the ticket is at `processing` before this responds, so the
+    workbench shows the run as soon as it reloads the ticket.
+    """
+    try:
+        await escalation_service.record_answer(ticket_id, payload.answer_text)
+        ticket = ticket_service.to_ticket(
+            await ticket_service.start_processing(ticket_id, resume=False)
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="No such ticket.") from None
+    except IllegalTransition as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception:
+        logger.exception("Failed to record the department answer for ticket %s", ticket_id)
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+    background_tasks.add_task(ticket_pipeline.process_ticket, ticket_id)
+    return ticket
 
 
 @router.post("/{ticket_id}/resolve", response_model=Ticket)
