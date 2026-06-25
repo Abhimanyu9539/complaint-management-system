@@ -3,7 +3,7 @@ from uuid import UUID
 from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
-from cms.rag.context import build_generation_context
+from cms.rag.context import build_generation_context, guidance_hit
 from cms.schemas.ticket_classification import (
     DepartmentCandidate,
     TicketClassification,
@@ -52,6 +52,15 @@ DRAFTED = {
     "risk_flags": ["safety"],
 }
 
+DEPT_RESPONSE = {
+    "id": "r1",
+    "ticket_id": "t1",
+    "department_id": "warranty",
+    "answer_text": "Approve a replacement unit; no proof of purchase needed.",
+    "created_at": "2026-10-02T10:00:00Z",
+}
+GUIDANCE_HIT = guidance_hit(DEPT_RESPONSE, "Warranty")
+
 
 class _FakeGraph:
     def __init__(self, result: dict | Exception) -> None:
@@ -64,7 +73,8 @@ class _FakeGraph:
         self.configs.append(config or {})
         if isinstance(self.result, Exception):
             raise self.result
-        return self.result
+        # Like LangGraph, the final state still holds the input.
+        return {**state, **self.result}
 
 
 def _install(
@@ -74,8 +84,12 @@ def _install(
     insert_error=None,
     severity: str = "normal",
     start_error: Exception | None = None,
+    responses: list[dict] | None = None,
+    responses_error: Exception | None = None,
 ):
     """Stub the status changes, the graph and every write. Returns (graph, updates, events, inserted).
+
+    `responses` are the department answers on the ticket; none by default.
 
     `finishes` (the gate's outcomes) is attached to the graph as `graph.finishes`.
     """
@@ -115,6 +129,16 @@ def _install(
         inserted.append(row)
         return {"id": "d1", **row}
 
+    async def list_responses(ticket_id):
+        if responses_error:
+            raise responses_error
+        return responses or []
+
+    async def list_departments():
+        return [{"id": "warranty", "name": "Warranty"}]
+
+    monkeypatch.setattr(ticket_pipeline.dept_responses, "list_responses", list_responses)
+    monkeypatch.setattr(ticket_pipeline.departments, "list_departments", list_departments)
     monkeypatch.setattr(ticket_pipeline.ticket_service, "start_processing", start_processing)
     monkeypatch.setattr(ticket_pipeline.ticket_service, "finish_processing", finish_processing)
     monkeypatch.setattr(ticket_pipeline.tickets, "update_ticket", update_ticket)
@@ -139,6 +163,7 @@ async def test_classified_and_drafted_ticket_is_saved(monkeypatch) -> None:
             "ticket_id": "t1",
             "ticket_no": 1042,
             "query": "X200 won't charge\n\nOrder #4521, dead after 3 months.",
+            "guidance_hits": [],
         }
     ]
     run_id = graph.configs[0]["run_id"]
@@ -173,6 +198,7 @@ async def test_classified_and_drafted_ticket_is_saved(monkeypatch) -> None:
     assert row["policy_refs"][0]["cited"] is True
     assert row["retrieved_cases"][0]["case_id"] == "c1"
     assert row["retrieved_cases"][0]["cited"] is False
+    assert row["guidance_refs"] == []
 
     assert _event_names(events) == ["classified", "drafted"]
     assert events[1][2]["draft_id"] == "d1"
@@ -334,7 +360,11 @@ def test_case_resolution_reads_the_resolution_section() -> None:
 
 
 def test_evidence_rows_pair_each_offered_chunk_with_its_score() -> None:
-    retrieved_cases, policy_refs = ticket_pipeline.evidence_rows([POLICY_HIT], [CASE_HIT], CITED)
+    retrieved_cases, policy_refs, guidance_refs = ticket_pipeline.evidence_rows(
+        [POLICY_HIT], [CASE_HIT], CITED
+    )
+
+    assert guidance_refs == []
 
     assert policy_refs == [
         {
@@ -351,3 +381,76 @@ def test_evidence_rows_pair_each_offered_chunk_with_its_score() -> None:
     assert retrieved_cases[0]["marker"] == 2
     assert retrieved_cases[0]["score"] == 0.5
     assert retrieved_cases[0]["resolution"] == "Replaced under warranty."
+
+
+# --- after an escalation: the department's answer is a source ---
+
+# The drafter cited the department's answer ([1]) and the policy ([2]).
+GUIDED_CITED = build_generation_context([GUIDANCE_HIT, POLICY_HIT], [CASE_HIT])[2][:2]
+GUIDED = {
+    **DRAFTED,
+    "draft": "Dear customer,\n\nWe will send a replacement [1][2].",
+    "citations": GUIDED_CITED,
+    "risk_flags": [],
+}
+
+
+async def test_department_answer_reaches_the_graph(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, GUIDED, responses=[DEPT_RESPONSE])
+
+    await ticket_pipeline.process_ticket("t1")
+
+    [hit] = graph.inputs[0]["guidance_hits"]
+    assert hit[0].metadata["title"] == "Department guidance — Warranty"
+    assert "Approve a replacement unit" in hit[0].page_content
+
+
+async def test_guided_run_ends_at_dept_responded_and_saves_the_guidance(monkeypatch) -> None:
+    graph, _, _, inserted = _install(monkeypatch, GUIDED, responses=[DEPT_RESPONSE])
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.finishes == [("dept_responded", [])]
+    [row] = inserted
+    assert row["guidance_refs"] == [
+        {
+            "marker": 1,
+            "dept_response_id": "r1",
+            "department_id": "warranty",
+            "title": "Department guidance — Warranty",
+            "snippet": "Approve a replacement unit; no proof of purchase needed.",
+            "cited": True,
+        }
+    ]
+    # The policy moves to [2] behind the answer.
+    assert row["policy_refs"][0]["marker"] == 2 and row["policy_refs"][0]["cited"] is True
+
+
+async def test_guided_run_keeps_its_review_reasons(monkeypatch) -> None:
+    graph, _, _, _ = _install(
+        monkeypatch, {**GUIDED, "risk_flags": ["safety"]}, responses=[DEPT_RESPONSE]
+    )
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.finishes == [("dept_responded", ["Risk flagged: safety."])]
+
+
+async def test_no_policy_match_with_an_answer_is_not_a_holding_reply(monkeypatch) -> None:
+    result = {**GUIDED, "policy_hits": [], "no_match": True}
+    _, _, _, inserted = _install(monkeypatch, result, responses=[DEPT_RESPONSE])
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert inserted[0]["no_match"] is False
+    assert inserted[0]["model"] == get_settings().openrouter_model_main
+
+
+async def test_failed_answer_read_ends_at_processing_failed(monkeypatch) -> None:
+    graph, _, events, _ = _install(monkeypatch, GUIDED, responses_error=ConnectionError("down"))
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.inputs == []
+    assert events == [("t1", "failed", {"stage": "fetch_guidance", "error": "ConnectionError: down"})]
+    assert graph.finishes == [("processing_failed", [])]

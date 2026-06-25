@@ -155,3 +155,37 @@ async def test_analyze_ticket_failure_falls_back_to_the_original_text(monkeypatc
     update = await analyze_ticket_module.analyze_ticket(STATE)
 
     assert update == {"policy_queries": [STATE["query"]], "risk_flags": []}
+
+
+# --- after an escalation ---
+
+ANSWER = (
+    Document(
+        page_content="Department guidance\nReplace the unit.",
+        metadata={"doc_id": "r1", "chunk_id": "r1", "title": "Department guidance — Warranty", "doc_type": "guidance"},
+    ),
+    1.0,
+)
+
+
+async def test_draft_reply_offers_the_department_answer_first(monkeypatch) -> None:
+    offered: list = []
+
+    async def fake_core(query, policy_hits, case_hits, **kwargs):
+        offered.extend(policy_hits)
+        return "Dear customer [1].", []
+
+    monkeypatch.setattr(draft_reply_module, "generate_core", fake_core)
+
+    await draft_reply_module.draft_reply({**STATE, "guidance_hits": [ANSWER]})
+
+    assert offered == [ANSWER, HIT]
+
+
+async def test_output_guard_checks_against_the_department_answer(monkeypatch) -> None:
+    calls = _install_guard(monkeypatch, GuardResult(passed=True, text="x"), nemo_enabled=True)
+
+    await guard_module.ticket_output_guard({**STATE, "guidance_hits": [ANSWER]})
+
+    assert "[1] Department guidance — Warranty" in calls[1][1]
+    assert "[2] Warranty Policy" in calls[1][1]

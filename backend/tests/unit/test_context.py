@@ -1,6 +1,11 @@
 from langchain_core.documents import Document
 
-from cms.rag.context import build_context, build_generation_context, used_citations
+from cms.rag.context import (
+    build_context,
+    build_generation_context,
+    guidance_hit,
+    used_citations,
+)
 from cms.schemas.generation import Citation
 
 BREADCRUMB = "Warranty Policy > 2. Manufacturing Defects > 2.3 Charging Circuit"
@@ -157,3 +162,17 @@ def test_a_fabricated_marker_is_dropped_without_raising() -> None:
 
 def test_no_citations_to_filter() -> None:
     assert used_citations("anything [1]", []) == []
+
+
+def test_department_guidance_is_cited_first_and_keeps_its_type() -> None:
+    answer = guidance_hit(
+        {"id": "r1", "department_id": "warranty", "answer_text": "Replace the unit."}, "Warranty"
+    )
+
+    policy_context, _, citations = build_generation_context([answer, _hit("c1")], [_hit("k1")])
+
+    assert policy_context.startswith("[1] Department guidance — Warranty\nDepartment guidance\nReplace the unit.")
+    assert [(c.marker, c.doc_type) for c in citations] == [(1, "guidance"), (2, "policy"), (3, "case")]
+    assert citations[0].section == "Department guidance"
+    assert citations[0].snippet == "Replace the unit."
+    assert citations[0].doc_id == "r1"

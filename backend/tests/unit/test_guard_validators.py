@@ -80,3 +80,13 @@ def test_draft_citing_policy_and_case_passes() -> None:
     draft = "Covered [1]; a similar case was replaced [2]."
 
     assert isinstance(PolicyCited().validate(draft, {"citations": [POLICY, CASE]}), PassResult)
+
+
+def test_draft_citing_department_guidance_and_case_passes() -> None:
+    guidance = Citation(
+        marker=3, doc_id="r", chunk_id="r", title="Department guidance — Warranty", section="g",
+        doc_type="guidance",
+    )
+    draft = "We will replace it [3]; a similar case was replaced [2]."
+
+    assert isinstance(PolicyCited().validate(draft, {"citations": [POLICY, CASE, guidance]}), PassResult)

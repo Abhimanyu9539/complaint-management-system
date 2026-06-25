@@ -1,3 +1,5 @@
+from langchain_core.documents import Document
+
 from cms.rag import ticket_graph as ticket_graph_module
 from cms.schemas.ticket_classification import DepartmentCandidate, TicketClassification
 
@@ -149,3 +151,16 @@ async def test_blocked_ticket_goes_no_further(monkeypatch) -> None:
     assert ran == ["input_guard"]
     assert state["input_blocked"] is True
     assert "classification" not in state and "draft" not in state
+
+
+async def test_no_match_with_a_department_answer_is_drafted(monkeypatch) -> None:
+    ran = _install_nodes(monkeypatch, no_match=True)
+    answer = (Document(page_content="Department guidance\nReplace it.", metadata={"doc_type": "guidance"}), 1.0)
+
+    state = await ticket_graph_module.build_ticket_graph().ainvoke(
+        {"ticket_id": "t1", "ticket_no": 1042, "query": "X200 won't charge", "guidance_hits": [answer]}
+    )
+
+    assert "ticket_no_match" not in ran
+    assert ran[-2:] == ["draft_reply", "ticket_output_guard"]
+    assert state["guidance_hits"] == [answer]
