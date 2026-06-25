@@ -80,6 +80,8 @@ def build_context(
 
     for marker, (document, _score) in enumerate(hits, start=start):
         metadata = document.metadata
+        # Only a department's answer sets this; retrieved chunks take the caller's type.
+        chunk_type = metadata.get("doc_type", doc_type)
         block = f"[{marker}] {metadata.get('title', 'Untitled')}\n{document.page_content}"
 
         cost = count_tokens(block)
@@ -102,12 +104,31 @@ def build_context(
                 title=str(metadata.get("title", "Untitled")),
                 section=_section(document),
                 snippet=_snippet(document),
-                doc_type=doc_type,
+                doc_type=chunk_type,
             )
         )
 
     logger.info("build_context: %d %s chunk(s), ~%d tokens", len(blocks), doc_type, used)
     return BLOCK_SEPARATOR.join(blocks), citations
+
+
+def guidance_hit(response: dict, department_name: str) -> tuple[Document, float]:
+    """A department's answer (a `dept_responses` row) as a hit the drafter can cite.
+
+    The first line plays the part of a policy chunk's breadcrumb, so the
+    citation's section reads "Department guidance" and its snippet is the answer.
+    """
+    document = Document(
+        page_content=f"Department guidance\n{response['answer_text']}",
+        metadata={
+            "title": get_settings().guidance_title_template.format(department=department_name),
+            "doc_id": response["id"],
+            "chunk_id": response["id"],
+            "department_id": response["department_id"],
+            "doc_type": "guidance",
+        },
+    )
+    return document, 1.0
 
 
 def build_generation_context(

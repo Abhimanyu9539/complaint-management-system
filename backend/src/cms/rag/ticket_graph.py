@@ -5,7 +5,7 @@
                           +-> analyze_ticket -+-> retrieve_policies -+
                                               +-> retrieve_cases ----+-> join_retrieval
     join_retrieval -+-> END                                  (retrieval failed)
-                    +-> ticket_no_match -> END               (no policy matched)
+                    +-> ticket_no_match -> END               (no policy matched, no dept answer)
                     +-> draft_reply -+-> END                 (drafting failed)
                                      +-> ticket_output_guard -+-> END          (grounded, or still not)
                                                               +-> draft_reply  (ungrounded, first time)
@@ -36,7 +36,7 @@ from cms.rag.nodes.retrieve_policies import retrieve_policies
 from cms.rag.nodes.ticket_no_match import ticket_no_match
 from cms.rag.nodes.ticket_output_guard import ticket_output_guard
 from cms.rag.subgraphs.complaint import route_after_output_guard
-from cms.rag.ticket_state import TicketState
+from cms.rag.ticket_state import TicketState, needs_holding_reply
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +78,14 @@ def route_after_input_guard(state: TicketState) -> list[str] | str:
 
 
 def route_after_retrieval(state: TicketState) -> str:
-    """Stop if either retrieval failed; otherwise draft, or hold when no policy matched."""
+    """Stop if either retrieval failed; otherwise draft, or hold when there is nothing to draft from.
+
+    A department's answer is enough to draft from even when no policy matched.
+    """
     errors = state.get("errors", {})
     if RETRIEVE_POLICIES in errors or RETRIEVE_CASES in errors:
         return "failed"
-    return "no_match_found" if state.get("no_match") else "match_found"
+    return "no_match_found" if needs_holding_reply(state) else "match_found"
 
 
 def route_after_draft(state: TicketState) -> str:

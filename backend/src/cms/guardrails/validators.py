@@ -113,7 +113,8 @@ class PolicyCited(Validator):
             for citation in metadata.get("citations", [])
             if citation.marker in markers
         }
-        if "case" in cited_types and "policy" not in cited_types:
+        # A department's answer authorises a remedy the way a policy does.
+        if "case" in cited_types and not cited_types & {"policy", "guidance"}:
             return FailResult(
                 error_message=(
                     "The draft rests only on past cases. Cite the policy extract that "

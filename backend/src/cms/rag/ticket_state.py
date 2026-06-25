@@ -35,6 +35,9 @@ class TicketState(_RequiredState, total=False):
     policy_queries: list[str]
     risk_flags: list[RiskFlag]
 
+    # --- department answers (set by the pipeline after an escalation) ---
+    guidance_hits: list[tuple[Document, float]]  # newest first, offered before the policies
+
     # --- retrieval ---
     policy_hits: list[tuple[Document, float]]  # (chunk, score), best first
     case_hits: list[tuple[Document, float]]  # (chunk, score), best first
@@ -49,3 +52,13 @@ class TicketState(_RequiredState, total=False):
     # Stage -> error, for nodes that failed without ending the run. Parallel
     # branches can both write it, so updates are merged.
     errors: Annotated[dict[str, str], operator.or_]
+
+
+def drafting_sources(state: TicketState) -> list[tuple[Document, float]]:
+    """What the drafter cites before the cases: department answers first, then policies."""
+    return state.get("guidance_hits", []) + state.get("policy_hits", [])
+
+
+def needs_holding_reply(state: TicketState) -> bool:
+    """No policy matched and no department has answered, so there is nothing to draft from."""
+    return bool(state.get("no_match")) and not state.get("guidance_hits")
