@@ -56,14 +56,15 @@ class UnknownDepartment(Exception):
 # `processing` and the three statuses after it are written by the ticket
 # pipeline: `start_processing` on the way in, the gate (`finish_processing`) on
 # the way out. `drafted` and `needs_review` may go back to `processing` so a
-# ticket can be drafted again (Regenerate, `cms-triage`).
+# ticket can be drafted again (Regenerate, `cms-triage`). A ticket with a
+# department's answer is redrafted from it and comes back to `dept_responded`.
 ALLOWED: dict[str, frozenset[str]] = {
     "new": frozenset({"processing", "escalated", "resolved"}),
-    "processing": frozenset({"drafted", "needs_review", "processing_failed"}),
+    "processing": frozenset({"drafted", "needs_review", "dept_responded", "processing_failed"}),
     "drafted": frozenset({"escalated", "resolved", "processing"}),
     "needs_review": frozenset({"escalated", "resolved", "processing"}),
     "escalated": frozenset({"dept_responded", "resolved"}),
-    "dept_responded": frozenset({"escalated", "resolved"}),
+    "dept_responded": frozenset({"escalated", "resolved", "processing"}),
     # Reopening: lld.md has resolved → drafted when a customer replies again.
     "resolved": frozenset({"drafted"}),
     "processing_failed": frozenset({"processing"}),
@@ -142,6 +143,7 @@ def _to_draft(row: dict, feedback: dict | None = None) -> TicketDraft:
         guard_reasons=row.get("guard_reasons") or [],
         retrieved_cases=row.get("retrieved_cases") or [],
         policy_refs=row.get("policy_refs") or [],
+        guidance_refs=row.get("guidance_refs") or [],
         model=row["model"],
         prompt_version=row["prompt_version"],
         created_at=row["created_at"],
@@ -228,7 +230,7 @@ async def start_processing(ticket_id: str, resume: bool = True) -> dict:
 
 
 async def finish_processing(ticket_id: str, status: str, reasons: list[str]) -> None:
-    """The gate's outcome: `drafted`, `needs_review` or `processing_failed`, with the reasons."""
+    """The run's outcome: `drafted`, `needs_review`, `dept_responded` or `processing_failed`, with the reasons."""
     current = await tickets.fetch_ticket(ticket_id)
     assert_transition(current["status"], status)
 
@@ -237,16 +239,27 @@ async def finish_processing(ticket_id: str, status: str, reasons: list[str]) -> 
     logger.info("Ticket %s gated to %s: %s", ticket_id, status, reasons)
 
 
-async def escalate_ticket(ticket_id: str, department_id: str, note: str | None = None) -> Ticket:
+async def get_department(department_id: str) -> dict:
+    """The department, or `UnknownDepartment` (a 422) when it is not one of the twelve.
+
+    The FK would reject a bad value anyway, but as a PostgREST error surfacing
+    as a 500 — checking first turns that into a 422 that names the problem.
+    """
+    try:
+        return await departments.fetch_department(department_id)
+    except LookupError:
+        raise UnknownDepartment(f"'{department_id}' is not one of the departments.") from None
+
+
+async def escalate_ticket(
+    ticket_id: str, department_id: str, note: str | None = None, email: dict | None = None
+) -> Ticket:
     """Hand a ticket to a specialist department (Path B).
 
-    The department is validated against the closed set before the write. The FK
-    would reject a bad value anyway, but as a PostgREST error surfacing as a 500
-    — checking first turns that into a 422 that names the problem.
+    `email` describes the question already sent to the department (`to`,
+    `message_id`, ...) and goes on the `escalated` event with the note.
     """
-    valid = {row["id"] for row in await departments.list_departments()}
-    if department_id not in valid:
-        raise UnknownDepartment(f"'{department_id}' is not one of the {len(valid)} departments.")
+    await get_department(department_id)
 
     current = await tickets.fetch_ticket(ticket_id)
     assert_transition(current["status"], "escalated")
@@ -258,10 +271,35 @@ async def escalate_ticket(ticket_id: str, department_id: str, note: str | None =
     await ticket_events.append_event(
         ticket_id,
         "escalated",
-        {"department_id": department_id, "note": note, "from_status": current["status"]},
+        {
+            "department_id": department_id,
+            "note": note,
+            "from_status": current["status"],
+            **(email or {}),
+        },
     )
 
     logger.info("Ticket %s escalated to %s", ticket_id, department_id)
+    return to_ticket(row)
+
+
+async def mark_dept_responded(ticket_id: str, response: dict) -> Ticket:
+    """Record that the escalated department answered. The redraft runs after this."""
+    current = await tickets.fetch_ticket(ticket_id)
+    assert_transition(current["status"], "dept_responded")
+
+    row = await tickets.update_ticket(ticket_id, {"status": "dept_responded"})
+    await ticket_events.append_event(
+        ticket_id,
+        "dept_responded",
+        {
+            "dept_response_id": response["id"],
+            "department_id": response["department_id"],
+            "answer": response["answer_text"],
+        },
+    )
+
+    logger.info("Ticket %s: %s answered", ticket_id, response["department_id"])
     return to_ticket(row)
 
 

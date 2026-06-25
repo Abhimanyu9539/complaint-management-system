@@ -6,7 +6,8 @@ for a person to handle. The classification and the draft are saved separately,
 so one failing never loses the other.
 
 The ticket moves `processing` → `drafted` | `needs_review` | `processing_failed`;
-`ticket_gate.review_reasons` decides between the first two.
+`ticket_gate.review_reasons` decides between the first two. A ticket a department
+has answered is drafted from that answer too, and goes back to `dept_responded`.
 """
 
 import logging
@@ -15,11 +16,17 @@ from uuid import UUID, uuid4
 from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
-from cms.db.repositories import drafts, ticket_events, tickets
-from cms.rag.context import build_generation_context
+from cms.db.repositories import (
+    departments,
+    dept_responses,
+    drafts,
+    ticket_events,
+    tickets,
+)
+from cms.rag.context import build_generation_context, guidance_hit
 from cms.rag.nodes.classify_ticket import join_complaint
 from cms.rag.ticket_graph import DRAFT_REPLY, get_ticket_graph
-from cms.rag.ticket_state import TicketState
+from cms.rag.ticket_state import TicketState, needs_holding_reply
 from cms.schemas.generation import Citation
 from cms.schemas.ticket_classification import TicketClassification
 from cms.services import ticket_service
@@ -65,16 +72,32 @@ def evidence_rows(
     policy_hits: list[tuple[Document, float]],
     case_hits: list[tuple[Document, float]],
     cited: list[Citation],
-) -> tuple[list[dict], list[dict]]:
-    """`(retrieved_cases, policy_refs)`: every chunk the drafter was offered, with its score.
+    guidance_hits: list[tuple[Document, float]] | None = None,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """`(retrieved_cases, policy_refs, guidance_refs)`: every source the drafter was offered.
 
-    The offered citations are rebuilt the way the drafter built them. They keep
-    the hits' order and stop at the context budget, so zipping pairs each with its hit.
+    The offered citations are rebuilt the way the drafter built them, department
+    answers first. They keep the hits' order and stop at the context budget, so
+    zipping pairs each with its hit.
     """
-    _, _, offered = build_generation_context(policy_hits, case_hits)
+    guidance_hits = guidance_hits or []
+    _, _, offered = build_generation_context(guidance_hits + policy_hits, case_hits)
     cited_markers = {citation.marker for citation in cited}
+    offered_guidance = [c for c in offered if c.doc_type == "guidance"]
     offered_policies = [c for c in offered if c.doc_type == "policy"]
     offered_cases = [c for c in offered if c.doc_type == "case"]
+
+    guidance_refs = [
+        {
+            "marker": citation.marker,
+            "dept_response_id": citation.doc_id,
+            "department_id": document.metadata.get("department_id", ""),
+            "title": citation.title,
+            "snippet": citation.snippet,
+            "cited": citation.marker in cited_markers,
+        }
+        for citation, (document, _score) in zip(offered_guidance, guidance_hits)
+    ]
 
     policy_refs = [
         {**_evidence_row(citation, score, cited_markers, "policy_id"), "section": citation.section}
@@ -87,7 +110,19 @@ def evidence_rows(
         }
         for citation, (document, score) in zip(offered_cases, case_hits)
     ]
-    return retrieved_cases, policy_refs
+    return retrieved_cases, policy_refs, guidance_refs
+
+
+async def _guidance_hits(ticket_id: str) -> list[tuple[Document, float]]:
+    """Every department answer on the ticket, newest first, as hits the drafter can cite."""
+    responses = await dept_responses.list_responses(ticket_id)
+    if not responses:
+        return []
+    names = {row["id"]: row["name"] for row in await departments.list_departments()}
+    return [
+        guidance_hit(response, names.get(response["department_id"], response["department_id"]))
+        for response in responses
+    ]
 
 
 async def _fail(ticket_id: str, stage: str, detail: dict) -> None:
@@ -130,7 +165,7 @@ async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> bool:
     Returns whether the draft was saved.
     """
     settings = get_settings()
-    no_match = bool(state.get("no_match"))
+    no_match = needs_holding_reply(state)
     model = settings.holding_reply_model if no_match else settings.openrouter_model_main
     prompt_version = (
         settings.holding_reply_prompt_version if no_match else settings.customer_reply_prompt_version
@@ -140,8 +175,11 @@ async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> bool:
     try:
         latest = await drafts.fetch_latest_draft(ticket_id)
         version = latest["version"] + 1 if latest else 1
-        retrieved_cases, policy_refs = evidence_rows(
-            state.get("policy_hits", []), state.get("case_hits", []), state.get("citations", [])
+        retrieved_cases, policy_refs, guidance_refs = evidence_rows(
+            state.get("policy_hits", []),
+            state.get("case_hits", []),
+            state.get("citations", []),
+            state.get("guidance_hits", []),
         )
         saved = await drafts.insert_draft(
             {
@@ -151,6 +189,7 @@ async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> bool:
                 "draft_text": state["draft"],
                 "retrieved_cases": retrieved_cases,
                 "policy_refs": policy_refs,
+                "guidance_refs": guidance_refs,
                 "no_match": no_match,
                 "grounded": grounded,
                 "guard_reasons": state.get("guard_reasons", []) if grounded is False else [],
@@ -205,6 +244,15 @@ async def process_ticket(ticket_id: str) -> None:
         await _fail(ticket_id, "fetch", {"error": _error_text(exc)})
         return
 
+    # Drafting without a department's answer would undo the escalation, so a failed read stops here.
+    try:
+        guidance_hits = await _guidance_hits(ticket_id)
+    except Exception as exc:
+        logger.exception("Ticket %s: reading the department answers failed", ticket_id)
+        await _fail(ticket_id, "fetch_guidance", {"error": _error_text(exc)})
+        await _finish(ticket_id, "processing_failed", [])
+        return
+
     # The root run's id in LangSmith, stored on the draft so feedback can find the trace.
     run_id = uuid4()
     try:
@@ -213,6 +261,7 @@ async def process_ticket(ticket_id: str) -> None:
                 "ticket_id": ticket_id,
                 "ticket_no": row.get("ticket_no"),
                 "query": join_complaint(row["subject"], row.get("body")),
+                "guidance_hits": guidance_hits,
             },
             config={"run_id": run_id},
         )
@@ -248,8 +297,13 @@ async def process_ticket(ticket_id: str) -> None:
     reasons = review_reasons(
         classification,
         row.get("severity", "normal"),
-        bool(state.get("no_match")),
+        needs_holding_reply(state),
         state.get("grounded"),
         state.get("risk_flags", []),
     )
-    await _finish(ticket_id, "needs_review" if reasons else "drafted", reasons)
+    # Redrafted from a department's answer: back to the top of the queue, reasons still shown.
+    if guidance_hits:
+        status = "dept_responded"
+    else:
+        status = "needs_review" if reasons else "drafted"
+    await _finish(ticket_id, status, reasons)
