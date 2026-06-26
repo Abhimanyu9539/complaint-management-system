@@ -33,6 +33,7 @@ Files run in filename order, which is FK dependency order.
 | `0021_drafts_guard.sql` | `drafts` | adds `grounded` + `guard_reasons`: the output guard's verdict on a ticket draft |
 | `0022_gate_and_send.sql` | `tickets`, `draft_feedback` | adds `review_reasons`; `draft_feedback.user_id` nullable until login exists |
 | `0023_dept_guidance.sql` | `drafts` | adds `guidance_refs`: the department answers a draft was written from |
+| `0024_cases_ticket_unique.sql` | `cases` | `UNIQUE (ticket_id)`: one flywheel case per ticket, so minting is an upsert |
 
 `0017` breaks the "one file per table" rule in the only way that keeps it
 meaningful: `0004` is the file that *creates* `tickets`, and editing it in place
