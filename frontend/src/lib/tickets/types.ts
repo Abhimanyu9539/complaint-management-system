@@ -119,6 +119,23 @@ export interface PolicyEvidence {
   cited: boolean;
 }
 
+/** A department's answer the drafter was offered. `marker` is its `[n]` in the draft. */
+export interface GuidanceEvidence {
+  marker: number;
+  deptResponseId: string;
+  departmentId: string;
+  title: string;
+  snippet: string;
+  cited: boolean;
+}
+
+/** A question drafted for a department; the agent edits it before escalating. */
+export interface DeptQuestion {
+  draftId: string;
+  departmentId: string;
+  text: string;
+}
+
 /** Why an agent rejected a draft (`draft_feedback.edit_reason`). */
 export type DiscardReason = 'wrong_case' | 'wrong_tone' | 'wrong_policy' | 'other';
 
@@ -144,6 +161,8 @@ export interface TicketDraft {
   guardReasons: string[];
   retrievedCases: CaseEvidence[];
   policyRefs: PolicyEvidence[];
+  /** The department answers it was written from, after an escalation. Cited first. */
+  guidanceRefs: GuidanceEvidence[];
   model: string;
   promptVersion: string;
   createdAt: string;

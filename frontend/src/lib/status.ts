@@ -296,8 +296,8 @@ export const TICKET_STATUS_ORDER: readonly TicketStatus[] = [
 const SEVERITY_TONES: Record<TicketSeverity, Tone> = {
   low: 'ok',
   normal: 'info',
-  high: 'warn',
-  critical: 'danger',
+  high: 'danger',
+  critical: 'pink',
 };
 
 const SEVERITY_LABELS: Record<TicketSeverity, string> = {

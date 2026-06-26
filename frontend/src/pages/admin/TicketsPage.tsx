@@ -97,8 +97,17 @@ export function TicketsPage() {
     tickets.refresh();
     escalation.refresh();
   });
-  const { detail, detailLoading, acting, actionError, openTicket, escalate, resolve, clear } =
-    ticketActions;
+  const {
+    detail,
+    detailLoading,
+    acting,
+    actionError,
+    openTicket,
+    draftQuestion,
+    escalate,
+    resolve,
+    clear,
+  } = ticketActions;
 
   const summary = escalation.data;
   const openCount = useMemo(() => {
@@ -187,6 +196,7 @@ export function TicketsPage() {
         loading={detailLoading}
         departments={departments.data ?? []}
         onClose={clear}
+        onDraftQuestion={draftQuestion}
         onEscalate={escalate}
         onResolve={resolve}
         actionError={actionError}

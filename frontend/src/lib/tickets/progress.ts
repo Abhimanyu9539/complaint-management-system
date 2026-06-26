@@ -1,153 +1,152 @@
 /**
- * "Where has this ticket got to" — derived, never guessed, from real data.
- *
- * The canonical path is `ticket_service.ALLOWED` (lld.md §2) flattened into six
- * stages: Received → Classified → Drafted → Escalated → Dept replied →
- * Resolved. A stage is `done` only when a matching `ticket_events` row says so.
- * Deriving "Classified ✓" from `ticket.status` alone would put a tick next to a
- * classifier that does not exist yet (`rag/` is an empty package) — today only
- * `created`, `escalated` and `resolved` are ever written, so most tickets show
- * gaps, and those gaps are the truth.
- *
- * Pure and side-effect free so the four-state logic is testable without a DOM.
+ * The ticket's path so far, one row per milestone in the order it happened, then
+ * the rows still ahead. Milestones come from `ticket_events`, so a redraft or a
+ * second escalation adds a row instead of re-ticking a fixed list. Every other
+ * event (gated, failed, discarded) stays in the full event history.
  */
 
-import type { Ticket, TicketEvent, TicketStatus } from './types';
+import type { Ticket, TicketEvent } from './types';
 
-export type ProgressStepId =
-  | 'received'
-  | 'classified'
-  | 'drafted'
-  | 'escalated'
-  | 'dept_replied'
-  | 'resolved';
-
-export type ProgressStepState = 'done' | 'current' | 'skipped' | 'pending';
+export type ProgressStepState = 'done' | 'current' | 'pending';
 
 export interface ProgressStep {
-  id: ProgressStepId;
+  key: string;
   label: string;
   state: ProgressStepState;
-  /** ISO timestamp the step completed. Null unless `state === 'done'`. */
+  /** When a done step happened. Null for the rows still ahead. */
   at: string | null;
+  /** Shown under a row still ahead, in place of a time. */
+  caption: string | null;
 }
 
 export interface TicketProgress {
   steps: ProgressStep[];
-  /**
-   * A `processing_failed` ticket is not paused *on* a stage — it fell off the
-   * path. The tracker renders a banner for this rather than a pulsing dot.
-   */
+  /** `processing_failed`: the ticket fell off the pipeline. The tracker shows a banner. */
   failed: boolean;
 }
 
-interface StepDef {
-  id: ProgressStepId;
-  label: string;
-  /** The `ticket_events.event` value that marks this stage done. */
-  event: string;
+type DepartmentLabel = (id: string | null) => string;
+
+const REPLY_SENT = 'Reply sent';
+
+function done(key: string, label: string, at: string | null): ProgressStep {
+  return { key, label, state: 'done', at, caption: null };
 }
 
-const STEPS: readonly StepDef[] = [
-  { id: 'received', label: 'Received', event: 'created' },
-  { id: 'classified', label: 'Classified', event: 'classified' },
-  { id: 'drafted', label: 'Drafted', event: 'drafted' },
-  { id: 'escalated', label: 'Escalated', event: 'escalated' },
-  { id: 'dept_replied', label: 'Dept replied', event: 'dept_responded' },
-  { id: 'resolved', label: 'Resolved', event: 'resolved' },
-];
-
-/**
- * The step a ticket's own status names as "home" — where the status implies it
- * last landed, independent of whether that step's event has logged yet. Used
- * both as the starting point for finding the *next undone* step (`current`)
- * and as the frontier for deciding which un-done earlier steps were skipped
- * rather than merely pending.
- */
-const STATUS_STEP_INDEX: Record<TicketStatus, number> = {
-  new: 0,
-  processing: 1,
-  drafted: 2,
-  needs_review: 2,
-  escalated: 3,
-  dept_responded: 4,
-  resolved: 5,
-  processing_failed: 1,
-};
-
-/** No pulsing "current" dot for a status that has already ended the ticket's life. */
-const TERMINAL_STATUSES = new Set<TicketStatus>(['resolved']);
-
-function lastEventAt(events: readonly TicketEvent[], eventName: string): string | null {
-  let latest: string | null = null;
-  let latestMs = -Infinity;
-  for (const event of events) {
-    if (event.event !== eventName) continue;
-    const ms = Date.parse(event.createdAt);
-    if (Number.isNaN(ms) || ms < latestMs) continue;
-    latestMs = ms;
-    latest = event.createdAt;
-  }
-  return latest;
+function ahead(label: string, state: 'current' | 'pending', caption: string): ProgressStep {
+  return { key: `ahead-${label}`, label, state, at: null, caption };
 }
 
-/**
- * When the audit trail is silent, two stages still have an authoritative
- * fallback timestamp on the ticket row itself: a ticket that exists was
- * necessarily received (`created_at`), and a ticket the backend calls
- * `resolved` was necessarily resolved (`resolved_at`) even if — defensively —
- * its `resolved` event row is missing (or, in the fully defensive case,
- * `resolved_at` is missing too, and the step is still `done`, just undated).
- * Every other stage has no such column, so an absent event there means the
- * stage genuinely has not happened.
- */
-function stepDoneAt(
-  step: StepDef,
-  ticket: Ticket,
-  events: readonly TicketEvent[],
-): { done: boolean; at: string | null } {
-  const fromEvent = lastEventAt(events, step.event);
-  if (fromEvent) return { done: true, at: fromEvent };
-  if (step.id === 'received') return { done: true, at: ticket.createdAt };
-  if (step.id === 'resolved' && ticket.status === 'resolved') {
-    return { done: true, at: ticket.resolvedAt };
-  }
-  return { done: false, at: null };
+function departmentOf(event: TicketEvent): string | null {
+  const id = event.payload.department_id;
+  return typeof id === 'string' ? id : null;
 }
 
-export function buildProgress(ticket: Ticket, events: readonly TicketEvent[]): TicketProgress {
-  const failed = ticket.status === 'processing_failed';
-  const frontier = STATUS_STEP_INDEX[ticket.status] ?? 0;
-  const showCurrent = !failed && !TERMINAL_STATUSES.has(ticket.status);
+/** The milestone rows in `events`, oldest first. */
+function milestones(events: readonly TicketEvent[], departmentLabel: DepartmentLabel): ProgressStep[] {
+  const sorted = [...events].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  const steps: ProgressStep[] = [];
+  let classified = false;
+  let drafted = false;
+  // The department whose answer arrived since the last draft, for the redraft's label.
+  let answeredBy: string | null = null;
 
-  const done = STEPS.map((step) => stepDoneAt(step, ticket, events));
-
-  // The status's home step is often already `done` (a ticket can only reach
-  // `dept_responded` once the `dept_replied` step's event has fired) — so
-  // "current" is the first *undone* step at or after that point, not the home
-  // step itself.
-  let currentIndex = -1;
-  if (showCurrent) {
-    for (let index = frontier; index < STEPS.length; index += 1) {
-      if (!done[index].done) {
-        currentIndex = index;
+  for (const event of sorted) {
+    const key = String(event.id);
+    const at = event.createdAt;
+    switch (event.event) {
+      case 'created':
+        steps.push(done(key, 'Received', at));
+        break;
+      case 'classified':
+        // Every re-run classifies again; the first one is the milestone.
+        if (!classified) steps.push(done(key, 'Classified', at));
+        classified = true;
+        break;
+      case 'drafted': {
+        const label = !drafted
+          ? 'Drafted'
+          : answeredBy
+            ? `Redrafted from ${answeredBy}'s answer`
+            : 'Redrafted';
+        steps.push(done(key, label, at));
+        drafted = true;
+        answeredBy = null;
         break;
       }
+      case 'escalated':
+        steps.push(done(key, `Escalated to ${departmentLabel(departmentOf(event))}`, at));
+        break;
+      case 'dept_responded':
+        answeredBy = departmentLabel(departmentOf(event));
+        steps.push(done(key, `${answeredBy} replied`, at));
+        break;
+      case 'sent':
+        steps.push(done(key, REPLY_SENT, at));
+        break;
+      case 'resolved':
+        // Sending resolves the ticket, so the two read as one step.
+        if (steps.at(-1)?.label === REPLY_SENT) {
+          steps[steps.length - 1] = done(key, `${REPLY_SENT} · Resolved`, at);
+        } else {
+          steps.push(done(key, 'Resolved', at));
+        }
+        break;
+      case 'reopened':
+        steps.push(done(key, 'Reopened', at));
+        break;
     }
   }
+  return steps;
+}
 
-  const steps: ProgressStep[] = STEPS.map((step, index) => {
-    if (done[index].done) {
-      return { id: step.id, label: step.label, state: 'done', at: done[index].at };
+/** What is still ahead for a ticket at its status. The first row is current when someone is on it. */
+function stepsAhead(
+  ticket: Ticket,
+  events: readonly TicketEvent[],
+  departmentLabel: DepartmentLabel,
+): ProgressStep[] {
+  const resolved = ahead('Resolved', 'pending', 'Pending');
+  switch (ticket.status) {
+    case 'new':
+      return [ahead('Drafted', 'pending', 'Pending'), resolved];
+    case 'processing': {
+      const redraft = events.some((event) => event.event === 'drafted');
+      return [ahead(redraft ? 'Redrafting the reply' : 'Drafting the reply', 'current', 'In progress'), resolved];
     }
-    if (index === currentIndex) {
-      return { id: step.id, label: step.label, state: 'current', at: null };
-    }
-    if (index < frontier) {
-      return { id: step.id, label: step.label, state: 'skipped', at: null };
-    }
-    return { id: step.id, label: step.label, state: 'pending', at: null };
-  });
+    case 'escalated':
+      return [
+        ahead(`Waiting for ${departmentLabel(ticket.escalatedDept)}`, 'current', 'In progress'),
+        resolved,
+      ];
+    case 'drafted':
+    case 'needs_review':
+    case 'dept_responded':
+      return [ahead('Resolved', 'current', 'Review the draft, then send it')];
+    case 'processing_failed':
+      return [resolved];
+    case 'resolved':
+      return [];
+  }
+}
 
-  return { steps, failed };
+export function buildProgress(
+  ticket: Ticket,
+  events: readonly TicketEvent[],
+  departmentLabel: DepartmentLabel,
+): TicketProgress {
+  const steps = milestones(events, departmentLabel);
+
+  // The ticket row vouches for these two even when their event is missing.
+  if (!events.some((event) => event.event === 'created')) {
+    steps.unshift(done('received', 'Received', ticket.createdAt));
+  }
+  if (ticket.status === 'resolved' && !events.some((event) => event.event === 'resolved')) {
+    steps.push(done('resolved', 'Resolved', ticket.resolvedAt));
+  }
+
+  return {
+    steps: [...steps, ...stepsAhead(ticket, events, departmentLabel)],
+    failed: ticket.status === 'processing_failed',
+  };
 }

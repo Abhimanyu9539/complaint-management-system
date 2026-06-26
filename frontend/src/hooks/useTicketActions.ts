@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { AdminRequestError } from '@/lib/admin/errors';
 import { adminTransport } from '@/lib/admin/transport';
-import type { DiscardReason, TicketDetail } from '@/lib/tickets/types';
+import type { DeptQuestion, DiscardReason, TicketDetail } from '@/lib/tickets/types';
 
 export interface UseTicketActionsResult {
   detail: TicketDetail | null;
@@ -10,7 +10,12 @@ export interface UseTicketActionsResult {
   actionError: string | null;
   acting: boolean;
   openTicket(ticketId: string): Promise<void>;
-  escalate(departmentId: string, note: string): Promise<void>;
+  /** A question drafted for the department, or null if drafting failed. Changes nothing. */
+  draftQuestion(departmentId: string): Promise<DeptQuestion | null>;
+  /** Email the question to the department and hand the ticket over. */
+  escalate(departmentId: string, question: string, questionDraftId: string | null): Promise<void>;
+  /** Save the department's answer; the draft is rewritten from it in the background. */
+  recordDeptResponse(answer: string): Promise<void>;
   resolve(note: string): Promise<void>;
   /** Email the (possibly edited) draft to the customer; resolves the ticket. */
   sendReply(draftId: string, finalText: string): Promise<void>;
@@ -86,13 +91,51 @@ export function useTicketActions(onChanged?: () => void): UseTicketActionsResult
     [openTicket, onChanged],
   );
 
+  const draftQuestion = useCallback(
+    async (departmentId: string): Promise<DeptQuestion | null> => {
+      const ticketId = detail?.ticket.id;
+      if (!ticketId) return null;
+      try {
+        const result = await adminTransport.draftDeptQuestion(
+          ticketId,
+          departmentId,
+          new AbortController().signal,
+        );
+        return result.data;
+      } catch (err) {
+        // Not an action failure: the agent can still write the question by hand.
+        console.warn('tickets: drafting the department question failed', err);
+        return null;
+      }
+    },
+    [detail],
+  );
+
   const escalate = useCallback(
-    async (departmentId: string, note: string) => {
+    async (departmentId: string, question: string, questionDraftId: string | null) => {
       const ticketId = detail?.ticket.id;
       if (!ticketId) return;
       await runAction(
         (signal) =>
-          adminTransport.escalateTicket(ticketId, departmentId, note.trim() || null, signal),
+          adminTransport.escalateTicket(
+            ticketId,
+            departmentId,
+            question.trim(),
+            questionDraftId,
+            signal,
+          ),
+        ticketId,
+      );
+    },
+    [detail, runAction],
+  );
+
+  const recordDeptResponse = useCallback(
+    async (answer: string) => {
+      const ticketId = detail?.ticket.id;
+      if (!ticketId) return;
+      await runAction(
+        (signal) => adminTransport.recordDeptResponse(ticketId, answer.trim(), signal),
         ticketId,
       );
     },
@@ -154,7 +197,9 @@ export function useTicketActions(onChanged?: () => void): UseTicketActionsResult
     actionError,
     acting,
     openTicket,
+    draftQuestion,
     escalate,
+    recordDeptResponse,
     resolve,
     sendReply,
     discard,

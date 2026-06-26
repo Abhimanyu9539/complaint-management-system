@@ -29,6 +29,7 @@ import type {
   TriggerIngestionResponse,
 } from './types';
 import type {
+  DeptQuestion,
   DiscardReason,
   Ticket,
   TicketDetail,
@@ -266,6 +267,15 @@ interface WirePolicyEvidence {
   cited: boolean;
 }
 
+interface WireGuidanceEvidence {
+  marker: number;
+  dept_response_id: string;
+  department_id: string;
+  title: string;
+  snippet: string;
+  cited: boolean;
+}
+
 interface WireTicketDraft {
   id: string;
   version: number;
@@ -275,6 +285,7 @@ interface WireTicketDraft {
   guard_reasons: string[];
   retrieved_cases: WireCaseEvidence[];
   policy_refs: WirePolicyEvidence[];
+  guidance_refs?: WireGuidanceEvidence[];
   model: string;
   prompt_version: string;
   created_at: string;
@@ -347,6 +358,14 @@ function toTicketDraft(wire: WireTicketDraft): TicketDraft {
       section: item.section,
       snippet: item.snippet,
       score: item.score,
+      cited: item.cited,
+    })),
+    guidanceRefs: (wire.guidance_refs ?? []).map((item) => ({
+      marker: item.marker,
+      deptResponseId: item.dept_response_id,
+      departmentId: item.department_id,
+      title: item.title,
+      snippet: item.snippet,
       cited: item.cited,
     })),
     model: wire.model,
@@ -672,15 +691,43 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     });
   }
 
+  async function draftDeptQuestion(
+    ticketId: string,
+    departmentId: string,
+    signal: AbortSignal,
+  ): Promise<AdminResult<DeptQuestion>> {
+    const wire = await postJson<{ draft_id: string; department_id: string; text: string }>(
+      `${tickets}/${encodeURIComponent(ticketId)}/dept-question`,
+      { department_id: departmentId },
+      signal,
+    );
+    return live({ draftId: wire.draft_id, departmentId: wire.department_id, text: wire.text });
+  }
+
   async function escalateTicket(
     ticketId: string,
     departmentId: string,
-    note: string | null,
+    question: string,
+    questionDraftId: string | null,
+    signal: AbortSignal,
+  ): Promise<AdminResult<Ticket>> {
+    // The question travels as `note`: it is what the `escalated` event records.
+    const wire = await postJson<WireTicket>(
+      `${tickets}/${encodeURIComponent(ticketId)}/escalate`,
+      { department_id: departmentId, note: question, question_draft_id: questionDraftId },
+      signal,
+    );
+    return live(toTicket(wire));
+  }
+
+  async function recordDeptResponse(
+    ticketId: string,
+    answerText: string,
     signal: AbortSignal,
   ): Promise<AdminResult<Ticket>> {
     const wire = await postJson<WireTicket>(
-      `${tickets}/${encodeURIComponent(ticketId)}/escalate`,
-      { department_id: departmentId, note },
+      `${tickets}/${encodeURIComponent(ticketId)}/dept-response`,
+      { answer_text: answerText },
       signal,
     );
     return live(toTicket(wire));
@@ -789,7 +836,9 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     rerunStuckDocument,
     listTickets,
     getTicket,
+    draftDeptQuestion,
     escalateTicket,
+    recordDeptResponse,
     resolveTicket,
     sendReply,
     discardDraft,

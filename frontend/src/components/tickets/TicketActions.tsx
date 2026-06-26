@@ -1,20 +1,19 @@
 import { CircleCheck, Send, TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { TextArea } from '@/components/ui/TextArea';
 import { canEscalate, canResolve } from '@/lib/tickets/transitions';
 import type { DepartmentOption } from '@/lib/admin/types';
-import type { Ticket } from '@/lib/tickets/types';
+import type { DeptQuestion, Ticket } from '@/lib/tickets/types';
 
 /**
  * Escalate and resolve.
  *
  * Escalation opens a department picker rather than firing immediately — cms.md
  * §4.3 wants the prediction pre-selected and every override recorded, because
- * an override is a training label. There is no classifier yet, so the picker
- * starts on the prediction when there is one and on nothing when there is not,
- * which is the honest version of the same interaction.
+ * an override is a training label. Picking a department asks the model for a
+ * question to send it; the agent edits it, and Escalate emails it.
  *
  * Shared by `/admin/tickets` and the workbench — one form, driven by
  * `lib/tickets/transitions`, so the two surfaces cannot offer an action the
@@ -23,6 +22,7 @@ import type { Ticket } from '@/lib/tickets/types';
 export function TicketActions({
   ticket,
   departments,
+  onDraftQuestion,
   onEscalate,
   onResolve,
   error,
@@ -30,7 +30,8 @@ export function TicketActions({
 }: {
   ticket: Ticket;
   departments: DepartmentOption[];
-  onEscalate(departmentId: string, note: string): Promise<void>;
+  onDraftQuestion(departmentId: string): Promise<DeptQuestion | null>;
+  onEscalate(departmentId: string, question: string, questionDraftId: string | null): Promise<void>;
   onResolve(note: string): Promise<void>;
   error: string | null;
   acting: boolean;
@@ -38,6 +39,46 @@ export function TicketActions({
   const [mode, setMode] = useState<'idle' | 'escalate' | 'resolve'>('idle');
   const [department, setDepartment] = useState(ticket.predictedDept ?? '');
   const [note, setNote] = useState('');
+  const [questionDraftId, setQuestionDraftId] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [draftFailed, setDraftFailed] = useState(false);
+  // Only the latest request may fill the box: switching department mid-draft discards the older one.
+  const requestRef = useRef(0);
+
+  async function askForQuestion(departmentId: string) {
+    const request = ++requestRef.current;
+    setDrafting(true);
+    setDraftFailed(false);
+    const question = await onDraftQuestion(departmentId);
+    if (request !== requestRef.current) return;
+    setDrafting(false);
+    if (question) {
+      setNote(question.text);
+      setQuestionDraftId(question.draftId);
+    } else {
+      setDraftFailed(true);
+      setQuestionDraftId(null);
+    }
+  }
+
+  function chooseDepartment(departmentId: string) {
+    setDepartment(departmentId);
+    if (departmentId) void askForQuestion(departmentId);
+  }
+
+  function startEscalating() {
+    setMode('escalate');
+    if (department) void askForQuestion(department);
+  }
+
+  function cancel() {
+    requestRef.current += 1;
+    setMode('idle');
+    setNote('');
+    setQuestionDraftId(null);
+    setDrafting(false);
+    setDraftFailed(false);
+  }
 
   const escalateAllowed = canEscalate(ticket.status);
   const resolveAllowed = canResolve(ticket.status);
@@ -70,7 +111,7 @@ export function TicketActions({
             label="Department"
             size="md"
             value={department}
-            onChange={setDepartment}
+            onChange={chooseDepartment}
             options={[
               { value: '', label: 'Select a department…' },
               ...departments.map((entry) => ({ value: entry.id, label: entry.name })),
@@ -80,9 +121,17 @@ export function TicketActions({
             label="Question for the department"
             value={note}
             onChange={setNote}
-            rows={3}
+            rows={5}
             maxLength={2000}
-            hint="Recorded on the audit log. Optional."
+            required
+            disabled={drafting}
+            hint={
+              drafting
+                ? 'Drafting a question…'
+                : draftFailed
+                  ? "Couldn't draft a question. Write it yourself."
+                  : 'Emailed to the department with the complaint below it.'
+            }
           />
         </div>
       )}
@@ -104,14 +153,7 @@ export function TicketActions({
 
       <div className="flex items-center justify-end gap-2">
         {mode !== 'idle' && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setMode('idle');
-              setNote('');
-            }}
-            disabled={acting}
-          >
+          <Button variant="ghost" onClick={cancel} disabled={acting}>
             Cancel
           </Button>
         )}
@@ -120,7 +162,7 @@ export function TicketActions({
           <Button
             variant="secondary"
             icon={<Send size={13} strokeWidth={2} />}
-            onClick={() => setMode('escalate')}
+            onClick={startEscalating}
           >
             Escalate
           </Button>
@@ -139,8 +181,8 @@ export function TicketActions({
           <Button
             variant="primary"
             loading={acting}
-            disabled={acting || !department}
-            onClick={() => void onEscalate(department, note)}
+            disabled={acting || drafting || !department || !note.trim()}
+            onClick={() => void onEscalate(department, note, questionDraftId)}
           >
             Send to department
           </Button>

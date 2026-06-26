@@ -5,14 +5,18 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { TextArea } from '@/components/ui/TextArea';
 import { formatTimestamp } from '@/lib/format';
-import { canRegenerate, canSend, isDraftLocked } from '@/lib/tickets/transitions';
+import {
+  canRecordDeptResponse,
+  canRegenerate,
+  canSend,
+  isDraftLocked,
+} from '@/lib/tickets/transitions';
 import type { DepartmentOption } from '@/lib/admin/types';
-import type { DiscardReason, Ticket, TicketDraft } from '@/lib/tickets/types';
+import type { DeptQuestion, DiscardReason, Ticket, TicketDraft } from '@/lib/tickets/types';
 
 /** Where and when the ticket was escalated, from its latest `escalated` event. */
 export interface EscalationInfo {
   department: string;
-  question: string | null;
   at: string;
 }
 
@@ -25,7 +29,9 @@ interface DraftPaneProps {
   onDiscard(draftId: string, reason: DiscardReason, note: string): Promise<void>;
   onRegenerate(): Promise<void>;
   departments: DepartmentOption[];
-  onEscalate(departmentId: string, note: string): Promise<void>;
+  onDraftQuestion(departmentId: string): Promise<DeptQuestion | null>;
+  onEscalate(departmentId: string, question: string, questionDraftId: string | null): Promise<void>;
+  onRecordDeptResponse(answer: string): Promise<void>;
   onResolve(note: string): Promise<void>;
   actionError: string | null;
   acting: boolean;
@@ -48,6 +54,7 @@ function reasonLabel(reason: DiscardReason | null): string {
 /** The text, with each `[n]` shown as a small superscript naming its source. */
 function DraftText({ draft, text }: { draft: TicketDraft; text: string }) {
   const sources = new Map<number, string>([
+    ...draft.guidanceRefs.map((ref) => [ref.marker, ref.title] as const),
     ...draft.policyRefs.map((ref) => [ref.marker, ref.section || ref.title] as const),
     ...draft.retrievedCases.map((item) => [item.marker, `Past case: ${item.title}`] as const),
   ]);
@@ -98,6 +105,43 @@ function Note({
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The department's answer, pasted in until incoming email is read. Saving it redrafts the reply. */
+function DeptAnswerForm({
+  department,
+  onSave,
+  acting,
+}: {
+  department: string;
+  onSave(answer: string): Promise<void>;
+  acting: boolean;
+}) {
+  const [answer, setAnswer] = useState('');
+
+  return (
+    <div className="mb-2.5 flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
+      <TextArea
+        label={`${department}'s answer`}
+        value={answer}
+        onChange={setAnswer}
+        rows={5}
+        maxLength={4000}
+        hint="Paste the department's reply. The draft is rewritten from it, and cites it as a source."
+      />
+      <div className="flex justify-end">
+        <Button
+          variant="primary"
+          icon={<RefreshCw size={13} strokeWidth={2} />}
+          loading={acting}
+          disabled={acting || !answer.trim()}
+          onClick={() => void onSave(answer)}
+        >
+          Save answer and redraft
+        </Button>
       </div>
     </div>
   );
@@ -299,7 +343,9 @@ export function DraftPane({
   onDiscard,
   onRegenerate,
   departments,
+  onDraftQuestion,
   onEscalate,
+  onRecordDeptResponse,
   onResolve,
   actionError,
   acting,
@@ -330,7 +376,21 @@ export function DraftPane({
                 ? `Escalated to ${escalation.department} · ${formatTimestamp(escalation.at)}. Waiting for the department's answer; the draft is locked until then.`
                 : "Escalated. Waiting for the department's answer; the draft is locked until then."
             }
-            reasons={escalation?.question ? [`Question: ${escalation.question}`] : []}
+          />
+        )}
+        {canRecordDeptResponse(ticket.status) && (
+          <DeptAnswerForm
+            key={ticket.id}
+            department={escalation?.department ?? 'The department'}
+            onSave={onRecordDeptResponse}
+            acting={acting}
+          />
+        )}
+        {ticket.status === 'dept_responded' && draft && draft.guidanceRefs.length > 0 && (
+          <Note
+            tone="info"
+            title={`Redrafted with ${escalation?.department ?? "the department"}'s answer. Check it, then send.`}
+            reasons={ticket.reviewReasons}
           />
         )}
         {ticket.status === 'needs_review' && ticket.reviewReasons.length > 0 && (
@@ -380,6 +440,7 @@ export function DraftPane({
           key={`${ticket.id}:${ticket.status}`}
           ticket={ticket}
           departments={departments}
+          onDraftQuestion={onDraftQuestion}
           onEscalate={onEscalate}
           onResolve={onResolve}
           error={actionError}

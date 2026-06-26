@@ -16,8 +16,8 @@ function percent(score: number): string {
 }
 
 /**
- * Predicted department, the similar past cases the drafter was given (cited ones
- * marked), and the policy the draft cited — all written by the ticket graph. Department names resolve through `departmentLabel`, backed by
+ * The department's answer after an escalation, the predicted department, the
+ * similar past cases the drafter was given (cited ones marked), and the policy the draft cited — all written by the ticket graph. Department names resolve through `departmentLabel`, backed by
  * the live `/admin/departments` list.
  */
 export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePaneProps) {
@@ -25,11 +25,36 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
   // to the customer rarely cites a case, but the agent still wants the precedent.
   const pastCases = draft?.retrievedCases ?? [];
   const citedPolicies = draft?.policyRefs.filter((ref) => ref.cited) ?? [];
+  const guidance = draft?.guidanceRefs ?? [];
   const runnerUps = ticket.deptCandidates.slice(1);
   const lowConfidence = ticket.deptConfidence !== null && ticket.deptConfidence < ROUTING_FLOOR;
 
   return (
     <div className="flex flex-col gap-4 p-4">
+      {guidance.length > 0 && (
+        <section className="rounded-lg border border-accent/30 bg-accent-soft p-3">
+          <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-accent uppercase">
+            Department guidance
+          </h3>
+          <div className="flex flex-col gap-2.5">
+            {guidance.map((ref) => (
+              <div key={ref.deptResponseId} className="text-[12px] leading-relaxed text-text-muted">
+                <p className="flex items-center gap-2 text-text">
+                  <span className="font-mono text-[11px] text-accent">[{ref.marker}]</span>
+                  <span className="min-w-0 truncate">{departmentLabel(ref.departmentId)}</span>
+                  {ref.cited && (
+                    <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10.5px] font-medium text-accent">
+                      cited
+                    </span>
+                  )}
+                </p>
+                <p className="mt-1 text-[11.5px] whitespace-pre-wrap">{ref.snippet}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="rounded-lg border border-border bg-surface p-3">
         <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Predicted department

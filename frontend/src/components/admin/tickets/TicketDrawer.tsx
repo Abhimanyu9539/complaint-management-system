@@ -4,14 +4,15 @@ import { TicketActions } from '@/components/tickets/TicketActions';
 import { TicketBody } from '@/components/tickets/TicketBody';
 import { ticketStatusLabel, ticketStatusTone } from '@/lib/status';
 import type { DepartmentOption } from '@/lib/admin/types';
-import type { TicketDetail } from '@/lib/tickets/types';
+import type { DeptQuestion, TicketDetail } from '@/lib/tickets/types';
 
 interface TicketDrawerProps {
   detail: TicketDetail | null;
   loading: boolean;
   departments: DepartmentOption[];
   onClose(): void;
-  onEscalate(departmentId: string, note: string): Promise<void>;
+  onDraftQuestion(departmentId: string): Promise<DeptQuestion | null>;
+  onEscalate(departmentId: string, question: string, questionDraftId: string | null): Promise<void>;
   onResolve(note: string): Promise<void>;
   /** Set when the last action was refused, e.g. by the state machine. */
   actionError: string | null;
@@ -30,6 +31,7 @@ export function TicketDrawer({
   loading,
   departments,
   onClose,
+  onDraftQuestion,
   onEscalate,
   onResolve,
   actionError,
@@ -57,6 +59,7 @@ export function TicketDrawer({
             key={`${ticket.id}:${ticket.status}`}
             ticket={ticket}
             departments={departments}
+            onDraftQuestion={onDraftQuestion}
             onEscalate={onEscalate}
             onResolve={onResolve}
             error={actionError}

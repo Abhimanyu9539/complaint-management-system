@@ -41,11 +41,22 @@ export function canSend(status: TicketStatus): boolean {
   return canResolve(status) && !isDraftLocked(status);
 }
 
-const CAN_REGENERATE = new Set<TicketStatus>(['new', 'drafted', 'needs_review', 'processing_failed']);
+const CAN_REGENERATE = new Set<TicketStatus>([
+  'new',
+  'drafted',
+  'needs_review',
+  'dept_responded',
+  'processing_failed',
+]);
 
 /** Where the backend lets the ticket graph run again (`ticket_service.ALLOWED` → `processing`). */
 export function canRegenerate(status: TicketStatus): boolean {
   return CAN_REGENERATE.has(status);
+}
+
+/** The department's answer can be recorded only while the ticket waits for it. */
+export function canRecordDeptResponse(status: TicketStatus): boolean {
+  return status === 'escalated';
 }
 
 /** True once a ticket can no longer be escalated or resolved from here. */

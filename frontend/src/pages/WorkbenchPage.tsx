@@ -65,7 +65,9 @@ export function WorkbenchPage() {
     acting,
     actionError,
     openTicket,
+    draftQuestion,
     escalate,
+    recordDeptResponse,
     resolve,
     sendReply,
     discard,
@@ -90,10 +92,8 @@ export function WorkbenchPage() {
   const escalation = useMemo(() => {
     const event = detail?.events.filter((entry) => entry.event === 'escalated').at(-1);
     if (!detail || !event) return null;
-    const note = event.payload.note;
     return {
       department: departmentLabel(detail.ticket.escalatedDept),
-      question: typeof note === 'string' && note.trim() ? note : null,
       at: event.createdAt,
     };
   }, [detail, departmentLabel]);
@@ -152,7 +152,7 @@ export function WorkbenchPage() {
       ) : (
         <div className="scrollbar-thin grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(280px,1fr)_minmax(320px,1.25fr)_320px] lg:overflow-hidden">
           <div className="lg:min-h-0 lg:overflow-y-auto lg:border-r lg:border-border">
-            <ComplaintPane detail={detail} loading={detailLoading} />
+            <ComplaintPane detail={detail} loading={detailLoading} departmentLabel={departmentLabel} />
           </div>
           <div className="border-t border-border lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-r lg:border-border">
             {detail && (
@@ -165,7 +165,9 @@ export function WorkbenchPage() {
                 onDiscard={discard}
                 onRegenerate={regenerate}
                 departments={departments.data ?? []}
+                onDraftQuestion={draftQuestion}
                 onEscalate={escalate}
+                onRecordDeptResponse={recordDeptResponse}
                 onResolve={resolve}
                 actionError={actionError}
                 acting={acting}

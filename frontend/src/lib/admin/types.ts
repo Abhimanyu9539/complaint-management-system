@@ -10,7 +10,13 @@
  * (`realTransport.ts`), exactly as `lib/chat/` does.
  */
 
-import type { DiscardReason, Ticket, TicketDetail, TicketQuery } from '@/lib/tickets/types';
+import type {
+  DeptQuestion,
+  DiscardReason,
+  Ticket,
+  TicketDetail,
+  TicketQuery,
+} from '@/lib/tickets/types';
 
 // ---------------------------------------------------------------------------
 // Envelope
@@ -493,15 +499,30 @@ export interface AdminTransport {
   /** LIVE. Ticket plus its `ticket_events` audit trail — one request per drawer. */
   getTicket(ticketId: string, signal: AbortSignal): Promise<AdminResult<TicketDetail>>;
 
+  /** LIVE. Draft the question for a department. Nothing is sent or changed. */
+  draftDeptQuestion(
+    ticketId: string,
+    departmentId: string,
+    signal: AbortSignal,
+  ): Promise<AdminResult<DeptQuestion>>;
+
   /**
-   * LIVE. Hand a ticket to a specialist department (Path B). Rejects with an
-   * `AdminRequestError` carrying status 409 when the state machine forbids the
-   * move, so the caller can say why rather than "something failed".
+   * LIVE. Email `question` to the department and hand the ticket over (Path B).
+   * Rejects with an `AdminRequestError` carrying status 409 when the state
+   * machine forbids the move, and 502 when the email fails.
    */
   escalateTicket(
     ticketId: string,
     departmentId: string,
-    note: string | null,
+    question: string,
+    questionDraftId: string | null,
+    signal: AbortSignal,
+  ): Promise<AdminResult<Ticket>>;
+
+  /** LIVE. Save the department's answer; the draft is rewritten from it in the background. */
+  recordDeptResponse(
+    ticketId: string,
+    answerText: string,
     signal: AbortSignal,
   ): Promise<AdminResult<Ticket>>;
 

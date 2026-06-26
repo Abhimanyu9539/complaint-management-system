@@ -3,24 +3,20 @@ import { formatTimestamp } from '@/lib/format';
 import { buildProgress, type ProgressStepState } from '@/lib/tickets/progress';
 import type { Ticket, TicketEvent } from '@/lib/tickets/types';
 
-const STEP_CAPTION: Record<ProgressStepState, string | null> = {
-  done: null, // filled in per-step from its timestamp
-  current: 'In progress',
-  skipped: 'Not reached',
-  pending: 'Pending',
-};
-
 /**
- * "Where the progress is till now" — the derived six-stage tracker.
- *
- * Every checkmark traces back to a `ticket_events` row (see
- * `lib/tickets/progress`); nothing here is inferred from `ticket.status`
- * alone. Most tickets today show real gaps — Classified and Drafted stay
- * un-ticked — because no classifier or drafter exists yet. That gap is the
- * truth, not a rendering bug.
+ * The ticket's path: one row per milestone from `ticket_events`, in order, then
+ * the rows still ahead (see `lib/tickets/progress`).
  */
-export function ProgressTracker({ ticket, events }: { ticket: Ticket; events: TicketEvent[] }) {
-  const { steps, failed } = buildProgress(ticket, events);
+export function ProgressTracker({
+  ticket,
+  events,
+  departmentLabel,
+}: {
+  ticket: Ticket;
+  events: TicketEvent[];
+  departmentLabel(id: string | null): string;
+}) {
+  const { steps, failed } = buildProgress(ticket, events, departmentLabel);
 
   return (
     <div className="flex flex-col gap-1">
@@ -32,7 +28,7 @@ export function ProgressTracker({ ticket, events }: { ticket: Ticket; events: Ti
       )}
       <ol className="flex flex-col gap-0">
         {steps.map((step, index) => (
-          <li key={step.id} className="flex gap-2.5">
+          <li key={step.key} className="flex gap-2.5">
             <div className="flex w-4 shrink-0 flex-col items-center">
               <StepDot state={step.state} />
               {index < steps.length - 1 && (
@@ -44,9 +40,7 @@ export function ProgressTracker({ ticket, events }: { ticket: Ticket; events: Ti
             <div className="min-w-0 flex-1 pb-3.5">
               <p
                 className={`text-[12.5px] font-medium ${
-                  step.state === 'pending' || step.state === 'skipped'
-                    ? 'text-text-faint'
-                    : 'text-text'
+                  step.state === 'pending' ? 'text-text-faint' : 'text-text'
                 }`}
               >
                 {step.label}
@@ -54,7 +48,7 @@ export function ProgressTracker({ ticket, events }: { ticket: Ticket; events: Ti
               <p className="text-[11px] text-text-faint">
                 {step.state === 'done'
                   ? (step.at ? formatTimestamp(step.at) : 'Done')
-                  : STEP_CAPTION[step.state]}
+                  : step.caption}
               </p>
             </div>
           </li>
@@ -80,11 +74,5 @@ function StepDot({ state }: { state: ProgressStepState }) {
       />
     );
   }
-  return (
-    <span
-      className={`mt-1.25 h-2.5 w-2.5 shrink-0 rounded-full border-2 ${
-        state === 'skipped' ? 'border-border-strong' : 'border-border'
-      }`}
-    />
-  );
+  return <span className="mt-1.25 h-2.5 w-2.5 shrink-0 rounded-full border-2 border-border" />;
 }
