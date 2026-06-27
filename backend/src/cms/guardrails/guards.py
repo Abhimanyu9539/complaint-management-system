@@ -29,11 +29,9 @@ logger = logging.getLogger(__name__)
 logging.getLogger("presidio-analyzer").setLevel(logging.ERROR)
 
 
-def _pii_validator(on_fail: OnFailAction) -> DetectPII:
+def _pii_validator(entities: list[str], on_fail: OnFailAction) -> DetectPII:
     """DetectPII with Presidio's Aadhaar and PAN recognizers, which ship disabled."""
-    validator = DetectPII(
-        pii_entities=get_settings().pii_entities, on_fail=on_fail, use_local=True
-    )
+    validator = DetectPII(pii_entities=entities, on_fail=on_fail, use_local=True)
     validator.pii_analyzer.registry.add_recognizer(InAadhaarRecognizer())
     validator.pii_analyzer.registry.add_recognizer(InPanRecognizer())
     return validator
@@ -58,11 +56,25 @@ def get_input_guard() -> AsyncGuard:
                 max=settings.query_max_chars,
                 on_fail=OnFailAction.EXCEPTION,
             ),
-            _pii_validator(OnFailAction.FIX),
+            _pii_validator(settings.pii_entities, OnFailAction.FIX),
             MaskCredentials(pattern=settings.credential_pattern, on_fail=OnFailAction.FIX),
         )
     except Exception:
         logger.exception("Failed to build the input guard")
+        raise
+
+
+@lru_cache
+def get_case_scrubber() -> AsyncGuard:
+    """Presidio with names added, then credential masking: what a past case must not keep."""
+    settings = get_settings()
+    try:
+        return _build_guard(
+            _pii_validator(settings.case_pii_entities, OnFailAction.FIX),
+            MaskCredentials(pattern=settings.credential_pattern, on_fail=OnFailAction.FIX),
+        )
+    except Exception:
+        logger.exception("Failed to build the case scrubber")
         raise
 
 
@@ -74,7 +86,7 @@ def get_output_guard() -> AsyncGuard:
             CitationsValid(on_fail=OnFailAction.NOOP),
             NumbersInSources(on_fail=OnFailAction.NOOP),
             PolicyCited(on_fail=OnFailAction.NOOP),
-            _pii_validator(OnFailAction.NOOP),
+            _pii_validator(get_settings().pii_entities, OnFailAction.NOOP),
         )
     except Exception:
         logger.exception("Failed to build the output guard")
@@ -88,7 +100,7 @@ def get_lookup_guard() -> AsyncGuard:
         return _build_guard(
             CitationsValid(on_fail=OnFailAction.NOOP),
             NumbersInSources(on_fail=OnFailAction.NOOP),
-            _pii_validator(OnFailAction.NOOP),
+            _pii_validator(get_settings().pii_entities, OnFailAction.NOOP),
         )
     except Exception:
         logger.exception("Failed to build the lookup guard")
@@ -113,6 +125,25 @@ async def run_input_guard(query: str) -> GuardResult:
     masked_by = [summary.validator_name for summary in outcome.validation_summaries or []]
     logger.info("input guard: passed, masked by %s", masked_by or "nothing")
     return GuardResult(passed=True, text=outcome.validated_output)
+
+
+async def scrub_case_text(text: str) -> str:
+    """`text` with names, contact details, IDs and credentials masked, for the case corpus.
+
+    Runs even with `guardrails_enabled` off, and raises rather than return text it
+    could not scrub, so nothing unscrubbed is ever indexed.
+    """
+    if not text.strip():
+        return text
+    try:
+        outcome = await get_case_scrubber().validate(text)
+    except Exception:
+        logger.exception("case scrubber: validation crashed")
+        raise
+
+    if not outcome.validation_passed or outcome.validated_output is None:
+        raise RuntimeError("The case scrubber returned no text.")
+    return outcome.validated_output
 
 
 async def run_output_guard(draft: str, citations: list[Citation], context: str) -> GuardResult:

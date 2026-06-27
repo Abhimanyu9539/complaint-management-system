@@ -94,6 +94,27 @@ async def fetch_ticket(ticket_id: str) -> dict:
     return rows[0]
 
 
+async def fetch_ticket_by_no(ticket_no: int) -> dict:
+    """One ticket by its customer reference (`T-1042` is 1042). Raises `LookupError` if none."""
+    try:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select(TICKET_COLUMNS)
+            .eq("ticket_no", ticket_no)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to fetch %s row T-%s", TABLE, ticket_no)
+        raise
+
+    rows = response.data or []
+    if not rows:
+        raise LookupError(f"No ticket T-{ticket_no}")
+    return rows[0]
+
+
 async def update_ticket(ticket_id: str, patch: dict) -> dict:
     """Apply a partial update and return the updated row.
 

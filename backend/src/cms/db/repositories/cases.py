@@ -60,6 +60,51 @@ async def upsert_case(row: dict) -> str:
     return response.data[0]["id"]
 
 
+async def upsert_flywheel_case(row: dict) -> str:
+    """Insert or update the case minted from a ticket, keyed by `ticket_id` (migration 0024).
+
+    Returns its id. A re-sent ticket updates its case rather than adding a second one.
+    """
+    try:
+        response = await get_supabase().table(TABLE).upsert(row, on_conflict="ticket_id").execute()
+    except Exception:
+        logger.exception("Failed to upsert the %s row for ticket %s", TABLE, row.get("ticket_id"))
+        raise
+    return response.data[0]["id"]
+
+
+async def fetch_case_by_ticket(ticket_id: str) -> dict | None:
+    """The case minted from a ticket, or None if it has none."""
+    try:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select("id,title,source,status")
+            .eq("ticket_id", ticket_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to fetch the %s row for ticket %s", TABLE, ticket_id)
+        raise
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
+async def mark_case_deleting(case_id: str) -> None:
+    """Flag a case before its points are removed, so a crash part-way leaves a visible row."""
+    await get_supabase().table(TABLE).update({"status": "deleting"}).eq("id", case_id).execute()
+
+
+async def delete_case(case_id: str) -> None:
+    """Remove a case row. Its `case_chunks` rows go with it (ON DELETE CASCADE)."""
+    try:
+        await get_supabase().table(TABLE).delete().eq("id", case_id).execute()
+    except Exception:
+        logger.exception("Failed to delete %s row %s", TABLE, case_id)
+        raise
+
+
 async def mark_case_processing(case_id: str) -> None:
     """Claim the row before the work starts, clearing any previous error.
 

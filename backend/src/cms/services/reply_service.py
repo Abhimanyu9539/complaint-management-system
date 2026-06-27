@@ -60,7 +60,7 @@ async def _actionable_draft(ticket: dict, draft_id: str) -> dict:
     return draft
 
 
-async def send_reply(ticket_id: str, draft_id: str, final_text: str) -> Ticket:
+async def  send_reply(ticket_id: str, draft_id: str, final_text: str) -> Ticket:
     """Email the reply to the customer, record what was sent, and resolve the ticket."""
     ticket = await tickets.fetch_ticket(ticket_id)
     # Checked before anything is sent: a reply must not go out on a ticket that can't close.

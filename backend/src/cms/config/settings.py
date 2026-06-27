@@ -67,12 +67,12 @@ class Settings(BaseSettings):
 
     # --- OpenAI ---
     openai_api_key: str
-    openai_model_main: str = "deepseek/deepseek-v4-pro-0813"
-    openai_model_cheap: str = "gpt-5.4-nano"
+    openai_model_main: str = "gpt-6-luna"
+    openai_model_cheap: str = "gpt-6-luna"
 
     # --- OpenRouter ---
-    openrouter_model_main: str = "openai/gpt-5.4-mini"
-    openrouter_model_cheap: str = "openai/gpt-5.4-nano"
+    openrouter_model_main: str = "openai/gpt-6-luna"
+    openrouter_model_cheap: str = "openai/gpt-6-luna"
     openrouter_embedding_model: str = "openai/text-embedding-3-small"
     open_router_api_key: str
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -248,13 +248,28 @@ class Settings(BaseSettings):
     }
     # Model for NeMo's output rails (fact check, tone). Measured on the 30 eval goldens
     # with the material-claims prompt: gpt-5.4-nano blocked 2 of 5 invented remedies,
-    # gpt-5.4-mini blocked 5 of 5 with 5/30 drafts caveated. The input rail stays on
-    # `openrouter_model_cheap`.
-    guard_judge_model: str = "openai/gpt-5.4-mini"
+    # gpt-5.4-mini blocked 5 of 5 with 5/30 drafts caveated. gpt-6-luna is not measured
+    # yet. The input rail stays on `openrouter_model_cheap`.
+    guard_judge_model: str = "openai/gpt-6-luna"
     # When NeMo's fact check blocks, a cheap model names the unsupported claims.
     fact_check_prompt_version: str = "v1"
     # Enough to act on; more turns the retry feedback into a second draft.
     fact_check_max_claims: int = 5
+
+    # --- Flywheel (a sent reply becomes a past case) ---
+    # Kill switch: off, sending a reply mints no case.
+    flywheel_enabled: bool = True
+    # The internal summary of what was sent, stored as the case's resolution.
+    case_resolution_prompt_version: str = "v1"
+    # Mirrors the seed `case_title`, with the ticket in place of the case id.
+    flywheel_case_title_template: str = "T-{ticket_no} — {department} / {category}"
+    # The ticket's own identifiers, replaced before Presidio runs (privacy §6).
+    case_entity_masks: dict[str, str] = {"order_no": "<ORDER_NO>", "invoice_no": "<INVOICE_NO>"}
+
+    @property
+    def case_pii_entities(self) -> list[str]:
+        """What is masked out of a case before indexing: the input guard's entities plus names."""
+        return [*self.pii_entities, "PERSON"]
 
     # --- Chat ---
     # Sent as the SSE `error` event when the graph raises mid-stream. The real
