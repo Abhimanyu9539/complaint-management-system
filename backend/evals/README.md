@@ -8,7 +8,11 @@ evals/
 ├── conftest.py              # truststore, stdout/stderr encoding, telemetry opt-out
 ├── datasets/
 │   ├── policies.json        # 30 goldens — used by BOTH suites
-│   └── cases.json           # 30 goldens
+│   ├── cases.json           # 30 goldens
+│   └── tickets.json         # policies.json + the departments each golden may route to
+├── analyzer/
+│   ├── test_intent_routing.py   # chat: complaint vs knowledge lookup
+│   └── test_ticket_routing.py   # tickets: which department owns the complaint
 ├── retriever/
 │   ├── adapters.py          # each leg -> retrieved chunk texts, in rank order
 │   ├── aggregate.py         # one leg -> the aggregate table (all 9 legs live here)
@@ -106,6 +110,102 @@ a judge is overkill for. `used_citations` in `cms/rag/context.py` warns about ea
 this is the per-run total.
 
 At `generate/v1` both are **0 of 30**.
+
+## Ticket graph
+
+Two checks on the graph that drafts the customer reply. Both use `tickets.json`: the 30
+`policies.json` complaints with the same `expected_output`, plus
+`additional_metadata.expected_departments`, the one or two departments a golden may route to.
+18 labels come from the department of the golden's source policy, the other 12 (company-wide
+policies) from the routing rules in `complaint-intake-policy.md` §4–§6.
+
+```bash
+uv run pytest evals/analyzer/test_ticket_routing.py -s                 # ~30 cheap-model calls
+uv run python evals/generator/aggregate.py --leg ticket-graph          # ~$0.6–1
+```
+
+- **Routing** runs `classify_ticket_core` once per golden and prints a per-golden table, top-1
+  and top-2 accuracy, mean confidence when right and when wrong, and how many fall below
+  `routing_confidence_floor`. It fails below `ROUTING_ACCURACY_FLOOR` (0.80).
+- **`ticket-graph`** runs the compiled ticket graph (it computes and writes nothing) and scores the
+  draft with the generation metrics above. Next to citation health it prints a gate line: drafts
+  that passed the output guard first time, after a retry, still ungrounded, holding replies,
+  inputs blocked, and tickets where a node failed.
+- **Read Correctness as "reaches the same remedy".** The draft is a letter to the customer and the
+  references are agent-facing policy notes, so wording and detail differ by design.
+
+### Baseline (seed cases only, before any flywheel case is minted)
+
+2026-10-03, `classify_ticket/v2` on `gpt-5.4-nano`, `customer_reply/v2`.
+
+| Check | Result |
+| --- | --- |
+| Routing top-1 | **26/30 (0.87)** |
+| Routing top-2 | 29/30 (0.97) |
+| Mean confidence, right / wrong | 0.72 / 0.60 |
+| Below the 0.60 floor | 9/30 |
+| `ticket-graph` Faithfulness | **0.98**, 30/30 pass |
+| `ticket-graph` Answer Relevancy | **0.82**, 21/30 pass |
+| `ticket-graph` Correctness | **0.69**, 24/30 pass |
+| Gate | 30/30 passed the guard first time; 0 retries, 0 holding replies |
+| Citation health | 0 citing nothing, 0 citing a marker never offered |
+
+The four routing misses are all company-wide-policy goldens: an account takeover and a carer's
+access request went to `legal`, an order we cancelled to `returns`, and a complaint about an
+AI-written reply to `sales`.
+
+The `ticket-graph` run (judge `gpt-5.4-mini`, `--max-concurrent 5`) cost $0.45 in judge tokens.
+
+- **Relevancy misses (9)**: the judge marks down process wording the customer did not ask for. The
+  data-protection request (0.36) is handed to Legal as policy requires, which the judge reads as
+  not answering; the missing parcel (0.33) gets a carrier claim, but explained in procedure.
+- **Correctness misses (6)** are omitted entitlements or a wrong coverage call: app pairing (0.40)
+  leaves out the goodwill gesture and the two-round troubleshooting limit, the helpline complaint
+  (0.40) the statutory 48-hour and one-month timelines, and the manager request (0.30) promises a
+  review instead of the reference's "a demand alone is not a reason to refer".
+- At the default `--max-concurrent 10` the judge hit OpenRouter's 402 (`in_flight_budget_exhausted`)
+  on a small balance; 5 finished cleanly.
+
+These are the numbers a flywheel case has to improve on: re-run the leg once minted cases are in
+the corpus and compare.
+
+### `gpt-6-luna` for both the main and cheap models
+
+2026-10-03, same prompts, corpus and judge (`gpt-5.4-mini`). `nemo_rails_enabled` is off, so no
+guard judge ran. Two `ticket-graph` runs per side, `--max-concurrent 5`.
+
+| Check | `gpt-5.4-mini` + `nano` | `gpt-6-luna` |
+| --- | --- | --- |
+| Routing top-1 / top-2 | 26/30 / 29/30 | 27/30 / 30/30 |
+| Faithfulness | 0.98, 0.97 (30, 30 pass) | 0.95, 0.98 (29, 30 pass) |
+| Answer Relevancy | 0.82, 0.86 (21, 25 pass) | 0.74, 0.82 (16, 22 pass) |
+| Correctness | 0.69, 0.72 (24, 26 pass) | 0.76, 0.74 (26, 27 pass) |
+| Gate / citation health | 30/30 first time; 0 / 0 | 30/30 first time; 0 / 0 |
+
+- Even within judge noise: Luna is ~0.06 lower on relevancy and ~0.05 higher on correctness, at
+  $0.10 / $0.50 per 1M tokens against mini's $0.75 / $4.50 and nano's $0.20 / $1.25.
+- Per-golden relevancy swings both ways between runs (app pairing 1.00 → 0.38, overheating battery
+  0.60 → 1.00), so read the averages, not single goldens.
+- **Gift card (golden 26)**: both Luna runs asked the customer to reply with the gift card number;
+  neither mini run did. The judge marked it against the privacy policy's "full card numbers" rule,
+  which is written for payment cards, so whether it applies to gift cards is a policy call.
+
+The policy graph against the September `gpt-5.4-mini` runs (rerank: the 7 runs at `top_n=12`;
+generate: 3 runs). Luna ran generate on `GENERATE_PROMPT_VERSION=v1` to match them, so it saw the
+same 12 policy chunks and no cases.
+
+| Leg | Metric | `gpt-5.4-mini` (mean, range) | `gpt-6-luna` |
+| --- | --- | --- | --- |
+| `policy-graph-rerank` | Precision | 0.832 (0.805–0.855) | 0.847, 0.830 |
+| | Recall | 0.912 (0.882–0.935) | 0.933, 0.955 |
+| `policy-graph-generate` | Faithfulness | 0.989 (0.985–0.995), 30/30 | 0.974, 29/30 |
+| | Answer Relevancy | 0.902 (0.844–0.932) | 0.860 |
+| | Correctness | 0.726 (0.717–0.737) | 0.733 |
+
+- Rerank recall sits at the top of mini's range with both Luna runs. The `analyze_query` prompt
+  version of the September runs is not recorded, so part of that may be the prompt.
+- Generate is one Luna run: the second stopped on OpenRouter's 402 (`in_flight_budget_exhausted`).
+  The faithfulness miss is the bereavement golden, which skipped the one required retention offer.
 
 ## The legs
 

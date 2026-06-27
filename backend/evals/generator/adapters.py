@@ -14,10 +14,14 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
+from langchain_core.documents import Document
+
 from cms.rag.context import build_generation_context
 from cms.rag.nodes.analyze_query import analyze_query_core, build_policy_queries
 from cms.rag.nodes.generate import generate_core
 from cms.rag.nodes.retrieve_policies import retrieve_policies_core
+from cms.rag.ticket_graph import get_ticket_graph
+from cms.rag.ticket_state import drafting_sources
 from cms.retrieval.retrievers.case_retriever import retrieve_cases_hybrid
 from cms.retrieval.retrievers.policy_retriever import DEFAULT_TOP_N as POLICY_TOP_N
 
@@ -29,6 +33,21 @@ CONCURRENT_GOLDENS = 5
 
 # (retrieval_context, draft) for one golden.
 GenerationCase = tuple[list[str], str]
+
+# How the ticket graph's guard treated each draft, one entry per golden. aggregate.py prints the totals.
+GATE_OUTCOMES: list[dict] = []
+
+
+def offered_contexts(
+    sources: list[tuple[Document, float]], case_hits: list[tuple[Document, float]]
+) -> list[str]:
+    """The chunk texts the drafter was shown, sources then cases, cut where the token budget cut them."""
+    _, _, offered = build_generation_context(sources, case_hits)
+    offered_cases = sum(1 for citation in offered if citation.doc_type == "case")
+    offered_sources = len(offered) - offered_cases
+    contexts = [document.page_content for document, _ in sources[:offered_sources]]
+    contexts += [document.page_content for document, _ in case_hits[:offered_cases]]
+    return contexts
 
 
 async def graph_generation_case(query: str) -> GenerationCase:
@@ -66,8 +85,34 @@ async def graph_generation_case(query: str) -> GenerationCase:
             ]
         ),
     )
-    contexts = [document.page_content for document, _ in policy_hits[:offered_policies]]
-    contexts += [document.page_content for document, _ in case_hits[:offered_cases]]
+    return offered_contexts(policy_hits, case_hits), draft
+
+
+async def ticket_graph_case(query: str) -> GenerationCase:
+    """The ticket graph end to end: guard, classify, retrieve, draft the customer reply, check it.
+
+    The compiled graph only computes, so nothing is written to the database.
+    A holding reply was drafted from nothing, so its context is empty.
+    """
+    state = await get_ticket_graph().ainvoke({"ticket_id": "eval", "ticket_no": 0, "query": query})
+    outcome = {
+        "grounded": state.get("grounded"),
+        "regenerated": bool(state.get("regenerated")),
+        "no_match": bool(state.get("no_match")),
+        "input_blocked": bool(state.get("input_blocked")),
+        "failed": sorted(state.get("errors", {})),
+    }
+    GATE_OUTCOMES.append(outcome)
+    for stage, error in state.get("errors", {}).items():
+        logger.warning("ticket leg | %s failed for %r: %s", stage, query[:60], error)
+
+    draft = state.get("draft") or ""
+    contexts: list[str] = []
+    if not draft:
+        logger.warning("ticket leg | no draft for %r: %s", query[:60], outcome)
+    elif not outcome["no_match"]:
+        contexts = offered_contexts(drafting_sources(state), state.get("case_hits", []))
+    logger.info("ticket leg | %r: %s, %d chunk(s) offered", query[:60], outcome, len(contexts))
     return contexts, draft
 
 

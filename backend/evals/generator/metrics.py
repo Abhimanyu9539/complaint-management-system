@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Unprefixed on purpose — see evals/README.md "The judge". deepeval looks the id
 # up in its model registry with a plain dict lookup, and `openai/gpt-5.4-mini`
 # would miss it and lose temperature=1, native structured outputs, and real prices.
-JUDGE_MODEL = "gpt-5.4-mini"
+JUDGE_MODEL = "gpt-6-luna"
 
 # Faithfulness sits higher than the rest: an invented entitlement is the failure
 # that actually costs something here, and it is the one a support agent is least

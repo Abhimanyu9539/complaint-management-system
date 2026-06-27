@@ -17,7 +17,7 @@ from cms.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-JUDGE_MODEL = "gpt-5.4-mini"
+JUDGE_MODEL = "gpt-6-luna"
 
 PRECISION_THRESHOLD = 0.7
 RECALL_THRESHOLD = 0.7

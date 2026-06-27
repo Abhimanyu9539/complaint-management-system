@@ -4,6 +4,7 @@ The generation counterpart to `retriever/aggregate.py`, and deliberately the sam
 shape: same arguments, same results layout, same reasons for the bootstrap below.
 
     uv run python evals/generator/aggregate.py --leg policy-graph-generate
+    uv run python evals/generator/aggregate.py --leg ticket-graph
 
 Unlike the retriever legs, every golden here runs a generation call as well as the
 retrieval fan-out, so a run costs materially more. Qdrant must be up and the
@@ -32,7 +33,12 @@ os.environ.setdefault("DEEPEVAL_RETRY_MAX_ATTEMPTS", "4")
 os.environ.setdefault("DEEPEVAL_RETRY_INITIAL_SECONDS", "2")
 os.environ.setdefault("DEEPEVAL_RETRY_CAP_SECONDS", "10")
 
-from adapters import build_cases, graph_generation_case
+from adapters import (
+    GATE_OUTCOMES,
+    build_cases,
+    graph_generation_case,
+    ticket_graph_case,
+)
 from deepeval import evaluate
 from deepeval.dataset import EvaluationDataset
 from deepeval.evaluate import AsyncConfig, DisplayConfig, ErrorConfig
@@ -48,13 +54,19 @@ DATASETS = Path(__file__).parents[1] / "datasets"
 # and timestamped per run so legs stay comparable after the fact.
 DEFAULT_RESULTS_FOLDER = Path(__file__).parents[1] / "results"
 
-# The prompt `generate_core` loads. Recorded as a hyperparameter because it is
-# half of what determines a score — a v2 prompt is a different system under test.
-PROMPT_VERSION = f"generate/{get_settings().generate_prompt_version}"
-
-# leg -> (dataset file, the coroutine that runs it).
+# leg -> (dataset file, the coroutine that runs it, the prompt it drafts with). The prompt
+# is recorded as a hyperparameter: a new prompt version is a different system under test.
 LEGS = {
-    "policy-graph-generate": ("policies.json", graph_generation_case),
+    "policy-graph-generate": (
+        "policies.json",
+        graph_generation_case,
+        f"generate/{get_settings().generate_prompt_version}",
+    ),
+    "ticket-graph": (
+        "tickets.json",
+        ticket_graph_case,
+        f"customer_reply/{get_settings().customer_reply_prompt_version}",
+    ),
 }
 DEFAULT_LEG = "policy-graph-generate"
 
@@ -83,6 +95,23 @@ def log_citation_health(cases: list[tuple[list[str], str]]) -> None:
     print(
         f"\ncitation health: {len(cases)} draft(s), "
         f"{ungrounded} citing nothing, {fabricated} citing a marker never offered"
+    )
+
+
+def log_gate_summary(outcomes: list[dict]) -> None:
+    """How the ticket graph's output guard treated the drafts. Empty on the chat leg."""
+    if not outcomes:
+        return
+    first_time = sum(1 for o in outcomes if o["grounded"] and not o["regenerated"])
+    after_retry = sum(1 for o in outcomes if o["grounded"] and o["regenerated"])
+    ungrounded = sum(1 for o in outcomes if o["grounded"] is False)
+    holding = sum(1 for o in outcomes if o["no_match"])
+    blocked = sum(1 for o in outcomes if o["input_blocked"])
+    failed = sum(1 for o in outcomes if o["failed"])
+    print(
+        f"gate: {len(outcomes)} ticket(s), {first_time} passed the guard first time, "
+        f"{after_retry} after a retry, {ungrounded} still ungrounded, "
+        f"{holding} holding replies, {blocked} blocked at input, {failed} with a failed node"
     )
 
 
@@ -117,7 +146,7 @@ def main() -> int:
         help="Where to write the timestamped run JSON. Default: evals/results/.",
     )
     args = parser.parse_args()
-    dataset_file, run_case = LEGS[args.leg]
+    dataset_file, run_case, prompt_version = LEGS[args.leg]
 
     dataset = EvaluationDataset()
     dataset.add_goldens_from_json_file(file_path=str(DATASETS / dataset_file))
@@ -126,6 +155,7 @@ def main() -> int:
     # event loop — build_cases calls asyncio.run(), which refuses to nest.
     cases = build_cases(run_case, [golden.input for golden in dataset.goldens])
     log_citation_health(cases)
+    log_gate_summary(GATE_OUTCOMES)
 
     test_cases = [
         LLMTestCase(
@@ -154,7 +184,7 @@ def main() -> int:
             # The two that make a generation run attributable: change either and
             # the scores describe a different system.
             "generation_model": get_settings().openrouter_model_main,
-            "prompt_version": PROMPT_VERSION,
+            "prompt_version": prompt_version,
             "judge_model": JUDGE_MODEL,
             "golden_set": dataset_file,
         },

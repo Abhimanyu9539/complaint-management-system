@@ -426,6 +426,7 @@ name = "complaint-management-system"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "deepeval" },
     { name = "en-core-web-lg" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -463,6 +464,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "deepeval", specifier = ">=4.2.8" },
     { name = "en-core-web-lg", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.139.2" },
     { name = "fastembed", specifier = ">=0.8.0" },
@@ -615,7 +617,7 @@ wheels = [
 
 [[package]]
 name = "deepeval"
-version = "4.2.0"
+version = "4.2.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -647,9 +649,9 @@ dependencies = [
     { name = "typer" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7f/95/44596d1e9853756346b4f82f6d3fca9d3a35dc421f253b89382544fb40f1/deepeval-4.2.0.tar.gz", hash = "sha256:07840ef5bc6db3242866ffae0969cca7cafe4a8c3e4e19e3a508283053a0b968", size = 855681, upload-time = "2026-08-24T21:54:17.825Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/99/5920130ea96f90685ef2765010afd85964db12439e50d2304cfa6ba84ba5/deepeval-4.2.8.tar.gz", hash = "sha256:6c6243a53be3e7fd59cf787310d24bbbc479b34cd48bb72f97c6ad81943596e2", size = 1027715, upload-time = "2026-10-02T15:49:09.299Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/09/18975670bcabf2fca174621db1f95bee79c091de1df0b6395e02b1f491b5/deepeval-4.2.0-py3-none-any.whl", hash = "sha256:7e10ea7ffdbe5506fde9e981c76184134079b586ef6bfc78049cd78112083a0e", size = 1216872, upload-time = "2026-08-24T21:54:19.532Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/e7/0c686816205bc77add2ecacbcad184d8b796c19ca891c2d8c542107340f5/deepeval-4.2.8-py3-none-any.whl", hash = "sha256:1bc6ec6ad9f36427e5578a01b4a2aaa357d7ac51bb0cd726af7315304b0339f8", size = 1486176, upload-time = "2026-10-02T15:49:15.964Z" },
 ]
 
 [[package]]

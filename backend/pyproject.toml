@@ -10,6 +10,7 @@ classifiers = [
     "Private :: Do Not Upload",
 ]
 dependencies = [
+    "deepeval>=4.2.8",
     "en-core-web-lg",
     "fastapi>=0.139.2",
     "fastembed>=0.8.0",
@@ -48,6 +49,7 @@ cms-classify = "cms.cli.classify:main"
 cms-triage = "cms.cli.triage:main"
 cms-retrieve = "cms.cli.retrieve:main"
 cms-graph = "cms.cli.graph:main"
+cms-delete-case = "cms.cli.delete_case:main"
 
 [build-system]
 requires = ["hatchling"]
