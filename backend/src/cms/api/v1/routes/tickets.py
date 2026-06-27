@@ -52,6 +52,7 @@ from cms.schemas.tickets import (
     TicketPage,
 )
 from cms.services import (
+    case_minting,
     escalation_service,
     reply_service,
     ticket_pipeline,
@@ -238,14 +239,18 @@ async def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticke
 
 
 @router.post("/{ticket_id}/send", response_model=Ticket)
-async def send_reply(ticket_id: str, payload: SendReplyRequest) -> Ticket:
+async def send_reply(
+    ticket_id: str, payload: SendReplyRequest, background_tasks: BackgroundTasks
+) -> Ticket:
     """Email the (possibly edited) draft to the customer and resolve the ticket.
 
     409 for a stale or already-handled draft, an unedited holding reply, or a
-    ticket that can't be resolved; 502 when the email itself fails.
+    ticket that can't be resolved; 502 when the email itself fails. Once sent, the
+    ticket becomes a past case in the background (the flywheel). Only a sent reply
+    does: a ticket resolved by hand has nothing to learn from.
     """
     try:
-        return await reply_service.send_reply(ticket_id, payload.draft_id, payload.final_text)
+        ticket = await reply_service.send_reply(ticket_id, payload.draft_id, payload.final_text)
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket or draft.") from None
     except (IllegalTransition, DraftConflict) as exc:
@@ -257,6 +262,9 @@ async def send_reply(ticket_id: str, payload: SendReplyRequest) -> Ticket:
     except Exception:
         logger.exception("Failed to send the reply for ticket %s", ticket_id)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+    background_tasks.add_task(case_minting.mint_case, ticket_id)
+    return ticket
 
 
 @router.post("/{ticket_id}/discard", response_model=Ticket)

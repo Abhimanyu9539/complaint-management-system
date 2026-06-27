@@ -36,6 +36,9 @@ EVENTS: tuple[str, ...] = (
     # Added with the gate and the send action; not in 0016's comment.
     "gated",
     "discarded",
+    # The flywheel: a sent reply became a past case, or that case was removed.
+    "case_minted",
+    "case_removed",
 )
 
 
