@@ -1,6 +1,11 @@
 """The real guards, end to end. Presidio runs locally, so no network — but it loads spaCy."""
 
-from cms.guardrails.guards import run_input_guard, run_lookup_guard, run_output_guard
+from cms.guardrails.guards import (
+    run_input_guard,
+    run_lookup_guard,
+    run_output_guard,
+    scrub_case_text,
+)
 from cms.schemas.generation import Citation
 
 CITATIONS = [Citation(marker=1, doc_id="p", chunk_id="p1", title="Warranty", section="2.3")]
@@ -71,3 +76,10 @@ async def test_lookup_guard_still_checks_grounding() -> None:
     assert not result.passed
     # Unknown marker and invented figure.
     assert len(result.reasons) == 2
+
+
+async def test_case_scrubber_masks_a_name_and_an_email() -> None:
+    text = await scrub_case_text("Rahul Mehta wrote from rahul.mehta@example.com about his kettle.")
+
+    assert "Rahul" not in text and "rahul.mehta@example.com" not in text
+    assert "<PERSON>" in text and "<EMAIL_ADDRESS>" in text
