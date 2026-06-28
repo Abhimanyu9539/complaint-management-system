@@ -1,0 +1,11 @@
+<complaint>
+{complaint}
+</complaint>
+
+<department_answers>
+{guidance}
+</department_answers>
+
+<sent_reply>
+{reply}
+</sent_reply>
