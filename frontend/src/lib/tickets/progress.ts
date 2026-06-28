@@ -95,6 +95,12 @@ function milestones(events: readonly TicketEvent[], departmentLabel: DepartmentL
       case 'reopened':
         steps.push(done(key, 'Reopened', at));
         break;
+      case 'case_minted':
+        steps.push(done(key, 'Added to the knowledge base', at));
+        break;
+      case 'case_removed':
+        steps.push(done(key, 'Removed from the knowledge base', at));
+        break;
     }
   }
   return steps;
