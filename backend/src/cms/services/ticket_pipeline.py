@@ -8,6 +8,7 @@ so one failing never loses the other.
 The ticket moves `processing` → `drafted` | `needs_review` | `processing_failed`;
 `ticket_gate.review_reasons` decides between the first two. A ticket a department
 has answered is drafted from that answer too, and goes back to `dept_responded`.
+A draft citing a similar past case's department answer gets a review reason.
 """
 
 import logging
@@ -76,6 +77,7 @@ def evidence_rows(
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """`(retrieved_cases, policy_refs, guidance_refs)`: every source the drafter was offered.
 
+    `guidance_hits` holds this ticket's department answers, then the past cases'.
     The offered citations are rebuilt the way the drafter built them, department
     answers first. They keep the hits' order and stop at the context budget, so
     zipping pairs each with its hit.
@@ -111,6 +113,19 @@ def evidence_rows(
         for citation, (document, score) in zip(offered_cases, case_hits)
     ]
     return retrieved_cases, policy_refs, guidance_refs
+
+
+def cited_precedents(state: TicketState) -> list[str]:
+    """Titles of the past cases' department answers the draft cites.
+
+    Matched on guidance citations only: the same case may also be offered, and cited, as a past case.
+    """
+    cited = {c.doc_id for c in state.get("citations", []) if c.doc_type == "guidance"}
+    return [
+        document.metadata["title"]
+        for document, _score in state.get("precedent_hits", [])
+        if document.metadata.get("doc_id") in cited
+    ]
 
 
 async def _guidance_hits(ticket_id: str) -> list[tuple[Document, float]]:
@@ -179,7 +194,7 @@ async def _save_draft(ticket_id: str, state: TicketState, run_id: UUID) -> bool:
             state.get("policy_hits", []),
             state.get("case_hits", []),
             state.get("citations", []),
-            state.get("guidance_hits", []),
+            state.get("guidance_hits", []) + state.get("precedent_hits", []),
         )
         saved = await drafts.insert_draft(
             {
@@ -300,6 +315,7 @@ async def process_ticket(ticket_id: str) -> None:
         needs_holding_reply(state),
         state.get("grounded"),
         state.get("risk_flags", []),
+        cited_precedents(state),
     )
     # Redrafted from a department's answer: back to the top of the queue, reasons still shown.
     if guidance_hits:

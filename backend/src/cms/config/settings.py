@@ -118,12 +118,19 @@ class Settings(BaseSettings):
     # Intake §7: a top department at or above this routes directly; below goes to human review.
     routing_confidence_floor: float = 0.60
     # The ticket graph's reply written to the customer (the chat's `generate` writes to the agent).
-    # v2 adds the department's answer as a source after an escalation.
-    customer_reply_prompt_version: str = "v2"
+    # v3 adds a department's answer from a similar past case; v2 the ticket's own answer.
+    customer_reply_prompt_version: str = "v3"
     # The question emailed to a department when a ticket is escalated.
     dept_question_prompt_version: str = "v1"
     # Title of a department's answer when it is offered to the drafter as a source.
     guidance_title_template: str = "Department guidance — {department}"
+    # Kill switch: off, a past case's department answer is only precedent, never a source.
+    precedents_enabled: bool = True
+    # Reranker score a past case needs before its department answer is offered as a source.
+    # Stricter than `policy_relevance_threshold`; tune it from the `ticket-precedents` eval's logged scores.
+    precedent_relevance_threshold: float = 0.70
+    # `{case}` is the case title, e.g. "T-14 — product_safety / safety".
+    precedent_title_template: str = "Earlier department guidance ({case})"
     # The ticket draft when no policy matches. No model call, so no claim to check.
     holding_reply_message: str = (
         "Dear customer,\n\n"
