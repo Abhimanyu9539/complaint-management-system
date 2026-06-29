@@ -1,0 +1,12 @@
+<policy_extracts>
+{context}
+</policy_extracts>
+
+<past_cases>
+{cases}
+</past_cases>
+
+<complaint>
+{query}
+</complaint>
+{feedback}
