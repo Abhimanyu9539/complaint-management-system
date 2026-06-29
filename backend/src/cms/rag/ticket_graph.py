@@ -4,18 +4,19 @@
                           +-> classify_ticket -> END                        (allowed)
                           +-> analyze_ticket -+-> retrieve_policies -+
                                               +-> retrieve_cases ----+-> join_retrieval
-    join_retrieval -+-> END                                  (retrieval failed)
-                    +-> ticket_no_match -> END               (no policy matched, no dept answer)
-                    +-> draft_reply -+-> END                 (drafting failed)
-                                     +-> ticket_output_guard -+-> END          (grounded, or still not)
-                                                              +-> draft_reply  (ungrounded, first time)
+    join_retrieval -> find_precedents -+-> END                     (retrieval failed)
+                                       +-> ticket_no_match -> END  (no policy matched, no dept answer)
+                                       +-> draft_reply
+    draft_reply -+-> END                                  (drafting failed)
+                 +-> ticket_output_guard -+-> END          (grounded, or still not)
+                                          +-> draft_reply  (ungrounded, first time)
 
 It only computes. `services/ticket_pipeline.py` runs it and saves what it
 produced, so status changes stay in `ticket_service`. No checkpointer: every run
 starts from the ticket row, and its results live on the ticket.
 
-A failing classifier, retriever or drafter records its error in `errors` rather
-than raising, so the pipeline still saves what the other branch produced.
+A failing classifier, retriever, precedent rerank or drafter records its error in
+`errors` rather than raising, so the pipeline still saves what the other branch produced.
 """
 
 import logging
@@ -29,6 +30,7 @@ from langgraph.graph.state import CompiledStateGraph
 from cms.rag.nodes.analyze_ticket import analyze_ticket
 from cms.rag.nodes.classify_ticket import classify_ticket
 from cms.rag.nodes.draft_reply import draft_reply
+from cms.rag.nodes.find_precedents import find_precedents
 from cms.rag.nodes.input_guard import input_guard
 from cms.rag.nodes.join_retrieval import join_retrieval
 from cms.rag.nodes.retrieve_cases import retrieve_cases
@@ -47,6 +49,7 @@ ANALYZE_TICKET = "analyze_ticket"
 RETRIEVE_POLICIES = "retrieve_policies"
 RETRIEVE_CASES = "retrieve_cases"
 JOIN_RETRIEVAL = "join_retrieval"
+FIND_PRECEDENTS = "find_precedents"
 TICKET_NO_MATCH = "ticket_no_match"
 DRAFT_REPLY = "draft_reply"
 TICKET_OUTPUT_GUARD = "ticket_output_guard"
@@ -80,7 +83,8 @@ def route_after_input_guard(state: TicketState) -> list[str] | str:
 def route_after_retrieval(state: TicketState) -> str:
     """Stop if either retrieval failed; otherwise draft, or hold when there is nothing to draft from.
 
-    A department's answer is enough to draft from even when no policy matched.
+    A department's answer, this ticket's or a close past case's, is enough to draft
+    from even when no policy matched.
     """
     errors = state.get("errors", {})
     if RETRIEVE_POLICIES in errors or RETRIEVE_CASES in errors:
@@ -114,6 +118,7 @@ def build_ticket_graph() -> CompiledStateGraph:
     builder.add_node(RETRIEVE_POLICIES, _record_errors(RETRIEVE_POLICIES, retrieve_policies))
     builder.add_node(RETRIEVE_CASES, _record_errors(RETRIEVE_CASES, retrieve_cases))
     builder.add_node(JOIN_RETRIEVAL, join_retrieval, input_schema=TicketState)
+    builder.add_node(FIND_PRECEDENTS, _record_errors(FIND_PRECEDENTS, find_precedents))
     builder.add_node(TICKET_NO_MATCH, ticket_no_match)
     builder.add_node(DRAFT_REPLY, _record_errors(DRAFT_REPLY, draft_reply))
     builder.add_node(TICKET_OUTPUT_GUARD, ticket_output_guard)
@@ -126,8 +131,10 @@ def build_ticket_graph() -> CompiledStateGraph:
     builder.add_edge(ANALYZE_TICKET, RETRIEVE_POLICIES)
     builder.add_edge(ANALYZE_TICKET, RETRIEVE_CASES)
     builder.add_edge([RETRIEVE_POLICIES, RETRIEVE_CASES], JOIN_RETRIEVAL)
+    # A failed rerank is recorded, and drafting goes on without precedents.
+    builder.add_edge(JOIN_RETRIEVAL, FIND_PRECEDENTS)
     builder.add_conditional_edges(
-        JOIN_RETRIEVAL,
+        FIND_PRECEDENTS,
         route_after_retrieval,
         {
             "failed": END,

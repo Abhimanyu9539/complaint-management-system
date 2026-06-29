@@ -14,10 +14,12 @@ def review_reasons(
     no_match: bool,
     grounded: bool | None,
     risk_flags: list[str],
+    precedents: list[str],
 ) -> list[str]:
     """Every reason this ticket needs review, in words the workbench shows as-is.
 
     Empty means the ticket is `drafted`; anything else means `needs_review`.
+    `precedents` are the titles of the earlier department answers the draft cites.
     """
     floor = get_settings().routing_confidence_floor
     reasons: list[str] = []
@@ -37,6 +39,8 @@ def review_reasons(
     suggested = classification.suggested_severity if classification else None
     if "critical" in (severity, suggested):
         reasons.append("Critical severity.")
+    for title in precedents:
+        reasons.append(f"Relies on {title}. Check it applies to this complaint.")
 
     logger.info("gate: %d review reason(s) %s", len(reasons), reasons)
     return reasons

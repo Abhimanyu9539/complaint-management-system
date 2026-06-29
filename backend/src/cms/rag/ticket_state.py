@@ -42,6 +42,8 @@ class TicketState(_RequiredState, total=False):
     policy_hits: list[tuple[Document, float]]  # (chunk, score), best first
     case_hits: list[tuple[Document, float]]  # (chunk, score), best first
     no_match: bool
+    # A close past case's department answer, offered like `guidance_hits` (find_precedents).
+    precedent_hits: list[tuple[Document, float]]
 
     # --- drafting (draft_reply or ticket_no_match) ---
     draft: str
@@ -55,10 +57,19 @@ class TicketState(_RequiredState, total=False):
 
 
 def drafting_sources(state: TicketState) -> list[tuple[Document, float]]:
-    """What the drafter cites before the cases: department answers first, then policies."""
-    return state.get("guidance_hits", []) + state.get("policy_hits", [])
+    """What the drafter cites before the cases: department answers first (this ticket's, then
+    earlier ones), then policies."""
+    return (
+        state.get("guidance_hits", [])
+        + state.get("precedent_hits", [])
+        + state.get("policy_hits", [])
+    )
 
 
 def needs_holding_reply(state: TicketState) -> bool:
-    """No policy matched and no department has answered, so there is nothing to draft from."""
-    return bool(state.get("no_match")) and not state.get("guidance_hits")
+    """No policy matched and no department answer applies, so there is nothing to draft from."""
+    return (
+        bool(state.get("no_match"))
+        and not state.get("guidance_hits")
+        and not state.get("precedent_hits")
+    )

@@ -255,6 +255,7 @@ class GuidanceEvidence(_Base):
     """A department's answer the drafter was offered. `marker` is its `[n]` in the draft."""
 
     marker: int
+    # For an earlier department answer from a past case, this holds the case id.
     dept_response_id: str
     department_id: str
     title: str
