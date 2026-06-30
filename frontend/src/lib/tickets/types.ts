@@ -122,6 +122,7 @@ export interface PolicyEvidence {
 /** A department's answer the drafter was offered. `marker` is its `[n]` in the draft. */
 export interface GuidanceEvidence {
   marker: number;
+  /** For an earlier department answer from a past case, the case id. */
   deptResponseId: string;
   departmentId: string;
   title: string;

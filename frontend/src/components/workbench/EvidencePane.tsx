@@ -16,7 +16,8 @@ function percent(score: number): string {
 }
 
 /**
- * The department's answer after an escalation, the predicted department, the
+ * The department's answer after an escalation (or an earlier one from a similar past case, told
+ * apart by its title), the predicted department, the
  * similar past cases the drafter was given (cited ones marked), and the policy the draft cited — all written by the ticket graph. Department names resolve through `departmentLabel`, backed by
  * the live `/admin/departments` list.
  */
@@ -41,7 +42,9 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
               <div key={ref.deptResponseId} className="text-[12px] leading-relaxed text-text-muted">
                 <p className="flex items-center gap-2 text-text">
                   <span className="font-mono text-[11px] text-accent">[{ref.marker}]</span>
-                  <span className="min-w-0 truncate">{departmentLabel(ref.departmentId)}</span>
+                  <span title={ref.title} className="min-w-0 truncate">
+                    {ref.title}
+                  </span>
                   {ref.cited && (
                     <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10.5px] font-medium text-accent">
                       cited
