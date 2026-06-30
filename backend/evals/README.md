@@ -207,6 +207,46 @@ same 12 policy chunks and no cases.
 - Generate is one Luna run: the second stopped on OpenRouter's 402 (`in_flight_budget_exhausted`).
   The faithfulness miss is the bereavement golden, which skipped the one required retention offer.
 
+## Precedents
+
+A past case's department answer can be cited when the reranker scores the case close to the new
+complaint (`find_precedents`, `precedent_relevance_threshold`). The `ticket-precedents` leg checks
+this with `precedents.json`: 7 new complaints, one per seed case that has a department answer
+(C-1002, 1005, 1008, 1009, 1014, 1016, 1018), each with a different order number and wording.
+`additional_metadata.precedent` names the case.
+
+```bash
+PRECEDENTS_ENABLED=false uv run python evals/generator/aggregate.py --leg ticket-precedents --max-concurrent 5   # before
+uv run python evals/generator/aggregate.py --leg ticket-precedents --max-concurrent 5                            # after
+```
+
+2026-10-03, `customer_reply/v3`, `gpt-6-luna` for drafting and judging, one run per side.
+
+| Check | Before (off) | After (on) |
+| --- | --- | --- |
+| Correctness | 0.60, 2/7 pass | **0.70, 5/7 pass** |
+| Faithfulness | 0.97, 7/7 pass | 0.83, 5/7 pass |
+| Answer Relevancy | 1.00, 7/7 pass | 1.00, 7/7 pass |
+| Holding replies | 0 | 0 |
+| Earlier answer offered / cited | 0 / 0 | 7 / 4 |
+| Gate / citation health | 7/7 first time; 0 / 0 | 7/7 first time; 0 / 0 |
+
+- **Correctness per golden, before → after**: C-1014 app pairing 0.40 → 0.70 (now gives the 4.2 fix
+  and the ₹1,200 credit), C-1018 batch defect 0.60 → 0.80 (a definite 5% credit and the batch hold),
+  C-1009 battery 0.60 → 0.70 (says the batch is under internal review), C-1002 and C-1008 0.50 →
+  0.60, C-1016 0.80 → 0.80, C-1005 0.80 → 0.70. The drafts that cite the earlier answer gain the
+  remedies only that answer authorises.
+- **The Faithfulness drop is the judge, not the drafts.** It reads the earlier answer as being about
+  this complaint: C-1005 (0.50) is marked down for refunding "two charges" because the old case had
+  three, and C-1018 (0.67) for replacing "nine units" because the old case had 12. Both numbers come
+  from the new complaints. Faithfulness sees only the retrieval context, not the complaint.
+- **Holding replies didn't move**: a policy matched all 7 goldens, so this set doesn't exercise the
+  holding-reply case. The unit tests cover it.
+- **Threshold**: the intended case scored 0.840–0.961 on all 7 goldens; the best wrong case scored
+  0.441. `0.70` sits in that gap and stays.
+- Not re-run: the 30-golden `ticket-graph` leg with precedents on. The earlier `ticket-graph` runs
+  above used the `gpt-5.4-mini` judge, so comparing against them also needs a run with precedents off.
+
 ## The legs
 
 `aggregate.py` is the full list; the `test_*.py` files cover the plain legs only.

@@ -21,7 +21,7 @@ from cms.rag.nodes.analyze_query import analyze_query_core, build_policy_queries
 from cms.rag.nodes.generate import generate_core
 from cms.rag.nodes.retrieve_policies import retrieve_policies_core
 from cms.rag.ticket_graph import get_ticket_graph
-from cms.rag.ticket_state import drafting_sources
+from cms.rag.ticket_state import drafting_sources, needs_holding_reply
 from cms.retrieval.retrievers.case_retriever import retrieve_cases_hybrid
 from cms.retrieval.retrievers.policy_retriever import DEFAULT_TOP_N as POLICY_TOP_N
 
@@ -92,15 +92,18 @@ async def ticket_graph_case(query: str) -> GenerationCase:
     """The ticket graph end to end: guard, classify, retrieve, draft the customer reply, check it.
 
     The compiled graph only computes, so nothing is written to the database.
-    A holding reply was drafted from nothing, so its context is empty.
+    A holding reply was drafted from nothing, so its context is empty. With no
+    department answer on an eval ticket, every guidance citation is an earlier one.
     """
     state = await get_ticket_graph().ainvoke({"ticket_id": "eval", "ticket_no": 0, "query": query})
     outcome = {
         "grounded": state.get("grounded"),
         "regenerated": bool(state.get("regenerated")),
-        "no_match": bool(state.get("no_match")),
+        "holding": needs_holding_reply(state),
         "input_blocked": bool(state.get("input_blocked")),
         "failed": sorted(state.get("errors", {})),
+        "precedents": len(state.get("precedent_hits", [])),
+        "precedents_cited": sum(1 for c in state.get("citations", []) if c.doc_type == "guidance"),
     }
     GATE_OUTCOMES.append(outcome)
     for stage, error in state.get("errors", {}).items():
@@ -110,7 +113,7 @@ async def ticket_graph_case(query: str) -> GenerationCase:
     contexts: list[str] = []
     if not draft:
         logger.warning("ticket leg | no draft for %r: %s", query[:60], outcome)
-    elif not outcome["no_match"]:
+    elif not outcome["holding"]:
         contexts = offered_contexts(drafting_sources(state), state.get("case_hits", []))
     logger.info("ticket leg | %r: %s, %d chunk(s) offered", query[:60], outcome, len(contexts))
     return contexts, draft

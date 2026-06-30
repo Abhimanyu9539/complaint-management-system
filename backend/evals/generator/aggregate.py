@@ -5,6 +5,7 @@ shape: same arguments, same results layout, same reasons for the bootstrap below
 
     uv run python evals/generator/aggregate.py --leg policy-graph-generate
     uv run python evals/generator/aggregate.py --leg ticket-graph
+    uv run python evals/generator/aggregate.py --leg ticket-precedents
 
 Unlike the retriever legs, every golden here runs a generation call as well as the
 retrieval fan-out, so a run costs materially more. Qdrant must be up and the
@@ -67,6 +68,12 @@ LEGS = {
         ticket_graph_case,
         f"customer_reply/{get_settings().customer_reply_prompt_version}",
     ),
+    # One complaint per seed case with a department answer. Run with PRECEDENTS_ENABLED=false for "before".
+    "ticket-precedents": (
+        "precedents.json",
+        ticket_graph_case,
+        f"customer_reply/{get_settings().customer_reply_prompt_version}",
+    ),
 }
 DEFAULT_LEG = "policy-graph-generate"
 
@@ -105,13 +112,19 @@ def log_gate_summary(outcomes: list[dict]) -> None:
     first_time = sum(1 for o in outcomes if o["grounded"] and not o["regenerated"])
     after_retry = sum(1 for o in outcomes if o["grounded"] and o["regenerated"])
     ungrounded = sum(1 for o in outcomes if o["grounded"] is False)
-    holding = sum(1 for o in outcomes if o["no_match"])
+    holding = sum(1 for o in outcomes if o["holding"])
     blocked = sum(1 for o in outcomes if o["input_blocked"])
     failed = sum(1 for o in outcomes if o["failed"])
+    offered = sum(1 for o in outcomes if o["precedents"])
+    cited = sum(1 for o in outcomes if o["precedents_cited"])
     print(
         f"gate: {len(outcomes)} ticket(s), {first_time} passed the guard first time, "
         f"{after_retry} after a retry, {ungrounded} still ungrounded, "
         f"{holding} holding replies, {blocked} blocked at input, {failed} with a failed node"
+    )
+    print(
+        f"precedents: {offered} draft(s) offered an earlier department answer, "
+        f"{cited} relied on one"
     )
 
 
@@ -187,6 +200,9 @@ def main() -> int:
             "prompt_version": prompt_version,
             "judge_model": JUDGE_MODEL,
             "golden_set": dataset_file,
+            # Ticket legs only; on the chat leg these change nothing.
+            "precedents_enabled": get_settings().precedents_enabled,
+            "precedent_relevance_threshold": get_settings().precedent_relevance_threshold,
         },
     )
     return 0

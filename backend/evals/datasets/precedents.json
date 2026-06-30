@@ -1,0 +1,51 @@
+[
+  {
+    "input": "My AV-450 Blender (order #6127) was a birthday present from a friend, and after only a handful of smoothies the motor has started smelling like burning plastic. I don't have a receipt because it was a gift. Is it still covered? Honestly I'm nervous about plugging it in again.",
+    "expected_output": "A burning smell from the motor is a safety symptom, so the customer is told to stop using the blender. A gifted unit is covered under the warranty once its serial number is registered, so the reply asks for the serial number rather than a receipt (warranty §4.1). Because a burning smell was reported, the warranty §5.1 safety exception applies: an immediate full refund instead of the standard repair-first remedy, whether or not a receipt is available. The missing receipt is not held against the customer.",
+    "additional_metadata": {
+      "precedent": "C-1002"
+    }
+  },
+  {
+    "input": "I cancelled my CarePlan+ subscription through your support team in June and I have their reply confirming it, yet my card was charged ₹749 again in July and in August. Please refund both charges and make sure the subscription really is cancelled this time.",
+    "expected_output": "The cancellation was received but never reached the billing system, a known problem between our support and billing systems, not the customer's error. Every charge taken after the cancellation date is refunded in full to the customer (billing §2), here both ₹749 charges, once the cancellation date is confirmed against our records. The subscription is cancelled directly in the billing system so it cannot renew again. The reply gives no internal incident numbers.",
+    "additional_metadata": {
+      "precedent": "C-1005"
+    }
+  },
+  {
+    "input": "My SmartHub Pro (order #9372) arrived yesterday with the box caved in on one side. Something loose slides around inside the hub and it won't power on. I'm away for work from Monday and need a working hub set up before I leave. What can you do quickly?",
+    "expected_output": "Damage in transit to a unit under ₹12,000 is replaced without the customer returning the damaged unit first (shipping §3), once photos of the damaged unit and packaging confirm it, so the reply asks for photos. Because the customer has a stated deadline, the replacement is sent by express shipping at no charge (shipping §4). The customer does not need to send the damaged hub back.",
+    "additional_metadata": {
+      "precedent": "C-1008"
+    }
+  },
+  {
+    "input": "Last night the battery on my X200 Cordless Vacuum (order #4733) got so hot on the charging dock that it gave off smoke and a burnt smell. I pulled the plug and it's sitting outside now. Has this happened to other people? Is the X200 being recalled? I'd like my money back.",
+    "expected_output": "Overheating and smoke while charging is a safety report. The customer is entitled to an immediate full refund regardless of the standard remedy hierarchy (product_safety §4), and the report is logged for the quality escalation queue. The affected X200 battery batch is under internal safety review for a suspected charging-circuit overheating defect; this is not a public recall, so the reply does not use the word 'recall', says the batch is under internal review, and tells the customer they will be informed directly if that changes. The customer stops using the unit and is given the safe battery disposal route through e-waste take-back, not household waste. The reply may ask for the serial number to confirm the batch.",
+    "additional_metadata": {
+      "precedent": "C-1009"
+    }
+  },
+  {
+    "input": "The X200 app still won't pair with my vacuum (order #4819). My phone runs Android 14 and the app freezes on the pairing screen every single time. I've reinstalled the app and restarted everything, and this is now the third time I've had to write to you about it.",
+    "expected_output": "This is a known app bug, not a fault in the vacuum: on Android 14, in-app pairing fails because of a Bluetooth permissions change in the latest OS update. A fix is scheduled for app version 4.2. Until then, the workaround is to pair manually through the phone's Bluetooth settings instead of the app's automatic discovery, and the reply explains how. Because this is the customer's third contact about the same unresolved issue, a ₹1,200 account credit is applied for the inconvenience.",
+    "additional_metadata": {
+      "precedent": "C-1014"
+    }
+  },
+  {
+    "input": "The lid came off my AV-450 Blender (order #5966) while I was blending hot soup and it went all over my hand. It blistered and I had to get it dressed at a clinic. I've kept the blender and taken photos. I want to know who is taking responsibility for this.",
+    "expected_output": "This is a potential injury claim and is handled by Legal directly. The reply acknowledges receipt of the report, asks the customer for the photos and any medical documentation they are willing to share, and gives the direct Legal contact for further correspondence, saying Legal will follow up. It offers no refund, replacement, credit or goodwill gesture, and makes no statement or apology that could be read as admitting fault or liability.",
+    "additional_metadata": {
+      "precedent": "C-1016"
+    }
+  },
+  {
+    "input": "We're a retail partner. Our latest wholesale delivery (order #WS-4127) included 40 ProBlend 300 mixers from batch #MB-2291, and 9 of them have a crack along the same seam of the outer housing. The cartons were undamaged, so this looks like a production fault. How will you sort this out?",
+    "expected_output": "Batch #MB-2291 is under an open manufacturing investigation for exactly this seam-cracking pattern, a tooling defect on one production line, so this is a manufacturing fault and not shipping damage. All affected units, here 9, are replaced at no charge from a verified-good batch, and a 5% credit is applied on the full wholesale order for the disruption. The batch is held from further shipments until the tooling is fixed, so the replacements do not come from #MB-2291.",
+    "additional_metadata": {
+      "precedent": "C-1018"
+    }
+  }
+]
