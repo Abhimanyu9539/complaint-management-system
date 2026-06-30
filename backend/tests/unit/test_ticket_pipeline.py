@@ -4,6 +4,7 @@ from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
 from cms.rag.context import build_generation_context, guidance_hit
+from cms.rag.nodes.find_precedents import precedent_hit
 from cms.schemas.ticket_classification import (
     DepartmentCandidate,
     TicketClassification,
@@ -454,3 +455,66 @@ async def test_failed_answer_read_ends_at_processing_failed(monkeypatch) -> None
     assert graph.inputs == []
     assert events == [("t1", "failed", {"stage": "fetch_guidance", "error": "ConnectionError: down"})]
     assert graph.finishes == [("processing_failed", [])]
+
+
+# --- an earlier department answer from a similar past case ---
+
+PRECEDENT_CASE = Document(
+    page_content=(
+        "COMPLAINT:\nX200 battery smoked on the dock.\n\n"
+        "DEPARTMENT GUIDANCE:\nBatch under internal review; refund it.\n\n"
+        "RESOLUTION:\nRefunded."
+    ),
+    metadata={
+        "doc_id": "c9",
+        "chunk_id": "cc9",
+        "title": "C-1009 — product_safety / safety_hazard",
+        "department": "product_safety",
+    },
+)
+PRECEDENT_TITLE = "Earlier department guidance (C-1009 — product_safety / safety_hazard)"
+# Offered as [1] the earlier answer, [2] the policy, [3] the same case as a past case.
+PRECEDENT_OFFERED = build_generation_context(
+    [precedent_hit(PRECEDENT_CASE, 0.82), POLICY_HIT], [(PRECEDENT_CASE, 0.5)]
+)[2]
+PRECEDED = {
+    **DRAFTED,
+    "case_hits": [(PRECEDENT_CASE, 0.5)],
+    "precedent_hits": [precedent_hit(PRECEDENT_CASE, 0.82)],
+    "draft": "Dear customer,\n\nWe will refund you [1][2].",
+    "citations": PRECEDENT_OFFERED[:2],
+    "risk_flags": [],
+}
+
+
+async def test_cited_precedent_is_saved_and_sent_to_review(monkeypatch) -> None:
+    graph, _, _, inserted = _install(monkeypatch, PRECEDED)
+
+    await ticket_pipeline.process_ticket("t1")
+
+    [row] = inserted
+    assert row["guidance_refs"] == [
+        {
+            "marker": 1,
+            "dept_response_id": "c9",
+            "department_id": "product_safety",
+            "title": PRECEDENT_TITLE,
+            "snippet": "Batch under internal review; refund it.",
+            "cited": True,
+        }
+    ]
+    assert row["policy_refs"][0]["marker"] == 2
+    assert graph.finishes == [
+        ("needs_review", [f"Relies on {PRECEDENT_TITLE}. Check it applies to this complaint."])
+    ]
+
+
+async def test_uncited_precedent_adds_no_reason(monkeypatch) -> None:
+    # Citing the same case as a past case ([3]) is not relying on its department answer.
+    uncited = {**PRECEDED, "draft": "Dear customer [2][3].", "citations": PRECEDENT_OFFERED[1:]}
+    graph, _, _, inserted = _install(monkeypatch, uncited)
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert inserted[0]["guidance_refs"][0]["cited"] is False
+    assert graph.finishes == [("drafted", [])]

@@ -21,6 +21,7 @@ def _reasons(**overrides) -> list[str]:
         "no_match": False,
         "grounded": True,
         "risk_flags": [],
+        "precedents": [],
     }
     return review_reasons(**{**args, **overrides})
 
@@ -59,6 +60,11 @@ def test_risk_flags() -> None:
 def test_critical_severity_from_the_ticket_or_the_classifier() -> None:
     assert _reasons(severity="critical") == ["Critical severity."]
     assert _reasons(classification=_classification(0.9, "critical")) == ["Critical severity."]
+
+
+def test_precedent() -> None:
+    title = "Earlier department guidance (T-14 — product_safety / safety)"
+    assert _reasons(precedents=[title]) == [f"Relies on {title}. Check it applies to this complaint."]
 
 
 def test_reasons_accumulate() -> None:

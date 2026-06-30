@@ -1,9 +1,11 @@
+import pytest
 from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
 from cms.llm.prompts.registry import load_prompt
 from cms.rag.nodes import analyze_ticket as analyze_ticket_module
 from cms.rag.nodes import draft_reply as draft_reply_module
+from cms.rag.nodes import find_precedents as precedents_module
 from cms.rag.nodes import ticket_output_guard as guard_module
 from cms.rag.nodes.ticket_no_match import ticket_no_match
 from cms.schemas.guardrails import GuardResult
@@ -168,7 +170,101 @@ ANSWER = (
 )
 
 
-async def test_draft_reply_offers_the_department_answer_first(monkeypatch) -> None:
+# --- find_precedents ---
+
+GUIDED_CASE = (
+    Document(
+        page_content=(
+            "COMPLAINT:\nX200 battery smoked on the dock.\n\n"
+            "DEPARTMENT GUIDANCE:\nBatch under internal review; refund it.\n\n"
+            "RESOLUTION:\nRefunded."
+        ),
+        metadata={
+            "doc_id": "case-9",
+            "chunk_id": "cc9",
+            "title": "C-1009 — product_safety / safety_hazard",
+            "department": "product_safety",
+        },
+    ),
+    0.03,
+)
+PLAIN_CASE = (
+    Document(
+        page_content="COMPLAINT:\nX100 dead.\n\nRESOLUTION:\nReplaced.",
+        metadata={"doc_id": "case-1", "chunk_id": "cc1", "title": "C-1001"},
+    ),
+    0.02,
+)
+
+
+def test_case_guidance_reads_the_guidance_section() -> None:
+    assert precedents_module.case_guidance(GUIDED_CASE[0].page_content) == (
+        "Batch under internal review; refund it."
+    )
+    assert precedents_module.case_guidance(PLAIN_CASE[0].page_content) is None
+
+
+def _install_rerank(monkeypatch, score: float = 0.9, enabled: bool = True, rerank: bool = True) -> list:
+    """Stub the reranker so every case scores `score`. Returns the doc ids sent on each call."""
+    calls: list[list[str]] = []
+
+    async def fake_rerank(query, hits, top_n):
+        calls.append([document.metadata["doc_id"] for document, _ in hits])
+        return [(document, score) for document, _ in hits][:top_n]
+
+    monkeypatch.setattr(precedents_module, "rerank_documents", fake_rerank)
+    monkeypatch.setattr(get_settings(), "precedents_enabled", enabled)
+    monkeypatch.setattr(get_settings(), "rerank_enabled", rerank)
+    monkeypatch.setattr(get_settings(), "precedent_relevance_threshold", 0.7)
+    return calls
+
+
+async def test_find_precedents_reranks_only_cases_with_guidance(monkeypatch) -> None:
+    calls = _install_rerank(monkeypatch, score=0.85)
+
+    update = await precedents_module.find_precedents({**STATE, "case_hits": [PLAIN_CASE, GUIDED_CASE]})
+
+    assert calls == [["case-9"]]
+    [(document, score)] = update["precedent_hits"]
+    assert score == 0.85
+    assert document.page_content == "Department guidance\nBatch under internal review; refund it."
+    assert document.metadata == {
+        "title": "Earlier department guidance (C-1009 — product_safety / safety_hazard)",
+        "doc_id": "case-9",
+        "chunk_id": "cc9",
+        "department_id": "product_safety",
+        "doc_type": "guidance",
+    }
+
+
+async def test_find_precedents_drops_cases_below_the_threshold(monkeypatch) -> None:
+    _install_rerank(monkeypatch, score=0.69)
+
+    update = await precedents_module.find_precedents({**STATE, "case_hits": [GUIDED_CASE]})
+
+    assert update == {"precedent_hits": []}
+
+
+@pytest.mark.parametrize(
+    ("case_hits", "enabled", "rerank"),
+    [([GUIDED_CASE], False, True), ([GUIDED_CASE], True, False), ([PLAIN_CASE], True, True)],
+    ids=["disabled", "rerank off", "no candidates"],
+)
+async def test_find_precedents_skips_the_reranker(monkeypatch, case_hits, enabled, rerank) -> None:
+    calls = _install_rerank(monkeypatch, enabled=enabled, rerank=rerank)
+
+    update = await precedents_module.find_precedents({**STATE, "case_hits": case_hits})
+
+    assert update == {"precedent_hits": []}
+    assert calls == []
+
+
+# --- drafting from department answers ---
+
+PRECEDENT = precedents_module.precedent_hit(GUIDED_CASE[0], 0.85)
+
+
+async def test_draft_reply_offers_the_department_answers_first(monkeypatch) -> None:
     offered: list = []
 
     async def fake_core(query, policy_hits, case_hits, **kwargs):
@@ -177,9 +273,12 @@ async def test_draft_reply_offers_the_department_answer_first(monkeypatch) -> No
 
     monkeypatch.setattr(draft_reply_module, "generate_core", fake_core)
 
-    await draft_reply_module.draft_reply({**STATE, "guidance_hits": [ANSWER]})
+    await draft_reply_module.draft_reply(
+        {**STATE, "guidance_hits": [ANSWER], "precedent_hits": [PRECEDENT]}
+    )
 
-    assert offered == [ANSWER, HIT]
+    # This ticket's answer, then the earlier one, then the policies.
+    assert offered == [ANSWER, PRECEDENT, HIT]
 
 
 async def test_output_guard_checks_against_the_department_answer(monkeypatch) -> None:

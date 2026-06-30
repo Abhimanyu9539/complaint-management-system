@@ -3,6 +3,10 @@ from langchain_core.documents import Document
 from cms.rag import ticket_graph as ticket_graph_module
 from cms.schemas.ticket_classification import DepartmentCandidate, TicketClassification
 
+PRECEDENT = (
+    Document(page_content="Department guidance\nRefund it.", metadata={"doc_type": "guidance"}),
+    0.85,
+)
 CLASSIFICATION = TicketClassification(
     candidates=[DepartmentCandidate(department="warranty", score=1.0)],
     category="faulty_product",
@@ -17,10 +21,12 @@ def _install_nodes(
     no_match: bool = False,
     verdicts: tuple[bool, ...] = (True,),
     failing: tuple[str, ...] = (),
+    precedents: bool = False,
 ) -> list[str]:
     """Stub every node so `build_ticket_graph` wires the real edges with no network.
 
-    `verdicts` are the output guard's answers in order; `failing` names nodes that raise.
+    `verdicts` are the output guard's answers in order; `failing` names nodes that raise;
+    `precedents` makes `find_precedents` return one.
     """
     ran: list[str] = []
     guard_answers = list(verdicts)
@@ -60,6 +66,7 @@ def _install_nodes(
         "retrieve_policies": {"policy_hits": [], "no_match": no_match},
         "retrieve_cases": {"case_hits": []},
         "join_retrieval": {},
+        "find_precedents": {"precedent_hits": [PRECEDENT] if precedents else []},
         "ticket_no_match": {"draft": "holding reply", "citations": []},
         "draft_reply": draft,
         "ticket_output_guard": guard,
@@ -83,7 +90,7 @@ async def test_allowed_ticket_is_classified_and_drafted(monkeypatch) -> None:
     assert ran[0] == "input_guard"
     assert set(ran[1:3]) == {"classify_ticket", "analyze_ticket"}
     assert set(ran[3:5]) == {"retrieve_policies", "retrieve_cases"}
-    assert ran[5:] == ["join_retrieval", "draft_reply", "ticket_output_guard"]
+    assert ran[5:] == ["join_retrieval", "find_precedents", "draft_reply", "ticket_output_guard"]
     assert state["classification"] == CLASSIFICATION
     assert state["draft"] == "reply to masked:X200 won't charge"
     assert state["grounded"] is True
@@ -164,3 +171,22 @@ async def test_no_match_with_a_department_answer_is_drafted(monkeypatch) -> None
     assert "ticket_no_match" not in ran
     assert ran[-2:] == ["draft_reply", "ticket_output_guard"]
     assert state["guidance_hits"] == [answer]
+
+
+async def test_no_match_with_a_precedent_is_drafted(monkeypatch) -> None:
+    ran = _install_nodes(monkeypatch, no_match=True, precedents=True)
+
+    state = await _run()
+
+    assert "ticket_no_match" not in ran
+    assert ran[-3:] == ["find_precedents", "draft_reply", "ticket_output_guard"]
+    assert state["precedent_hits"] == [PRECEDENT]
+
+
+async def test_precedent_failure_still_drafts(monkeypatch) -> None:
+    ran = _install_nodes(monkeypatch, failing=("find_precedents",))
+
+    state = await _run()
+
+    assert state["errors"] == {"find_precedents": "RuntimeError: find_precedents down"}
+    assert ran[-2:] == ["draft_reply", "ticket_output_guard"]
