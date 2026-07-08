@@ -62,7 +62,7 @@ async def _main() -> int:
     # One at a time: a backfill is not worth a burst of parallel model calls.
     # `process_ticket` never raises; each outcome is in the log and the ticket's events.
     for ticket_id in ticket_ids:
-        await process_ticket(ticket_id)
+        await process_ticket(ticket_id, trigger="cli")
     print(f"Triaged {len(ticket_ids)} ticket(s). Check each ticket's events for the outcome.")
     return 0
 

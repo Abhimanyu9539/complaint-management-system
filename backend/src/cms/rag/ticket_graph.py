@@ -20,7 +20,9 @@ A failing classifier, retriever, precedent rerank or drafter records its error i
 """
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -73,6 +75,24 @@ def _record_errors(stage: str, node: Node) -> Node:
     return run
 
 
+def _timed(name: str, node: Node) -> Node:
+    """Wrap `node` so its run time is appended to `steps`."""
+
+    async def run(state: TicketState) -> dict:
+        started_at = datetime.now(UTC).isoformat()
+        start = time.perf_counter()
+        update = await node(state) or {}
+        step = {
+            "node": name,
+            "started_at": started_at,
+            "ms": round((time.perf_counter() - start) * 1000),
+            "ok": name not in update.get("errors", {}),
+        }
+        return {**update, "steps": [step]}
+
+    return run
+
+
 def route_after_input_guard(state: TicketState) -> list[str] | str:
     """A blocked ticket goes no further; an allowed one is classified and drafted in parallel."""
     if state.get("input_blocked"):
@@ -111,17 +131,29 @@ def build_ticket_graph() -> CompiledStateGraph:
     builder = StateGraph(TicketState)
 
     # Chat nodes are typed for `GraphState`; without `input_schema` LangGraph would
-    # merge those channels in. The `_record_errors` wrapper is typed for `TicketState`.
-    builder.add_node(INPUT_GUARD, input_guard, input_schema=TicketState)
-    builder.add_node(CLASSIFY_TICKET, _record_errors(CLASSIFY_TICKET, classify_ticket))
-    builder.add_node(ANALYZE_TICKET, analyze_ticket)
-    builder.add_node(RETRIEVE_POLICIES, _record_errors(RETRIEVE_POLICIES, retrieve_policies))
-    builder.add_node(RETRIEVE_CASES, _record_errors(RETRIEVE_CASES, retrieve_cases))
-    builder.add_node(JOIN_RETRIEVAL, join_retrieval, input_schema=TicketState)
-    builder.add_node(FIND_PRECEDENTS, _record_errors(FIND_PRECEDENTS, find_precedents))
-    builder.add_node(TICKET_NO_MATCH, ticket_no_match)
-    builder.add_node(DRAFT_REPLY, _record_errors(DRAFT_REPLY, draft_reply))
-    builder.add_node(TICKET_OUTPUT_GUARD, ticket_output_guard)
+    # merge those channels in. The wrappers are typed for `TicketState`.
+    # `_timed` wraps every node so the run's path and node timings are recorded.
+    builder.add_node(INPUT_GUARD, _timed(INPUT_GUARD, input_guard), input_schema=TicketState)
+    builder.add_node(
+        CLASSIFY_TICKET, _timed(CLASSIFY_TICKET, _record_errors(CLASSIFY_TICKET, classify_ticket))
+    )
+    builder.add_node(ANALYZE_TICKET, _timed(ANALYZE_TICKET, analyze_ticket))
+    builder.add_node(
+        RETRIEVE_POLICIES,
+        _timed(RETRIEVE_POLICIES, _record_errors(RETRIEVE_POLICIES, retrieve_policies)),
+    )
+    builder.add_node(
+        RETRIEVE_CASES, _timed(RETRIEVE_CASES, _record_errors(RETRIEVE_CASES, retrieve_cases))
+    )
+    builder.add_node(
+        JOIN_RETRIEVAL, _timed(JOIN_RETRIEVAL, join_retrieval), input_schema=TicketState
+    )
+    builder.add_node(
+        FIND_PRECEDENTS, _timed(FIND_PRECEDENTS, _record_errors(FIND_PRECEDENTS, find_precedents))
+    )
+    builder.add_node(TICKET_NO_MATCH, _timed(TICKET_NO_MATCH, ticket_no_match))
+    builder.add_node(DRAFT_REPLY, _timed(DRAFT_REPLY, _record_errors(DRAFT_REPLY, draft_reply)))
+    builder.add_node(TICKET_OUTPUT_GUARD, _timed(TICKET_OUTPUT_GUARD, ticket_output_guard))
 
     builder.add_edge(START, INPUT_GUARD)
     builder.add_conditional_edges(

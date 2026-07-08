@@ -9,20 +9,24 @@ The ticket moves `processing` → `drafted` | `needs_review` | `processing_faile
 `ticket_gate.review_reasons` decides between the first two. A ticket a department
 has answered is drafted from that answer too, and goes back to `dept_responded`.
 A draft citing a similar past case's department answer gets a review reason.
+Every graph run is recorded in `agent_runs` for the admin's activity page.
 """
 
 import logging
+import time
 from uuid import UUID, uuid4
 
 from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
 from cms.db.repositories import (
+    agent_runs,
     departments,
     dept_responses,
     drafts,
     ticket_events,
     tickets,
+    utc_now_iso,
 )
 from cms.rag.context import build_generation_context, guidance_hit
 from cms.rag.nodes.classify_ticket import join_complaint
@@ -246,8 +250,94 @@ async def _finish(ticket_id: str, status: str, reasons: list[str]) -> None:
         await _fail(ticket_id, "gate", {"error": _error_text(exc)})
 
 
-async def process_ticket(ticket_id: str) -> None:
-    """Guard, classify and draft one ticket, save what each part produced, then gate it."""
+def run_status(state: TicketState, outcome: str) -> str:
+    """How a graph run ended, for the activity log: `failed`, `blocked`, `no_match` or `succeeded`."""
+    if outcome == "processing_failed":
+        return "failed"
+    if state.get("input_blocked"):
+        return "blocked"
+    if needs_holding_reply(state):
+        return "no_match"
+    return "succeeded"
+
+
+async def _record_run(
+    run: dict, state: TicketState, outcome: str, reasons: list[str], latency_ms: int
+) -> None:
+    """Write the run's row in `agent_runs`. `insert_run` swallows its own failures."""
+    classification = state.get("classification")
+    status = run_status(state, outcome)
+    await agent_runs.insert_run(
+        {
+            **run,
+            "status": status,
+            "outcome": outcome,
+            "review_reasons": reasons,
+            "predicted_dept": classification.department if classification else None,
+            "dept_confidence": classification.confidence if classification else None,
+            "category": classification.category if classification else None,
+            "grounded": state.get("grounded"),
+            "regenerated": bool(state.get("regenerated")),
+            "precedents_offered": len(state.get("precedent_hits", [])),
+            "steps": state.get("steps", []),
+            "errors": state.get("errors", {}),
+            "latency_ms": latency_ms,
+            "finished_at": utc_now_iso(),
+        }
+    )
+    logger.info(
+        "Ticket %s run %s: %s, gated to %s in %d ms", run["ticket_id"], run["id"], status, outcome, latency_ms
+    )
+
+
+async def _save_and_gate(
+    ticket_id: str,
+    row: dict,
+    state: TicketState,
+    run_id: UUID,
+    guidance_hits: list[tuple[Document, float]],
+) -> tuple[str, list[str]]:
+    """Save what the run produced, then pick the ticket's next status. Returns `(status, reasons)`."""
+    if state.get("input_blocked"):
+        reasons = state.get("guard_reasons", [])
+        logger.warning("Ticket %s blocked by the input guard: %s", ticket_id, reasons)
+        await _fail(ticket_id, "input_guard", {"reasons": reasons})
+        return "needs_review", [f"Blocked by the input guard: {'; '.join(reasons)}"]
+
+    errors = state.get("errors", {})
+    for failed_stage, error in errors.items():
+        await _fail(ticket_id, failed_stage, {"error": error})
+
+    classification = state.get("classification")
+    if classification:
+        await _save_classification(ticket_id, classification)
+
+    # If drafting failed on a retry, `draft` holds the attempt that failed its checks; it is not saved.
+    saved = False
+    if state.get("draft") and DRAFT_REPLY not in errors:
+        saved = await _save_draft(ticket_id, state, run_id)
+    if not saved:
+        return "processing_failed", []
+
+    reasons = review_reasons(
+        classification,
+        row.get("severity", "normal"),
+        needs_holding_reply(state),
+        state.get("grounded"),
+        state.get("risk_flags", []),
+        cited_precedents(state),
+    )
+    # Redrafted from a department's answer: back to the top of the queue, reasons still shown.
+    if guidance_hits:
+        return "dept_responded", reasons
+    return ("needs_review" if reasons else "drafted"), reasons
+
+
+async def process_ticket(ticket_id: str, trigger: str = "created") -> None:
+    """Guard, classify and draft one ticket, save what each part produced, then gate it.
+
+    `trigger` says why it ran (`agent_runs.TRIGGERS`), for the activity log.
+    """
     try:
         row = await ticket_service.start_processing(ticket_id)
     except ticket_service.IllegalTransition as exc:
@@ -270,6 +360,15 @@ async def process_ticket(ticket_id: str) -> None:
 
     # The root run's id in LangSmith, stored on the draft so feedback can find the trace.
     run_id = uuid4()
+    run = {
+        "id": str(run_id),
+        "ticket_id": ticket_id,
+        "ticket_no": row.get("ticket_no"),
+        "subject": row.get("subject"),
+        "trigger": trigger,
+        "started_at": utc_now_iso(),
+    }
+    start = time.perf_counter()
     try:
         state = await get_ticket_graph().ainvoke(
             {
@@ -282,44 +381,14 @@ async def process_ticket(ticket_id: str) -> None:
         )
     except Exception as exc:
         logger.exception("Ticket %s: the ticket graph failed", ticket_id)
-        await _fail(ticket_id, "ticket_graph", {"error": _error_text(exc)})
+        error = _error_text(exc)
+        latency_ms = round((time.perf_counter() - start) * 1000)
+        await _fail(ticket_id, "ticket_graph", {"error": error})
         await _finish(ticket_id, "processing_failed", [])
+        await _record_run(run, {"errors": {"ticket_graph": error}}, "processing_failed", [], latency_ms)
         return
+    latency_ms = round((time.perf_counter() - start) * 1000)
 
-    if state.get("input_blocked"):
-        reasons = state.get("guard_reasons", [])
-        logger.warning("Ticket %s blocked by the input guard: %s", ticket_id, reasons)
-        await _fail(ticket_id, "input_guard", {"reasons": reasons})
-        await _finish(ticket_id, "needs_review", [f"Blocked by the input guard: {'; '.join(reasons)}"])
-        return
-
-    errors = state.get("errors", {})
-    for failed_stage, error in errors.items():
-        await _fail(ticket_id, failed_stage, {"error": error})
-
-    classification = state.get("classification")
-    if classification:
-        await _save_classification(ticket_id, classification)
-
-    # If drafting failed on a retry, `draft` holds the attempt that failed its checks; it is not saved.
-    saved = False
-    if state.get("draft") and DRAFT_REPLY not in errors:
-        saved = await _save_draft(ticket_id, state, run_id)
-    if not saved:
-        await _finish(ticket_id, "processing_failed", [])
-        return
-
-    reasons = review_reasons(
-        classification,
-        row.get("severity", "normal"),
-        needs_holding_reply(state),
-        state.get("grounded"),
-        state.get("risk_flags", []),
-        cited_precedents(state),
-    )
-    # Redrafted from a department's answer: back to the top of the queue, reasons still shown.
-    if guidance_hits:
-        status = "dept_responded"
-    else:
-        status = "needs_review" if reasons else "drafted"
+    status, reasons = await _save_and_gate(ticket_id, row, state, run_id, guidance_hits)
     await _finish(ticket_id, status, reasons)
+    await _record_run(run, state, status, reasons, latency_ms)

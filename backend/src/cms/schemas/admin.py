@@ -313,3 +313,68 @@ class EscalationSummaryResponse(_Base):
         description="Includes departments at zero — an absent bar is ambiguous."
     )
     corpus: CorpusResolutionSplit
+
+
+# ---------------------------------------------------------------------------
+# Agent activity — one row per ticket-graph run (`agent_runs`, migration 0025)
+# ---------------------------------------------------------------------------
+
+AgentRunStatus = Literal["succeeded", "no_match", "blocked", "failed"]
+AgentRunTrigger = Literal["created", "dept_response", "regenerate", "cli"]
+
+
+class AgentRunStep(_Base):
+    """One node the run passed through. A retried node appears twice."""
+
+    node: str
+    started_at: str
+    ms: int
+    ok: bool
+
+
+class AgentRun(_Base):
+    id: str = Field(description="The graph run id, which is also the LangSmith root run id.")
+    ticket_id: str
+    ticket_no: int | None = None
+    subject: str | None = None
+    trigger: AgentRunTrigger
+    status: AgentRunStatus
+    outcome: str | None = Field(default=None, description="The ticket status the gate chose.")
+    review_reasons: list[str]
+    predicted_dept: str | None = None
+    dept_confidence: float | None = None
+    category: str | None = None
+    grounded: bool | None = None
+    regenerated: bool
+    precedents_offered: int
+    steps: list[AgentRunStep]
+    errors: dict[str, str]
+    latency_ms: int | None = None
+    started_at: str
+    finished_at: str
+
+
+class AgentRunPage(_Base):
+    items: list[AgentRun]
+    total: int
+    limit: int
+    offset: int
+
+
+class NodeLatency(_Base):
+    node: str
+    p50_ms: int
+    samples: int
+
+
+class AgentSummaryResponse(_Base):
+    range_days: int
+    total: int
+    by_status: dict[str, int]
+    by_outcome: dict[str, int]
+    needs_review_rate: float | None = Field(
+        default=None,
+        description="Runs gated to needs_review / all runs. Null, never 0.0, when nothing ran.",
+    )
+    latency: DurationStats
+    node_latency: list[NodeLatency] = Field(description="Slowest node first.")

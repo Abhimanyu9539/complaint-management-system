@@ -14,10 +14,12 @@ repository *arguments*, never as `.eq()` / `.order()` calls in this file.
 
 import asyncio
 import logging
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from cms.config.settings import get_settings
 from cms.db.repositories import (
+    agent_runs,
     cases,
     chunks,
     departments,
@@ -28,6 +30,9 @@ from cms.db.repositories import (
 from cms.ingestion import seed as seed_module
 from cms.retrieval.vector_store import qdrant_store
 from cms.schemas.admin import (
+    AgentRun,
+    AgentRunPage,
+    AgentSummaryResponse,
     ChunkRowCounts,
     CollectionStorage,
     CorpusResolutionSplit,
@@ -43,6 +48,7 @@ from cms.schemas.admin import (
     IngestionSummaryResponse,
     JobPage,
     JobSummary,
+    NodeLatency,
     OverviewResponse,
     QueueSnapshot,
     StorageResponse,
@@ -536,4 +542,88 @@ async def build_escalation_summary(days: int) -> EscalationSummaryResponse:
             direct=corpus.get("direct", 0),
             escalated=corpus.get("escalated", 0),
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Agent activity — ticket-graph runs
+# ---------------------------------------------------------------------------
+
+
+def _to_agent_run(row: dict) -> AgentRun:
+    return AgentRun(
+        id=row["id"],
+        ticket_id=row["ticket_id"],
+        ticket_no=row.get("ticket_no"),
+        subject=row.get("subject"),
+        trigger=row["trigger"],
+        status=row["status"],
+        outcome=row.get("outcome"),
+        review_reasons=row.get("review_reasons") or [],
+        predicted_dept=row.get("predicted_dept"),
+        dept_confidence=row.get("dept_confidence"),
+        category=row.get("category"),
+        grounded=row.get("grounded"),
+        regenerated=bool(row.get("regenerated")),
+        precedents_offered=row.get("precedents_offered") or 0,
+        # Parallel branches append in either order; the timeline reads by start time.
+        steps=sorted(row.get("steps") or [], key=lambda step: step.get("started_at", "")),
+        errors=row.get("errors") or {},
+        latency_ms=row.get("latency_ms"),
+        started_at=row["started_at"],
+        finished_at=row["finished_at"],
+    )
+
+
+async def build_agent_run_page(
+    *, status: str | None, search: str | None, limit: int, offset: int
+) -> AgentRunPage:
+    """One page of ticket-graph runs, newest first."""
+    rows, total = await agent_runs.list_runs(
+        status=status, search=search, limit=limit, offset=offset
+    )
+    return AgentRunPage(
+        items=[_to_agent_run(row) for row in rows], total=total, limit=limit, offset=offset
+    )
+
+
+async def build_agent_summary(days: int) -> AgentSummaryResponse:
+    """Run counts, graph latency percentiles and per-node median latency over a window."""
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    rows = await agent_runs.list_runs_since(since, get_settings().agent_runs_summary_max_rows)
+
+    by_outcome = Counter(row.get("outcome") or "unknown" for row in rows)
+    latencies = sorted(row["latency_ms"] for row in rows if row.get("latency_ms") is not None)
+
+    node_ms: dict[str, list[int]] = {}
+    for row in rows:
+        for step in row.get("steps") or []:
+            node_ms.setdefault(step["node"], []).append(step["ms"])
+    node_latency = sorted(
+        (
+            NodeLatency(node=node, p50_ms=_percentile(sorted(ms), 0.5) or 0, samples=len(ms))
+            for node, ms in node_ms.items()
+        ),
+        key=lambda item: item.p50_ms,
+        reverse=True,
+    )
+
+    total = len(rows)
+    return AgentSummaryResponse(
+        range_days=days,
+        total=total,
+        by_status={
+            status: sum(1 for row in rows if row["status"] == status)
+            for status in agent_runs.RUN_STATUSES
+        },
+        by_outcome=dict(by_outcome),
+        # Null, not 0.0, when nothing ran: an idle graph is not a graph that never needs review.
+        needs_review_rate=by_outcome["needs_review"] / total if total else None,
+        latency=DurationStats(
+            p50_ms=_percentile(latencies, 0.5),
+            p95_ms=_percentile(latencies, 0.95),
+            max_ms=latencies[-1] if latencies else None,
+            samples=len(latencies),
+        ),
+        node_latency=node_latency,
     )
