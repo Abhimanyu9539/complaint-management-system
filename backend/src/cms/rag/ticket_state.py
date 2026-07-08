@@ -55,6 +55,9 @@ class TicketState(_RequiredState, total=False):
     # branches can both write it, so updates are merged.
     errors: Annotated[dict[str, str], operator.or_]
 
+    # One `{node, started_at, ms, ok}` per node that ran, for the admin's activity log.
+    steps: Annotated[list[dict], operator.add]
+
 
 def drafting_sources(state: TicketState) -> list[tuple[Document, float]]:
     """What the drafter cites before the cases: department answers first (this ticket's, then

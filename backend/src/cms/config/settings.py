@@ -273,6 +273,10 @@ class Settings(BaseSettings):
     # The ticket's own identifiers, replaced before Presidio runs (privacy §6).
     case_entity_masks: dict[str, str] = {"order_no": "<ORDER_NO>", "invoice_no": "<INVOICE_NO>"}
 
+    # --- Agent activity (admin) ---
+    # Row cap on the read behind the activity summary; a window above it is truncated and logged.
+    agent_runs_summary_max_rows: int = 5000
+
     @property
     def case_pii_entities(self) -> list[str]:
         """What is masked out of a case before indexing: the input guard's entities plus names."""
