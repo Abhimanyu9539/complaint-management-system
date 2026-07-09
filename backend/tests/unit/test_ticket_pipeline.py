@@ -92,10 +92,12 @@ def _install(
 
     `responses` are the department answers on the ticket; none by default.
 
-    `finishes` (the gate's outcomes) is attached to the graph as `graph.finishes`.
+    `finishes` (the gate's outcomes) is attached to the graph as `graph.finishes`,
+    and the recorded `agent_runs` rows as `graph.runs`.
     """
     graph = _FakeGraph(graph_result)
     graph.finishes = []
+    graph.runs = []
     updates: list[tuple[str, dict]] = []
     events: list[tuple[str, str, dict]] = []
     inserted: list[dict] = []
@@ -138,6 +140,9 @@ def _install(
     async def list_departments():
         return [{"id": "warranty", "name": "Warranty"}]
 
+    async def insert_run(row):
+        graph.runs.append(row)
+
     monkeypatch.setattr(ticket_pipeline.dept_responses, "list_responses", list_responses)
     monkeypatch.setattr(ticket_pipeline.departments, "list_departments", list_departments)
     monkeypatch.setattr(ticket_pipeline.ticket_service, "start_processing", start_processing)
@@ -146,6 +151,7 @@ def _install(
     monkeypatch.setattr(ticket_pipeline.ticket_events, "append_event", append_event)
     monkeypatch.setattr(ticket_pipeline.drafts, "fetch_latest_draft", fetch_latest_draft)
     monkeypatch.setattr(ticket_pipeline.drafts, "insert_draft", insert_draft)
+    monkeypatch.setattr(ticket_pipeline.agent_runs, "insert_run", insert_run)
     monkeypatch.setattr(ticket_pipeline, "get_ticket_graph", lambda: graph)
     return graph, updates, events, inserted
 
@@ -353,6 +359,77 @@ async def test_draft_save_failure_ends_at_processing_failed(monkeypatch) -> None
     await ticket_pipeline.process_ticket("t1")
 
     assert graph.finishes == [("processing_failed", [])]
+
+
+async def test_drafted_run_is_recorded(monkeypatch) -> None:
+    steps = [{"node": "input_guard", "started_at": "2026-10-03T10:00:00+00:00", "ms": 12, "ok": True}]
+    graph, _, _, _ = _install(monkeypatch, {**DRAFTED, "risk_flags": [], "steps": steps})
+
+    await ticket_pipeline.process_ticket("t1", trigger="regenerate")
+
+    [run] = graph.runs
+    assert run["id"] == str(graph.configs[0]["run_id"])
+    assert run["ticket_id"] == "t1" and run["ticket_no"] == 1042
+    assert run["subject"] == "X200 won't charge"
+    assert run["trigger"] == "regenerate"
+    assert run["status"] == "succeeded" and run["outcome"] == "drafted"
+    assert run["review_reasons"] == []
+    assert run["predicted_dept"] == "warranty" and run["dept_confidence"] == 0.75
+    assert run["category"] == "faulty_product"
+    assert run["grounded"] is True and run["regenerated"] is False
+    assert run["precedents_offered"] == 0
+    assert run["steps"] == steps and run["errors"] == {}
+    assert isinstance(run["latency_ms"], int) and run["started_at"] and run["finished_at"]
+
+
+async def test_holding_reply_run_is_recorded_as_no_match(monkeypatch) -> None:
+    holding = {**DRAFTED, "policy_hits": [], "no_match": True, "citations": [], "grounded": None}
+    graph, _, _, _ = _install(monkeypatch, holding)
+
+    await ticket_pipeline.process_ticket("t1")
+
+    [run] = graph.runs
+    assert run["status"] == "no_match" and run["trigger"] == "created"
+
+
+async def test_blocked_run_is_recorded_as_blocked(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, {"input_blocked": True, "guard_reasons": ["injection"]})
+
+    await ticket_pipeline.process_ticket("t1")
+
+    [run] = graph.runs
+    assert run["status"] == "blocked" and run["outcome"] == "needs_review"
+    assert run["review_reasons"] == ["Blocked by the input guard: injection"]
+    assert run["predicted_dept"] is None
+
+
+async def test_graph_failure_run_is_recorded_as_failed(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, ConnectionError("getaddrinfo failed"))
+
+    await ticket_pipeline.process_ticket("t1")
+
+    [run] = graph.runs
+    assert run["status"] == "failed" and run["outcome"] == "processing_failed"
+    assert run["errors"] == {"ticket_graph": "ConnectionError: getaddrinfo failed"}
+    assert run["steps"] == []
+
+
+async def test_draft_save_failure_run_is_recorded_as_failed(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, DRAFTED, insert_error=ConnectionError("down"))
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.runs[0]["status"] == "failed"
+
+
+async def test_no_run_is_recorded_for_a_ticket_that_is_not_processed(monkeypatch) -> None:
+    graph, _, _, _ = _install(
+        monkeypatch, DRAFTED, start_error=IllegalTransition("resolved", "processing")
+    )
+
+    await ticket_pipeline.process_ticket("t1")
+
+    assert graph.runs == []
 
 
 def test_case_resolution_reads_the_resolution_section() -> None:

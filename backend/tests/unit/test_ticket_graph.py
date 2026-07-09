@@ -190,3 +190,22 @@ async def test_precedent_failure_still_drafts(monkeypatch) -> None:
 
     assert state["errors"] == {"find_precedents": "RuntimeError: find_precedents down"}
     assert ran[-2:] == ["draft_reply", "ticket_output_guard"]
+
+
+async def test_every_node_that_ran_is_timed(monkeypatch) -> None:
+    ran = _install_nodes(monkeypatch, verdicts=(False, True))
+
+    state = await _run()
+
+    # One step per node run, the retried drafter and guard included.
+    assert sorted(step["node"] for step in state["steps"]) == sorted(ran)
+    assert all(step["ok"] and step["ms"] >= 0 and step["started_at"] for step in state["steps"])
+
+
+async def test_a_failed_node_is_timed_as_not_ok(monkeypatch) -> None:
+    _install_nodes(monkeypatch, failing=("classify_ticket",))
+
+    state = await _run()
+
+    failed = [step["node"] for step in state["steps"] if not step["ok"]]
+    assert failed == ["classify_ticket"]
