@@ -215,7 +215,7 @@ async def record_dept_response(
         logger.exception("Failed to record the department answer for ticket %s", ticket_id)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
-    background_tasks.add_task(ticket_pipeline.process_ticket, ticket_id)
+    background_tasks.add_task(ticket_pipeline.process_ticket, ticket_id, "dept_response")
     return ticket
 
 
@@ -302,5 +302,5 @@ async def regenerate_draft(ticket_id: str, background_tasks: BackgroundTasks) ->
         logger.exception("Failed to regenerate the draft for ticket %s", ticket_id)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
-    background_tasks.add_task(ticket_pipeline.process_ticket, ticket_id)
+    background_tasks.add_task(ticket_pipeline.process_ticket, ticket_id, "regenerate")
     return ticket

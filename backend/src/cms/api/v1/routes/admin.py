@@ -34,6 +34,8 @@ from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from cms.schemas.admin import (
+    AgentRunPage,
+    AgentSummaryResponse,
     DepartmentOptionPage,
     DocumentOptionPage,
     EscalationSummaryResponse,
@@ -215,4 +217,31 @@ async def list_departments() -> DepartmentOptionPage:
         return DepartmentOptionPage(items=await admin_stats.build_departments())
     except Exception:
         logger.exception("Failed to list departments")
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.get("/agent/runs", response_model=AgentRunPage)
+async def list_agent_runs(
+    status: Literal["succeeded", "no_match", "blocked", "failed"] | None = Query(None),
+    search: str | None = Query(None, max_length=200),
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> AgentRunPage:
+    """A page of ticket-graph runs, newest first. `search` takes a ticket number or subject text."""
+    try:
+        return await admin_stats.build_agent_run_page(
+            status=status, search=search, limit=limit, offset=offset
+        )
+    except Exception:
+        logger.exception("Failed to list agent runs")
+        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
+
+
+@router.get("/agent/summary", response_model=AgentSummaryResponse)
+async def get_agent_summary(days: int = Query(7, ge=1, le=90)) -> AgentSummaryResponse:
+    """Run counts, graph latency percentiles and per-node median latency over a window."""
+    try:
+        return await admin_stats.build_agent_summary(days)
+    except Exception:
+        logger.exception("Failed to build the agent summary for %d days", days)
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
