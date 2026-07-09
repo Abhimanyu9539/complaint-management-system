@@ -14,6 +14,9 @@ import type {
   AdminOverview,
   AdminResult,
   AdminTransport,
+  AgentRun,
+  AgentRunQuery,
+  AgentSummary,
   DepartmentOption,
   DocStatus,
   DocType,
@@ -181,6 +184,35 @@ interface WireJob {
   started_at: string | null;
   finished_at: string | null;
   duration_ms: number | null;
+}
+
+interface WireAgentRun {
+  id: string;
+  ticket_id: string;
+  ticket_no: number | null;
+  subject: string | null;
+  trigger: AgentRun['trigger'];
+  status: AgentRun['status'];
+  outcome: AgentRun['outcome'];
+  review_reasons: string[];
+  predicted_dept: string | null;
+  dept_confidence: number | null;
+  category: string | null;
+  grounded: boolean | null;
+  regenerated: boolean;
+  precedents_offered: number;
+  steps: { node: AgentRun['steps'][number]['node']; started_at: string; ms: number; ok: boolean }[];
+  errors: Record<string, string>;
+  latency_ms: number | null;
+  started_at: string;
+  finished_at: string;
+}
+
+interface WireAgentRunPage {
+  items: WireAgentRun[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 interface WireJobPage {
@@ -420,6 +452,35 @@ function toJob(wire: WireJob): IngestionJob {
   };
 }
 
+function toAgentRun(wire: WireAgentRun): AgentRun {
+  return {
+    id: wire.id,
+    ticketId: wire.ticket_id,
+    ticketNo: wire.ticket_no,
+    subject: wire.subject,
+    trigger: wire.trigger,
+    status: wire.status,
+    outcome: wire.outcome,
+    reviewReasons: wire.review_reasons,
+    department: wire.predicted_dept,
+    confidence: wire.dept_confidence,
+    category: wire.category,
+    grounded: wire.grounded,
+    regenerated: wire.regenerated,
+    precedentsOffered: wire.precedents_offered,
+    steps: wire.steps.map((step) => ({
+      node: step.node,
+      startedAt: step.started_at,
+      ms: step.ms,
+      ok: step.ok,
+    })),
+    errors: wire.errors,
+    latencyMs: wire.latency_ms,
+    startedAt: wire.started_at,
+    finishedAt: wire.finished_at,
+  };
+}
+
 export function createRealAdminTransport(baseUrl: string): AdminTransport {
   const api = `${baseUrl}/api/v1/admin`;
   // Tickets sit outside `/admin` because the create endpoint is customer-facing
@@ -564,6 +625,65 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
       successRate: wire.success_rate,
       byDocType: wire.by_doc_type,
       byDepartment: wire.by_department,
+    });
+  }
+
+  async function listAgentRuns(
+    query: AgentRunQuery,
+    signal: AbortSignal,
+  ): Promise<AdminResult<Page<AgentRun>>> {
+    const params = new URLSearchParams({
+      limit: String(query.limit),
+      offset: String(query.offset),
+    });
+    if (query.status && query.status !== 'all') params.set('status', query.status);
+    if (query.search?.trim()) params.set('search', query.search.trim());
+
+    const wire = await getJson<WireAgentRunPage>(`${api}/agent/runs?${params}`, signal);
+
+    return live<Page<AgentRun>>({
+      items: wire.items.map(toAgentRun),
+      total: wire.total,
+      limit: wire.limit,
+      offset: wire.offset,
+    });
+  }
+
+  async function getAgentSummary(
+    rangeDays: number,
+    signal: AbortSignal,
+  ): Promise<AdminResult<AgentSummary>> {
+    const wire = await getJson<{
+      range_days: number;
+      total: number;
+      by_status: AgentSummary['byStatus'];
+      by_outcome: AgentSummary['byOutcome'];
+      needs_review_rate: number | null;
+      latency: { p50_ms: number | null; p95_ms: number | null; max_ms: number | null; samples: number };
+      node_latency: {
+        node: AgentSummary['nodeLatency'][number]['node'];
+        p50_ms: number;
+        samples: number;
+      }[];
+    }>(`${api}/agent/summary?days=${rangeDays}`, signal);
+
+    return live<AgentSummary>({
+      rangeDays: wire.range_days,
+      total: wire.total,
+      byStatus: wire.by_status,
+      byOutcome: wire.by_outcome,
+      needsReviewRate: wire.needs_review_rate,
+      latency: {
+        p50Ms: wire.latency.p50_ms,
+        p95Ms: wire.latency.p95_ms,
+        maxMs: wire.latency.max_ms,
+        samples: wire.latency.samples,
+      },
+      nodeLatency: wire.node_latency.map((item) => ({
+        node: item.node,
+        p50Ms: item.p50_ms,
+        samples: item.samples,
+      })),
     });
   }
 
@@ -845,5 +965,7 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
     regenerateDraft,
     getEscalationSummary,
     listDepartments,
+    listAgentRuns,
+    getAgentSummary,
   };
 }

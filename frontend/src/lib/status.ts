@@ -8,8 +8,9 @@
  */
 
 import type {
-  AgentActionType,
+  AgentNode,
   AgentRunStatus,
+  AgentRunTrigger,
   DocStatus,
   JobStatus,
 } from '@/lib/admin/types';
@@ -325,7 +326,6 @@ export function resolutionPathTone(path: ResolutionPath): Tone {
 // ---------------------------------------------------------------------------
 
 const RUN_TONES: Record<AgentRunStatus, Tone> = {
-  running: 'accent',
   succeeded: 'ok',
   failed: 'danger',
   /**
@@ -334,14 +334,23 @@ const RUN_TONES: Record<AgentRunStatus, Tone> = {
    * red would train operators to treat honest abstention as breakage.
    */
   no_match: 'info',
+  /** The input guard stopped it; the ticket waits for a person, not a fix. */
+  blocked: 'warn',
 };
 
 const RUN_LABELS: Record<AgentRunStatus, string> = {
-  running: 'Running',
   succeeded: 'Succeeded',
   failed: 'Failed',
   no_match: 'No match',
+  blocked: 'Blocked',
 };
+
+export const RUN_STATUS_ORDER: readonly AgentRunStatus[] = [
+  'succeeded',
+  'no_match',
+  'blocked',
+  'failed',
+];
 
 export function runStatusTone(status: AgentRunStatus): Tone {
   return RUN_TONES[status] ?? 'neutral';
@@ -351,28 +360,33 @@ export function runStatusLabel(status: AgentRunStatus): string {
   return RUN_LABELS[status] ?? status;
 }
 
-/** Human labels for the RAG graph's nodes (lld.md §6). */
-const ACTION_LABELS: Record<AgentActionType, string> = {
-  analyze_query: 'Analyze query',
-  direct_answer: 'Direct answer',
-  retrieve: 'Retrieve',
-  grade_documents: 'Grade documents',
-  rewrite_query: 'Rewrite query',
-  generate: 'Generate',
-  check_groundedness: 'Check groundedness',
-  no_match_response: 'No-match response',
+/** Human labels for the ticket graph's nodes (`backend/src/cms/rag/ticket_graph.py`). */
+const NODE_LABELS: Record<AgentNode, string> = {
+  input_guard: 'Input guard',
+  classify_ticket: 'Classify',
+  analyze_ticket: 'Analyze',
+  retrieve_policies: 'Retrieve policies',
+  retrieve_cases: 'Retrieve cases',
+  join_retrieval: 'Join retrieval',
+  find_precedents: 'Find precedents',
+  ticket_no_match: 'Holding reply',
+  draft_reply: 'Draft reply',
+  ticket_output_guard: 'Output guard',
 };
 
-export const AGENT_ACTION_TYPES = Object.keys(ACTION_LABELS) as AgentActionType[];
-
-export function agentActionLabel(type: AgentActionType): string {
-  return ACTION_LABELS[type] ?? type;
+export function agentNodeLabel(node: AgentNode): string {
+  return NODE_LABELS[node] ?? node;
 }
 
-export function agentActionTone(status: 'ok' | 'failed' | 'skipped'): Tone {
-  if (status === 'failed') return 'danger';
-  if (status === 'skipped') return 'neutral';
-  return 'ok';
+const TRIGGER_LABELS: Record<AgentRunTrigger, string> = {
+  created: 'New ticket',
+  dept_response: 'Dept answer',
+  regenerate: 'Regenerate',
+  cli: 'CLI',
+};
+
+export function runTriggerLabel(trigger: AgentRunTrigger): string {
+  return TRIGGER_LABELS[trigger] ?? trigger;
 }
 
 // ---------------------------------------------------------------------------

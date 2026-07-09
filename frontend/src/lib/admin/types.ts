@@ -16,6 +16,7 @@ import type {
   Ticket,
   TicketDetail,
   TicketQuery,
+  TicketStatus,
 } from '@/lib/tickets/types';
 
 // ---------------------------------------------------------------------------
@@ -227,64 +228,78 @@ export interface IngestionSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Agent activity — contract-only; nothing emits these yet
+// Agent activity — one row per ticket-graph run (`agent_runs`, migration 0025)
 // ---------------------------------------------------------------------------
 
-/**
- * Node names of the planned RAG graph (lld.md §6). Union literals rather than a
- * TS enum, which `erasableSyntaxOnly` forbids.
- *
- * The graph is deliberately tool-less (lld.md §6.4: "it proposes; the human
- * applies"), so no action type here ever represents a write.
- */
-export type AgentActionType =
-  | 'analyze_query'
-  | 'direct_answer'
-  | 'retrieve'
-  | 'grade_documents'
-  | 'rewrite_query'
-  | 'generate'
-  | 'check_groundedness'
-  | 'no_match_response';
+/** The ticket graph's nodes (`backend/src/cms/rag/ticket_graph.py`). */
+export type AgentNode =
+  | 'input_guard'
+  | 'classify_ticket'
+  | 'analyze_ticket'
+  | 'retrieve_policies'
+  | 'retrieve_cases'
+  | 'join_retrieval'
+  | 'find_precedents'
+  | 'ticket_no_match'
+  | 'draft_reply'
+  | 'ticket_output_guard';
 
-export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'no_match';
+export type AgentRunStatus = 'succeeded' | 'no_match' | 'blocked' | 'failed';
 
-export interface AgentAction {
-  id: string;
-  type: AgentActionType;
-  status: 'ok' | 'failed' | 'skipped';
+/** Why the run happened. */
+export type AgentRunTrigger = 'created' | 'dept_response' | 'regenerate' | 'cli';
+
+/** One node the run passed through. A retried node appears twice. */
+export interface AgentRunStep {
+  node: AgentNode;
   startedAt: string;
-  durationMs: number;
-  /** One line of what this node decided, for the timeline. */
-  detail: string;
-  /**
-   * Loop-guard counter. The graph caps `retrieval_attempts` at 2 and
-   * `regenerated` at 1, so rendering `retrieve 2/2` makes the guard legible
-   * instead of leaving a repeated node looking like a duplicate log line.
-   */
-  attempt: number;
+  ms: number;
+  ok: boolean;
 }
 
 export interface AgentRun {
+  /** The graph run id, which is also the LangSmith root run id. */
   id: string;
-  sessionId: string | null;
-  startedAt: string;
-  finishedAt: string | null;
+  ticketId: string;
+  ticketNo: number | null;
+  subject: string | null;
+  trigger: AgentRunTrigger;
   status: AgentRunStatus;
+  /** The ticket status the gate chose. */
+  outcome: TicketStatus | null;
+  reviewReasons: string[];
   department: string | null;
-  /**
-   * Department-routing confidence, compared against the backend's
-   * `dept_confidence_threshold` (0.60). Null when the run never routed.
-   */
+  /** Department-routing confidence. Null when classification failed or never ran. */
   confidence: number | null;
-  inputSummary: string;
-  outputSummary: string | null;
-  actions: AgentAction[];
-  langsmithRunId: string | null;
-  totalLatencyMs: number | null;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  costUsd: number | null;
+  category: string | null;
+  grounded: boolean | null;
+  regenerated: boolean;
+  /** Past cases' department answers offered to the drafter. */
+  precedentsOffered: number;
+  steps: AgentRunStep[];
+  /** Stage → error, for nodes that failed without ending the run. */
+  errors: Record<string, string>;
+  latencyMs: number | null;
+  startedAt: string;
+  finishedAt: string;
+}
+
+export interface NodeLatency {
+  node: AgentNode;
+  p50Ms: number;
+  samples: number;
+}
+
+export interface AgentSummary {
+  rangeDays: number;
+  total: number;
+  byStatus: Record<AgentRunStatus, number>;
+  byOutcome: Record<string, number>;
+  /** Runs gated to `needs_review` ÷ all runs. Null, never 0, when nothing ran. */
+  needsReviewRate: number | null;
+  latency: DurationStats;
+  /** Slowest node first. */
+  nodeLatency: NodeLatency[];
 }
 
 // ---------------------------------------------------------------------------
@@ -374,11 +389,8 @@ export interface JobQuery {
 
 export interface AgentRunQuery {
   status?: AgentRunStatus | 'all';
-  actionType?: AgentActionType | 'all';
+  /** A ticket number, or text in the subject. Server-side. */
   search?: string;
-  /** ISO date bounds, inclusive. */
-  from?: string;
-  to?: string;
   limit: number;
   offset: number;
 }
@@ -422,10 +434,9 @@ export interface DocumentOption {
 
 /**
  * The admin data surface. Real-only — see `AdminResult`. Every method here has
- * a route behind it; `AgentRun`/`ApiUsageSummary` above are kept as the
- * contract for the agent-runs log and API-usage counter once those exist (see
- * `backend/docs/admin-api.md` §6/§7), but neither has a transport method until
- * a backend does.
+ * a route behind it; `ApiUsageSummary` above is kept as the contract for the
+ * API-usage counter once it exists (see `backend/docs/admin-api.md` §7), but has
+ * no transport method until a backend does.
  */
 export interface AdminTransport {
   /**
@@ -568,4 +579,10 @@ export interface AdminTransport {
 
   /** LIVE. The closed set of twelve routing targets, for the escalate picker. */
   listDepartments(signal: AbortSignal): Promise<AdminResult<DepartmentOption[]>>;
+
+  /** LIVE. Ticket-graph runs, newest first, server-side paged and filtered. */
+  listAgentRuns(query: AgentRunQuery, signal: AbortSignal): Promise<AdminResult<Page<AgentRun>>>;
+
+  /** LIVE. Run counts, graph latency percentiles and per-node median latency. */
+  getAgentSummary(rangeDays: number, signal: AbortSignal): Promise<AdminResult<AgentSummary>>;
 }

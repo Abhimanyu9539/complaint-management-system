@@ -68,15 +68,9 @@ export function DocStatusPill({ status }: { status: DocStatus }) {
   );
 }
 
-/** An agent run's outcome. */
+/** How a ticket-graph run ended. Runs are recorded once finished, so none pulse. */
 export function RunStatusPill({ status }: { status: AgentRunStatus }) {
-  return (
-    <StatusPill
-      label={runStatusLabel(status)}
-      tone={runStatusTone(status)}
-      pulse={status === 'running'}
-    />
-  );
+  return <StatusPill label={runStatusLabel(status)} tone={runStatusTone(status)} />;
 }
 
 /**

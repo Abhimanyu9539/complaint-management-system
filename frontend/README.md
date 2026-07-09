@@ -21,7 +21,7 @@ npm run lint     # oxlint
 | `/admin` | Dashboard: health, KPIs, ingest queue, document counts, storage |
 | `/admin/tickets` | The complaint queue as a searchable, paged table; escalate to a department or resolve |
 | `/admin/ingestion` | Trigger ingestion runs; browse and retry the ingest history |
-| `/admin/activity` | Agent graph executions, routing confidence, latency |
+| `/admin/activity` | Ticket-graph runs: path, routing decisions, node timings, latency |
 | `/admin/stats` | Throughput, processing times, corpus distribution, escalation rate |
 
 `/` and `/admin/tickets` do the same two actions (escalate, resolve) for
@@ -58,12 +58,11 @@ search and selected ticket (`?ticket=`) follow the same convention.
 
 `lib/admin/transport.ts` has no mock path — every `/admin` panel reads live
 Supabase and Qdrant state, and a request failure surfaces as a connection
-error rather than substituting fake data. Two surfaces have no backend yet
-(the agent activity log and the API-usage counter — the RAG graph and a
-request-log middleware, respectively) and render an honest empty state
-instead of a "Simulated" badge over fabricated rows.
+error rather than substituting fake data. One surface has no backend yet
+(the API-usage counter, which needs a request-log middleware) and renders an
+honest empty state instead of a "Simulated" badge over fabricated rows.
 
-See `backend/docs/admin-api.md` for which endpoints exist and what those two
+See `backend/docs/admin-api.md` for which endpoints exist and what that one
 must eventually return.
 
 Chat keeps its mock as a convenience, not a necessity — `POST /api/v1/chat`
