@@ -1,0 +1,101 @@
+{
+  "name": "Inbound email",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "postProcessAction": "read",
+        "format": "simple",
+        "options": {}
+      },
+      "id": "5b0c9a51-3f7e-4c1e-9a3e-1f2d6a7b8c01",
+      "name": "Email Trigger (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "message_id",
+              "value": "={{ $json.metadata['message-id'] }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "from_address",
+              "value": "={{ $json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "subject",
+              "value": "={{ $json.subject || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "text",
+              "value": "={{ $json.textPlain || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "auto_submitted",
+              "value": "={{ $json.metadata['auto-submitted'] || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5b0c9a51-3f7e-4c1e-9a3e-1f2d6a7b8c02",
+      "name": "Normalise",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.API_URL }}/api/v1/emails/inbound",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Inbound-Secret",
+              "value": "={{ $env.INBOUND_EMAIL_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "5b0c9a51-3f7e-4c1e-9a3e-1f2d6a7b8c03",
+      "name": "Post to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [[{ "node": "Normalise", "type": "main", "index": 0 }]]
+    },
+    "Normalise": {
+      "main": [[{ "node": "Post to API", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
