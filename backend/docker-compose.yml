@@ -1,0 +1,84 @@
+# Local development dependencies. Mongo backs the LangGraph checkpointer that
+# stores chat transcripts (see src/cms/db/mongo.py). Mailpit catches the
+# replies the workbench sends (see src/cms/services/email_sender.py).
+# GreenMail is the support mailbox incoming email lands in; n8n reads it and posts
+# each message to the API (see n8n/README.md).
+#
+# Run from backend/. Compose reads `${...}` values from backend/.env.
+#
+# No authentication: this binds to localhost for development only. A deployment
+# points MONGO_URL at a managed instance with credentials instead.
+
+# Pinned: the default would be the folder name ("backend"), and a new project name
+# means new, empty volumes (chat history, the n8n account and workflow).
+name: complaint-management-system
+
+services:
+  mongo:
+    image: mongo:8
+    container_name: cms-mongo
+    restart: unless-stopped
+    # Host port 27018, not 27017: a native mongod installed on the machine may
+    # already hold 127.0.0.1:27017, and Windows prefers that more specific bind
+    # over Docker's 0.0.0.0 one. Both would start, and the app would silently
+    # talk to the native install instead of this container.
+    ports:
+      - "127.0.0.1:27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Catches every email the API sends (customer replies) and delivers none.
+  # SMTP on 1025 matches the SMTP_* defaults in settings; read the mail at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: cms-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+  # The support mailbox incoming email lands in (support@example.com, password "password").
+  # Send it a test email with `curl smtp://localhost:3025`; n8n reads it over IMAP on 3143.
+  greenmail:
+    image: greenmail/standalone:latest
+    container_name: cms-greenmail
+    restart: unless-stopped
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=support:password@example.com
+    ports:
+      - "127.0.0.1:3025:3025"
+      - "127.0.0.1:3143:3143"
+
+  # Reads the support mailbox and posts each email to the API (n8n/inbound-email.json).
+  # Plumbing only: every routing decision is the API's. UI at http://localhost:5678.
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: cms-n8n
+    restart: unless-stopped
+    environment:
+      API_URL: http://host.docker.internal:8000
+      # Read from backend/.env, the same value the API checks.
+      INBOUND_EMAIL_SECRET: ${INBOUND_EMAIL_SECRET:-}
+      # Lets the HTTP node read the two variables above with $env.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - greenmail
+
+volumes:
+  mongo_data:
+  n8n_data:
