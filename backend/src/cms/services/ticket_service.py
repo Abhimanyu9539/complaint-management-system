@@ -65,8 +65,8 @@ ALLOWED: dict[str, frozenset[str]] = {
     "needs_review": frozenset({"escalated", "resolved", "processing"}),
     "escalated": frozenset({"dept_responded", "resolved"}),
     "dept_responded": frozenset({"escalated", "resolved", "processing"}),
-    # Reopening: lld.md has resolved → drafted when a customer replies again.
-    "resolved": frozenset({"drafted"}),
+    # Reopening: lld.md has resolved → drafted; a customer's email reply reopens to needs_review.
+    "resolved": frozenset({"drafted", "needs_review"}),
     "processing_failed": frozenset({"processing"}),
 }
 
@@ -323,6 +323,30 @@ async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
 
     logger.info("Ticket %s resolved via the %s path", ticket_id, path)
     return to_ticket(row)
+
+
+async def record_customer_reply(ticket_id: str, text: str) -> None:
+    """Record a customer's email reply. A resolved ticket reopens to `needs_review`; nothing is redrafted."""
+    current = await tickets.fetch_ticket(ticket_id)
+    await ticket_events.append_event(ticket_id, "customer_replied", {"text": text})
+
+    if current["status"] != "resolved":
+        logger.info("Ticket %s: customer replied (status %s unchanged)", ticket_id, current["status"])
+        return
+
+    # The path and time are cleared so the escalation metrics stop counting it as resolved.
+    assert_transition("resolved", "needs_review")
+    await tickets.update_ticket(
+        ticket_id,
+        {
+            "status": "needs_review",
+            "review_reasons": ["Customer replied after resolution."],
+            "resolution_path": None,
+            "resolved_at": None,
+        },
+    )
+    await ticket_events.append_event(ticket_id, "reopened", {"from_status": "resolved"})
+    logger.info("Ticket %s reopened: the customer replied after resolution", ticket_id)
 
 
 # ---------------------------------------------------------------------------

@@ -112,7 +112,7 @@ class DraftDeptQuestionRequest(_Base):
 
 
 class DeptResponseRequest(_Base):
-    """The department's answer, pasted in by the agent until incoming email is read (step 7)."""
+    """The department's answer, pasted in by the agent. Emailed answers arrive via `/emails/inbound`."""
 
     answer_text: str = Field(min_length=1, max_length=4000)
 
