@@ -40,6 +40,25 @@ async def fetch_department(department_id: str) -> dict:
     return rows[0]
 
 
+async def fetch_department_by_mailbox(address: str) -> dict | None:
+    """The department whose mailbox is `address` (lower-case), or None."""
+    try:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select(DEPARTMENT_FULL_COLUMNS)
+            .eq("mailbox", address)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to fetch the %s row for mailbox %s", TABLE, address)
+        raise
+
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
 async def list_departments() -> list[dict]:
     """Every department, id and display name, ordered by name.
 

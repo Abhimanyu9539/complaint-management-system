@@ -39,6 +39,8 @@ EVENTS: tuple[str, ...] = (
     # The flywheel: a sent reply became a past case, or that case was removed.
     "case_minted",
     "case_removed",
+    # A customer's email reply to an existing ticket (incoming email).
+    "customer_replied",
 )
 
 
