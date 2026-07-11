@@ -153,7 +153,7 @@ class Settings(BaseSettings):
     smtp_timeout_seconds: float = 10.0
     support_email_from: str = "Customer Care <support@example.com>"
     support_reply_to: str = "support@example.com"
-    # The [T-n] tag lets incoming replies be matched to their ticket later (step 7).
+    # The [T-n] tag matches an incoming reply to its ticket (`ticket_ref_pattern`).
     reply_subject_template: str = "Re: {subject} [T-{ticket_no}]"
     # The escalation email to a department. Its reply comes back to `support_reply_to`.
     dept_question_subject_template: str = "[T-{ticket_no}] Question from Customer Care: {subject}"
@@ -168,6 +168,24 @@ class Settings(BaseSettings):
     # it does, only a local SMTP server (Mailpit) is allowed.
     email_real_delivery_enabled: bool = False
     local_smtp_hosts: list[str] = ["localhost", "127.0.0.1", "mailpit"]
+
+    # --- Incoming email (n8n posts each message to /api/v1/emails/inbound) ---
+    # The shared secret n8n sends as `X-Inbound-Secret`. Unset turns inbound email off (503).
+    inbound_email_secret: str | None = None
+    # The ticket reference in a reply's subject; outgoing subjects carry it.
+    ticket_ref_pattern: str = r"\[T-(\d+)\]"
+    email_subject_fallback: str = "(no subject)"
+    email_ticket_severity: str = "normal"
+    # Same bounds as `CreateTicketRequest`.
+    email_subject_max_chars: int = 200
+    email_body_max_chars: int = 8000
+    # Lines where quoted history starts in a reply; only the text above the first one is kept.
+    reply_quote_markers: list[str] = [
+        r"^On .+ wrote:$",
+        r"^>",
+        r"^-----Original Message-----",
+        r"^From: ",
+    ]
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (
