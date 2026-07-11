@@ -47,8 +47,9 @@ unchanged documents (content hashes short-circuit, and point ids are `uuid5`-der
 `cases` and `policies` are deliberately separate tables backed by separate Qdrant
 collections, because they differ in origin, governance and chunking:
 
-|            | `cases`                         | `policies`                                |
-| ---------- | --------------------------------- | ------------------------------------------- |
+
+|            | `cases`                           | `policies`                                  |
+| ------------ | ----------------------------------- | --------------------------------------------- |
 | origin     | seed corpus, or a resolved ticket | authored and uploaded                       |
 | chunking   | 1 case = 1 chunk                  | header split, then ~800 tok / 100 overlap   |
 | governance | none — a record of what happened | lifecycle: draft → published → superseded |
@@ -111,6 +112,12 @@ The admin panel (`/admin`) is real-only and always calls `VITE_API_BASE_URL`
 own switch and **runs mocked by default** (`VITE_CHAT_USE_MOCK=true`):
 realistic streamed responses and localStorage sessions, no backend required,
 since no chat backend exists yet. Set `VITE_CHAT_USE_MOCK=false` once one does.
+
+### Incoming email
+
+`docker compose up -d greenmail n8n`, run from `backend/`, starts a dev support mailbox and
+the n8n workflow that posts each email to the API. Setup (the shared secret, the workflow
+import, the IMAP credential) is in [backend/n8n/README.md](backend/n8n/README.md).
 
 ## Configuration
 

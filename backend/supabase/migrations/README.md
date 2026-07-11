@@ -35,6 +35,7 @@ Files run in filename order, which is FK dependency order.
 | `0023_dept_guidance.sql` | `drafts` | adds `guidance_refs`: the department answers a draft was written from |
 | `0024_cases_ticket_unique.sql` | `cases` | `UNIQUE (ticket_id)`: one flywheel case per ticket, so minting is an upsert |
 | `0025_agent_runs.sql` | `agent_runs` | one row per ticket-graph run: path, node timings, routing, latency |
+| `0026_inbound_emails.sql` | `inbound_emails` | every email n8n posted and what it became; `message_id` UNIQUE is the dedupe lock |
 
 `0017` breaks the "one file per table" rule in the only way that keeps it
 meaningful: `0004` is the file that *creates* `tickets`, and editing it in place

@@ -11,7 +11,7 @@ reconfigured the day the API version changes.
 
 from fastapi import APIRouter
 
-from cms.api.v1.routes import admin, chat, health, tickets
+from cms.api.v1.routes import admin, chat, emails, health, tickets
 
 V1_PREFIX = "/api/v1"
 
@@ -23,4 +23,5 @@ api_router.include_router(health.router)
 # Versioned business routes.
 api_router.include_router(admin.router, prefix=V1_PREFIX)
 api_router.include_router(chat.router, prefix=V1_PREFIX)
+api_router.include_router(emails.router, prefix=V1_PREFIX)
 api_router.include_router(tickets.router, prefix=V1_PREFIX)
