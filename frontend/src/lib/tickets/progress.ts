@@ -92,6 +92,9 @@ function milestones(events: readonly TicketEvent[], departmentLabel: DepartmentL
           steps.push(done(key, 'Resolved', at));
         }
         break;
+      case 'customer_replied':
+        steps.push(done(key, 'Customer replied', at));
+        break;
       case 'reopened':
         steps.push(done(key, 'Reopened', at));
         break;

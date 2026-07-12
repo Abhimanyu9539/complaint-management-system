@@ -22,32 +22,44 @@ const ENTITY_LABELS: Record<string, string> = {
   error_code: 'Error code',
 };
 
-// The audit events that carry a message to or from a department.
+// The audit events that carry a message: to or from a department, or a customer's reply.
 const DEPT_EVENT_PREFIX: Record<string, string | undefined> = {
   escalated: 'Question to',
   dept_responded: 'Answer from',
+  customer_replied: 'Reply from the customer',
 };
 
-/** One message with a department: a question sent to it, or its answer. From the audit log. */
-interface DeptMessage {
+// Where each message event keeps its text.
+const MESSAGE_TEXT_KEY: Record<string, string> = {
+  escalated: 'note',
+  dept_responded: 'answer',
+  customer_replied: 'text',
+};
+
+/** One message on the ticket, from the audit log. */
+interface TicketMessage {
   id: number;
   label: string;
   text: string;
   at: string;
 }
 
-function deptMessages(
+function ticketMessages(
   events: TicketEvent[],
   departmentLabel: (id: string | null) => string,
-): DeptMessage[] {
+): TicketMessage[] {
   return events.flatMap((event) => {
     const prefix = DEPT_EVENT_PREFIX[event.event];
-    const text = event.event === 'escalated' ? event.payload.note : event.payload.answer;
-    if (!prefix || typeof text !== 'string' || !text.trim()) return [];
+    if (!prefix) return [];
+    const text = event.payload[MESSAGE_TEXT_KEY[event.event]];
+    if (typeof text !== 'string' || !text.trim()) return [];
 
     const departmentId = event.payload.department_id;
-    const department = departmentLabel(typeof departmentId === 'string' ? departmentId : null);
-    return [{ id: event.id, label: `${prefix} ${department}`, text, at: event.createdAt }];
+    const label =
+      event.event === 'customer_replied'
+        ? prefix
+        : `${prefix} ${departmentLabel(typeof departmentId === 'string' ? departmentId : null)}`;
+    return [{ id: event.id, label, text, at: event.createdAt }];
   });
 }
 
@@ -72,7 +84,7 @@ export function ComplaintPane({ detail, loading, departmentLabel }: ComplaintPan
   const entityChips = Object.entries(ENTITY_LABELS).flatMap(([key, label]) =>
     ticket.entities[key] ? [[label, ticket.entities[key]] as const] : [],
   );
-  const messages = deptMessages(events, departmentLabel);
+  const messages = ticketMessages(events, departmentLabel);
 
   return (
     <div className={`flex flex-col gap-5 p-4 ${loading ? 'opacity-60' : ''}`}>
@@ -120,7 +132,7 @@ export function ComplaintPane({ detail, loading, departmentLabel }: ComplaintPan
       {messages.length > 0 && (
         <section>
           <h3 className="mb-1.5 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
-            Department
+            Messages
           </h3>
           <div className="flex flex-col gap-2">
             {messages.map((message) => (
