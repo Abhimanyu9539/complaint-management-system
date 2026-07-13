@@ -21,3 +21,6 @@ skills-lock.json
 
 # Working notes
 BACKEND_REQUIREMENTS.md
+
+# Machine-specific root certificates for TLS-intercepting antivirus (see backend/docker-compose.yml)
+backend/certs/

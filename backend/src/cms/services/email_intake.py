@@ -13,14 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 def reply_text(text: str) -> str:
-    """The reply above the quoted history: everything before the first quote-marker line."""
+    """The reply above the quoted history: everything before the first quote-marker line.
+
+    Each line is also checked joined with the next one, because Gmail wraps a long
+    "On ... wrote:" line and leaves "wrote:" on a line of its own.
+    """
     markers = [re.compile(pattern) for pattern in get_settings().reply_quote_markers]
-    kept = []
-    for line in text.splitlines():
-        if any(marker.match(line.strip()) for marker in markers):
-            break
-        kept.append(line)
-    return "\n".join(kept).strip()
+    lines = [line.strip() for line in text.splitlines()]
+    for i, line in enumerate(lines):
+        joined = f"{line} {lines[i + 1]}" if i + 1 < len(lines) else line
+        if any(marker.match(line) or marker.match(joined) for marker in markers):
+            return "\n".join(lines[:i]).strip()
+    return "\n".join(lines).strip()
 
 
 def _own_addresses() -> set[str]:

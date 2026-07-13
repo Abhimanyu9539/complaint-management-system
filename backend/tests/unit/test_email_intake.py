@@ -71,6 +71,9 @@ def _install(monkeypatch, ticket=TICKET, duplicate=False, error=None) -> dict:
     monkeypatch.setattr(email_intake.escalation_service, "record_answer", record_answer)
     monkeypatch.setattr(email_intake.ticket_service, "start_processing", start_processing)
     monkeypatch.setattr(email_intake.ticket_service, "record_customer_reply", record_customer_reply)
+    # Our own address, independent of the local .env.
+    monkeypatch.setattr(get_settings(), "support_email_from", "Customer Care <support@example.com>")
+    monkeypatch.setattr(get_settings(), "support_reply_to", "support@example.com")
     return calls
 
 
@@ -172,6 +175,8 @@ async def test_a_failure_is_recorded_and_re_raised(monkeypatch) -> None:
         "> Is it covered?",
         "-----Original Message-----",
         "From: Customer Care <support@example.com>",
+        # Gmail wraps a long attribution line.
+        "On Sun, Oct 4, 2026 at 4:24 PM Customer Care <resolvrsupport@gmail.com>\nwrote:",
     ],
 )
 def test_reply_text_stops_at_each_quote_marker(quote) -> None:

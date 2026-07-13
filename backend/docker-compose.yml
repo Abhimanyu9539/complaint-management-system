@@ -70,12 +70,16 @@ services:
       INBOUND_EMAIL_SECRET: ${INBOUND_EMAIL_SECRET:-}
       # Lets the HTTP node read the two variables above with $env.
       N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      # Extra root certificate for antivirus or proxies that intercept TLS (e.g. Norton
+      # mail scanning on imap.gmail.com). Optional: Node only warns if the file is missing.
+      NODE_EXTRA_CA_CERTS: /certs/extra-ca.pem
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./certs:/certs:ro
     depends_on:
       - greenmail
 
