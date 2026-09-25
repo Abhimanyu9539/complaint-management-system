@@ -10,6 +10,11 @@ Two things make this more than a loop over `astream`:
    The final state is therefore the authority, and the stream is reconciled
    against it before `citations` goes out.
 
+The answer nodes live inside the lane subgraphs, and LangGraph drops a subgraph's
+messages unless `astream` gets `subgraphs=True` — so events arrive as
+`(namespace, mode, payload)`, and only the parent's `values` (empty namespace) is
+the final state.
+
 `session_messages` is the other half: the same conversation read back out of the
 checkpointer when the browser reopens it.
 """
@@ -24,8 +29,10 @@ from langchain_core.messages import BaseMessage
 
 from cms.config.settings import get_settings
 from cms.db.mongo import get_checkpointer
-from cms.rag.graph import GENERATE, SMALLTALK, get_graph
+from cms.rag.graph import SMALLTALK, get_graph
 from cms.rag.state import new_turn
+from cms.rag.subgraphs.complaint import GENERATE
+from cms.rag.subgraphs.lookup import LOOKUP_GENERATE
 from cms.schemas.chat import ChatDone, ChatMessageOut
 from cms.schemas.generation import Citation
 
@@ -33,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # The only nodes that write the answer with an LLM. Tokens from the cheap models
 # in analyze_query and the guards run through the same stream and are not shown.
-ANSWER_NODES = frozenset({GENERATE, SMALLTALK})
+ANSWER_NODES = frozenset({GENERATE, LOOKUP_GENERATE, SMALLTALK})
 
 
 def _event(name: str, data: Any) -> dict[str, str]:
@@ -67,14 +74,17 @@ async def stream_turn(
     durability = "exit" if settings.chat_memory_enabled else None
 
     try:
-        async for mode, payload in get_graph().astream(
+        async for namespace, mode, payload in get_graph().astream(
             new_turn(message, session, user_id),
             config=config,
             stream_mode=["messages", "values"],
             durability=durability,
+            subgraphs=True,
         ):
             if mode == "values":
-                final = payload
+                # A lane reports its own state too; only the parent's is the turn's result.
+                if not namespace:
+                    final = payload
                 continue
 
             chunk, meta = payload

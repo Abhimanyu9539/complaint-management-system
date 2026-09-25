@@ -1,4 +1,4 @@
-"""First graph node: classify the input, and for a complaint write policy-worded queries.
+"""First graph node: classify the input, and for a complaint or lookup write policy-worded queries.
 """
 
 import logging
@@ -28,8 +28,9 @@ async def analyze_query_core(query: str) -> QueryAnalysis:
         raise
 
     logger.info(
-        "analyze_query: intent=%s, risk_flags=%s, %d policy query(ies) for %r",
+        "analyze_query: intent=%s, lookup_target=%s, risk_flags=%s, %d policy query(ies) for %r",
         analysis.intent,
+        analysis.lookup_target,
         analysis.risk_flags,
         len(analysis.policy_queries),
         query,
@@ -45,7 +46,7 @@ def build_policy_queries(query: str, analysis: QueryAnalysis) -> list[str]:
     The original is kept because a rewrite can drift from what the user actually asked.
     Nothing to retrieve for smalltalk, so that returns empty.
     """
-    if analysis.intent != "complaint_query":
+    if analysis.intent not in ("complaint_query", "knowledge_lookup"):
         return []
     return [query, *analysis.policy_queries]
 
@@ -54,10 +55,13 @@ def build_policy_queries(query: str, analysis: QueryAnalysis) -> list[str]:
 async def analyze_query(state: GraphState) -> dict:
     """The graph node: a partial `GraphState` update."""
     analysis = await analyze_query_core(state["query"])
+    # Only a complaint has a reply for a lead to review; a flag on a lookup is noise.
+    risk_flags = analysis.risk_flags if analysis.intent == "complaint_query" else []
     return {
         "intent": analysis.intent,
+        "lookup_target": analysis.lookup_target,
         "policy_queries": build_policy_queries(state["query"], analysis),
-        "risk_flags": analysis.risk_flags,
+        "risk_flags": risk_flags,
         # Any flag means a lead reviews the reply before it is sent (ai §4).
-        "requires_lead_review": bool(analysis.risk_flags),
+        "requires_lead_review": bool(risk_flags),
     }

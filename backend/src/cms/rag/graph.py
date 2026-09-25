@@ -1,47 +1,40 @@
-"""Graph assembly: guard the input, analyze the query, fork on intent, then guard the draft.
+"""Graph assembly: guard the input, analyze the query, hand it to one lane, record the turn.
 
-    START -> input_guard -+-> blocked_input -> record_turn -> END
-                          +-> analyze_query -+-> retrieve_policies -+
-                                             |                      +-> join_retrieval -+
-                                             +-> retrieve_cases ----+                   |
-                                             +-> smalltalk -> record_turn -> END        |
-                                                                                        |
-        +-- no_match -> record_turn -> END  <-------------------------------------------+
-        +-- generate -> output_guard -+-> record_turn -> END   (grounded)
-               ^                      +-> generate             (ungrounded, first time)
-               |______________________|
-                                      +-> add_caveat -> record_turn -> END  (still ungrounded)
+    START -> input_guard -+-> blocked_input ------------------------------+
+                          +-> analyze_query -+-> complaint_lane ----------+
+                                             +-> lookup_lane -------------+-> record_turn -> END
+                                             +-> smalltalk ---------------+
 
-A complaint runs retrieve_policies and retrieve_cases in parallel; join_retrieval
-waits for both, so generate gets policy and case hits.
+Each lane is a compiled subgraph with its own nodes — see `rag/subgraphs/complaint.py`
+and `rag/subgraphs/lookup.py` for their wiring. They share no node, so either can
+change without touching the other.
 
 Every path ends at record_turn, which writes the turn into `chat_history` for the
-checkpointer. Exactly one of the four terminals runs per turn, so each gets its
-own edge — a list edge would build an AND-join and wait forever.
+checkpointer. Exactly one branch runs per turn, so each gets its own edge — a list
+edge would build an AND-join and wait forever.
+
+Streaming a lane's tokens needs `astream(..., subgraphs=True)`: LangGraph drops
+messages from inside a subgraph without it. See `services/chat_service.py`.
 """
 
 import logging
 from functools import lru_cache
 from pathlib import Path
 
+from langchain_core.runnables.graph import Graph
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from cms.db.mongo import get_checkpointer
-from cms.rag.nodes.add_caveat import add_caveat
 from cms.rag.nodes.analyze_query import analyze_query
 from cms.rag.nodes.blocked_input import blocked_input
-from cms.rag.nodes.generate import generate
 from cms.rag.nodes.input_guard import input_guard
-from cms.rag.nodes.join_retrieval import join_retrieval
-from cms.rag.nodes.no_match import no_match
-from cms.rag.nodes.output_guard import output_guard
 from cms.rag.nodes.record_turn import record_turn
-from cms.rag.nodes.retrieve_cases import retrieve_cases
-from cms.rag.nodes.retrieve_policies import retrieve_policies
 from cms.rag.nodes.smalltalk import smalltalk
 from cms.rag.state import GraphState
+from cms.rag.subgraphs.complaint import build_complaint_lane
+from cms.rag.subgraphs.lookup import build_lookup_lane
 
 logger = logging.getLogger(__name__)
 
@@ -49,18 +42,13 @@ logger = logging.getLogger(__name__)
 INPUT_GUARD = "input_guard"
 BLOCKED_INPUT = "blocked_input"
 ANALYZE_QUERY = "analyze_query"
-RETRIEVE_POLICIES = "retrieve_policies"
-RETRIEVE_CASES = "retrieve_cases"
-JOIN_RETRIEVAL = "join_retrieval"
+COMPLAINT_LANE = "complaint_lane"
+LOOKUP_LANE = "lookup_lane"
 SMALLTALK = "smalltalk"
-NO_MATCH = "no_match"
-GENERATE = "generate"
-OUTPUT_GUARD = "output_guard"
-ADD_CAVEAT = "add_caveat"
 RECORD_TURN = "record_turn"
 
 COMPLAINT_QUERY = "complaint_query"
-OTHER_QUERY = "other_query"
+KNOWLEDGE_LOOKUP = "knowledge_lookup"
 
 
 def route_after_input_guard(state: GraphState) -> str:
@@ -68,54 +56,37 @@ def route_after_input_guard(state: GraphState) -> str:
     return "blocked" if state.get("input_blocked") else "allowed"
 
 
-def route_by_intent(state: GraphState) -> list[str] | str:
-    """Determine the branch(es) after `analyze_query`: a complaint searches policies and cases in parallel."""
-    if state.get("intent") == "complaint_query":
-        return ["policy_search", "case_search"]
+def route_by_intent(state: GraphState) -> str:
+    """Determine the lane after `analyze_query`. Each lane starts its own retrievals."""
+    intent = state.get("intent")
+    if intent == COMPLAINT_QUERY:
+        return "complaint"
+    if intent == KNOWLEDGE_LOOKUP:
+        return "lookup"
     return "other_query"
 
 
-def route_after_retrieval(state: GraphState) -> str:
-    """Determine the branch after `join_retrieval` based on the policy match result."""
-    return "no_match_found" if state.get("no_match") else "match_found"
-
-
-def route_after_output_guard(state: GraphState) -> str:
-    """Determine the branch after `output_guard`: pass, retry once, or caveat.
-
-    `grounded` is None when guardrails are disabled, which passes. The retry is
-    capped by `regenerated`, which `generate` sets on its second run.
-    """
-    if state.get("grounded") is not False:
-        return "grounded"
-    if not state.get("regenerated"):
-        return "retry"
-    return "still_ungrounded"
-
-
-def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
-    """Wire the nodes and conditional branches using explicit path mappings.
+def build_graph(
+    checkpointer: BaseCheckpointSaver | None = None,
+    lane_checkpointer: bool | None = False,
+) -> CompiledStateGraph:
+    """Wire the parent graph; the lanes are built here too, so tests can stub their nodes first.
 
     `checkpointer` defaults to None so a caller that only wants the shape — the
     CLI renderer, the flow tests — gets a graph that touches no database.
+    `lane_checkpointer` stays False except for `render_graph` — see there.
     """
     builder = StateGraph(GraphState)
 
-    # Register nodes
+    # Register nodes — a lane is one node holding its whole subgraph.
     builder.add_node(INPUT_GUARD, input_guard)
     builder.add_node(BLOCKED_INPUT, blocked_input)
     builder.add_node(ANALYZE_QUERY, analyze_query)
-    builder.add_node(RETRIEVE_POLICIES, retrieve_policies)
-    builder.add_node(RETRIEVE_CASES, retrieve_cases)
-    builder.add_node(JOIN_RETRIEVAL, join_retrieval)
+    builder.add_node(COMPLAINT_LANE, build_complaint_lane(lane_checkpointer))
+    builder.add_node(LOOKUP_LANE, build_lookup_lane(lane_checkpointer))
     builder.add_node(SMALLTALK, smalltalk)
-    builder.add_node(NO_MATCH, no_match)
-    builder.add_node(GENERATE, generate)
-    builder.add_node(OUTPUT_GUARD, output_guard)
-    builder.add_node(ADD_CAVEAT, add_caveat)
     builder.add_node(RECORD_TURN, record_turn)
 
-    # Linear and conditional edges
     builder.add_edge(START, INPUT_GUARD)
 
     builder.add_conditional_edges(
@@ -127,46 +98,21 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
         },
     )
 
-    # Intent-based branching on the edge from analyze_query
     builder.add_conditional_edges(
-        ANALYZE_QUERY, 
-        route_by_intent, 
+        ANALYZE_QUERY,
+        route_by_intent,
         {
-            "policy_search": RETRIEVE_POLICIES,
-            "case_search": RETRIEVE_CASES,
+            "complaint": COMPLAINT_LANE,
+            "lookup": LOOKUP_LANE,
             "other_query": SMALLTALK,
-        }
-    )
-    
-    # Waits for both retrievals before the one match/no-match decision.
-    builder.add_edge([RETRIEVE_POLICIES, RETRIEVE_CASES], JOIN_RETRIEVAL)
-
-    builder.add_conditional_edges(
-        JOIN_RETRIEVAL,
-        route_after_retrieval,
-        {
-            "match_found": GENERATE,
-            "no_match_found": NO_MATCH,
-        },
-    )
-
-    builder.add_edge(GENERATE, OUTPUT_GUARD)
-
-    builder.add_conditional_edges(
-        OUTPUT_GUARD,
-        route_after_output_guard,
-        {
-            "grounded": RECORD_TURN,
-            "retry": GENERATE,
-            "still_ungrounded": ADD_CAVEAT,
         },
     )
 
     # One edge each, never `add_edge([...], RECORD_TURN)`: a list start is an
-    # AND-join, and only one of these four ever runs.
-    builder.add_edge(ADD_CAVEAT, RECORD_TURN)
+    # AND-join, and only one of these ever runs.
     builder.add_edge(BLOCKED_INPUT, RECORD_TURN)
-    builder.add_edge(NO_MATCH, RECORD_TURN)
+    builder.add_edge(COMPLAINT_LANE, RECORD_TURN)
+    builder.add_edge(LOOKUP_LANE, RECORD_TURN)
     builder.add_edge(SMALLTALK, RECORD_TURN)
     builder.add_edge(RECORD_TURN, END)
 
@@ -179,13 +125,21 @@ def get_graph() -> CompiledStateGraph:
     return build_graph(get_checkpointer())
 
 
+def build_drawing() -> Graph:
+    """The whole graph with each lane's nodes expanded, for drawing only.
+
+    LangGraph's xray skips subgraphs compiled with `checkpointer=False`, so the
+    lanes are built with None here. This graph is drawn, never run, so nothing is
+    stored — and with no parent checkpointer it touches no database.
+    """
+    return build_graph(lane_checkpointer=None).get_graph(xray=True)
+
+
 def render_graph() -> None:
-    """Print the graph as Mermaid and save it as a PNG next to this module."""
+    """Save the whole graph, lanes expanded, as a PNG next to this module."""
     target = Path(__file__).with_suffix(".png")
     try:
-        # `build_graph`, not `get_graph`: drawing the shape needs no database.
-        graph = build_graph().get_graph()
-        graph.draw_mermaid_png(output_file_path=str(target))
+        build_drawing().draw_mermaid_png(output_file_path=str(target))
         logger.info("Graph png saved to %s", target)
     except Exception:
         logger.exception("Could not render the graph")

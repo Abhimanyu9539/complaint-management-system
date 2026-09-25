@@ -81,6 +81,20 @@ def get_output_guard() -> AsyncGuard:
         raise
 
 
+@lru_cache
+def get_lookup_guard() -> AsyncGuard:
+    """The output guard minus `PolicyCited`: a lookup may rightly cite only past cases."""
+    try:
+        return _build_guard(
+            CitationsValid(on_fail=OnFailAction.NOOP),
+            NumbersInSources(on_fail=OnFailAction.NOOP),
+            _pii_validator(OnFailAction.NOOP),
+        )
+    except Exception:
+        logger.exception("Failed to build the lookup guard")
+        raise
+
+
 async def run_input_guard(query: str) -> GuardResult:
     """The complaint with sensitive data masked, or a failure if its length is out of bounds."""
     try:
@@ -102,13 +116,23 @@ async def run_input_guard(query: str) -> GuardResult:
 
 
 async def run_output_guard(draft: str, citations: list[Citation], context: str) -> GuardResult:
-    """Grounding and PII checks on `draft`, given the citations and context it was written from."""
+    """Grounding and PII checks on a complaint draft, given the citations and context it was written from."""
+    return await _validate_draft(get_output_guard(), "output guard", draft, citations, context)
+
+
+async def run_lookup_guard(draft: str, citations: list[Citation], context: str) -> GuardResult:
+    """The same checks on a lookup answer, without requiring a policy citation."""
+    return await _validate_draft(get_lookup_guard(), "lookup guard", draft, citations, context)
+
+
+async def _validate_draft(
+    guard: AsyncGuard, name: str, draft: str, citations: list[Citation], context: str
+) -> GuardResult:
+    """Run `guard` over `draft` and turn every failed check into a regeneration-ready reason."""
     try:
-        outcome = await get_output_guard().validate(
-            draft, metadata={"citations": citations, "context": context}
-        )
+        outcome = await guard.validate(draft, metadata={"citations": citations, "context": context})
     except Exception:
-        logger.exception("output guard: validation crashed")
+        logger.exception("%s: validation crashed", name)
         raise
 
     reasons = [
@@ -119,5 +143,5 @@ async def run_output_guard(draft: str, citations: list[Citation], context: str) 
         for summary in outcome.validation_summaries or []
         if summary.validator_status == "fail"
     ]
-    logger.info("output guard: %d failed check(s) %s", len(reasons), reasons)
+    logger.info("%s: %d failed check(s) %s", name, len(reasons), reasons)
     return GuardResult(passed=not reasons, text=draft, reasons=reasons)

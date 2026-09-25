@@ -1,0 +1,14 @@
+[
+  {"input": "How long is the return window for large appliances?", "lookup_target": "policies"},
+  {"input": "What does our policy say about refunding to the original payment method?", "lookup_target": "policies"},
+  {"input": "Who is allowed to approve a goodwill credit above the standard limit?", "lookup_target": "policies"},
+  {"input": "What is our response time commitment for a new complaint?", "lookup_target": "policies"},
+  {"input": "List past cases where a replacement unit was sent", "lookup_target": "cases"},
+  {"input": "Show me previous complaints about a courier losing a parcel", "lookup_target": "cases"},
+  {"input": "Any examples of complaints that were escalated to the product safety team?", "lookup_target": "cases"},
+  {"input": "How did we resolve earlier complaints about being charged twice?", "lookup_target": "cases"},
+  {"input": "What's the policy on late deliveries, and are there cases where we gave a credit for one?", "lookup_target": "both"},
+  {"input": "For items damaged in transit, what does policy allow and what have we done before?", "lookup_target": "both"},
+  {"input": "What are the rules for replacing a defective product? Show me some past replacements too.", "lookup_target": "both"},
+  {"input": "Find the policy and any precedents for cancelling an order after it has shipped", "lookup_target": "both"}
+]

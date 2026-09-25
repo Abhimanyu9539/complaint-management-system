@@ -7,28 +7,35 @@ from cms.services import chat_service
 CITATION = Citation(
     marker=1, doc_id="p", chunk_id="p1", title="Warranty", section="2.3", snippet="the clause"
 )
+# The namespace LangGraph gives events from inside a lane subgraph.
+LANE = ("complaint_lane:1",)
 
 
 def _install_graph(monkeypatch, events: list) -> list[dict]:
     """Stub the compiled graph with a scripted `astream`, so no model is called.
 
-    Returns the list the stub records its call kwargs into, so a test can assert
-    on the thread config the service built.
+    Events are `(namespace, mode, payload)`, as with `subgraphs=True`; a bare
+    `(mode, payload)` is shorthand for the parent graph's own event. Returns the
+    list the stub records its call kwargs into, so a test can assert on the
+    thread config the service built.
     """
     calls: list[dict] = []
 
-    async def astream(graph_input, config=None, stream_mode=None, durability=None):
-        calls.append({"input": graph_input, "config": config, "durability": durability})
+    async def astream(graph_input, config=None, stream_mode=None, durability=None, subgraphs=False):
+        calls.append(
+            {"input": graph_input, "config": config, "durability": durability, "subgraphs": subgraphs}
+        )
         for event in events:
-            yield event
+            yield event if len(event) == 3 else ((), *event)
 
     monkeypatch.setattr(chat_service, "get_graph", lambda: SimpleNamespace(astream=astream))
     return calls
 
 
 def _token(text: str, node: str = "generate", step: int = 1) -> tuple:
-    """One `messages` record, as LangGraph emits it."""
+    """One `messages` record from inside a lane, as LangGraph emits it."""
     return (
+        LANE,
         "messages",
         (SimpleNamespace(content=text), {"langgraph_node": node, "langgraph_step": step}),
     )
@@ -189,3 +196,44 @@ async def test_done_carries_the_id_the_turn_was_stored_under(monkeypatch) -> Non
     events = await _collect()
 
     assert events[-1]["data"]["message_id"] == "stored-id"
+
+
+async def test_lookup_answers_stream(monkeypatch) -> None:
+    _install_graph(
+        monkeypatch,
+        [
+            _token("- A duplicate charge was refunded ", node="lookup_generate"),
+            _token("[1].", node="lookup_generate"),
+            ("values", {"draft": "- A duplicate charge was refunded [1].", "citations": []}),
+        ],
+    )
+
+    events = await _collect("cases where a refund was issued")
+
+    # Streamed token by token — no reset and no whole-draft resend.
+    assert [event["event"] for event in events] == ["token", "token", "citations", "done"]
+
+
+async def test_the_graph_streams_events_from_inside_the_lanes(monkeypatch) -> None:
+    """Without `subgraphs=True`, LangGraph drops every token a lane's generator writes."""
+    calls = _install_graph(monkeypatch, [("values", {"draft": "d", "citations": []})])
+
+    await _collect()
+
+    assert calls[0]["subgraphs"] is True
+
+
+async def test_a_lanes_own_state_never_becomes_the_final_state(monkeypatch) -> None:
+    _install_graph(
+        monkeypatch,
+        [
+            ("values", {"draft": "parent draft", "citations": [], "message_id": "m-1"}),
+            # A lane's `values` event, even one arriving last, is not the turn's result.
+            (LANE, "values", {"draft": "lane draft", "citations": []}),
+        ],
+    )
+
+    events = await _collect()
+
+    assert events[0]["data"] == "parent draft"
+    assert events[-1]["data"]["message_id"] == "m-1"

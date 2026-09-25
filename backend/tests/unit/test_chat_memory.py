@@ -5,6 +5,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from cms.rag import graph as graph_module
 from cms.rag.state import new_turn
+from cms.rag.subgraphs import complaint as complaint_module
 
 POLICY_HIT = (Document(page_content="policy clause"), 0.9)
 
@@ -51,16 +52,16 @@ def _install_nodes(monkeypatch, seen: list[dict]) -> None:
     async def add_caveat(state):
         return {"draft": f"caveat + {state.get('draft', '')}"}
 
+    monkeypatch.setattr(graph_module, "input_guard", input_guard)
+    monkeypatch.setattr(graph_module, "analyze_query", analyze_query)
     for name, fn in [
-        ("input_guard", input_guard),
-        ("analyze_query", analyze_query),
         ("retrieve_policies", retrieve_policies),
         ("retrieve_cases", retrieve_cases),
         ("generate", generate),
         ("output_guard", output_guard),
         ("add_caveat", add_caveat),
     ]:
-        monkeypatch.setattr(graph_module, name, fn)
+        monkeypatch.setattr(complaint_module, name, fn)
 
 
 async def test_a_second_turn_does_not_inherit_the_first_turns_state(monkeypatch) -> None:
@@ -114,6 +115,21 @@ async def test_retrieved_chunks_are_not_carried_into_the_checkpoint(monkeypatch)
     values = (await graph.aget_state(config)).values
     assert values["policy_hits"] == []
     assert values["case_hits"] == []
+
+
+async def test_lanes_store_no_checkpoint_of_their_own(monkeypatch) -> None:
+    """Lanes compile with `checkpointer=False`: only the parent's namespace is stored.
+
+    A lane checkpoint would carry the retrieved chunks `record_turn` clears.
+    """
+    _install_nodes(monkeypatch, [])
+    saver = InMemorySaver()
+    graph = graph_module.build_graph(saver)
+    config = {"configurable": {"thread_id": "t-4", "user_id": "anonymous"}}
+
+    await graph.ainvoke(new_turn("a question", "t-4", "anonymous"), config=config)
+
+    assert set(saver.storage["t-4"]) == {""}
 
 
 # --- new_turn, the reset itself ---
