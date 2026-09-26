@@ -112,6 +112,11 @@ class Settings(BaseSettings):
     analyze_query_prompt_version: str = "v3"
     # v2 mentions policy and case lookups in the "what can you do?" answer.
     smalltalk_prompt_version: str = "v2"
+    # Ticket triage: department candidates, suggested severity, category, entities.
+    # v2 takes the subject and body as one masked text; v1 took them separately.
+    classify_ticket_prompt_version: str = "v2"
+    # Intake §7: a top department at or above this routes directly; below goes to human review.
+    routing_confidence_floor: float = 0.60
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (
@@ -139,9 +144,9 @@ class Settings(BaseSettings):
     # Kill switches. The Guardrails AI checks run locally; the NeMo rails are LLM calls.
     guardrails_enabled: bool = True
     nemo_rails_enabled: bool = False
-    # Same bounds as `CreateTicketRequest.body`.
+    # Fits `CreateTicketRequest`: the ticket graph guards subject (200) + body (8000) as one text.
     query_min_chars: int = 1
-    query_max_chars: int = 8000
+    query_max_chars: int = 8300
     # Presidio entities masked out of the complaint and flagged in drafts (privacy §2).
     pii_entities: list[str] = [
         "CREDIT_CARD",

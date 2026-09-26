@@ -50,7 +50,6 @@ export function WorkbenchPage() {
   const departments = useAsyncData((signal) => adminTransport.listDepartments(signal), {
     intervalMs: 20_000 * 30,
   });
-  const departmentIds = useMemo(() => departments.data?.map((entry) => entry.id) ?? [], [departments.data]);
   const departmentLabel = useCallback(
     (id: string | null) => {
       if (!id) return 'Unrouted';
@@ -140,7 +139,6 @@ export function WorkbenchPage() {
             {detail && (
               <EvidencePane
                 ticket={detail.ticket}
-                departmentIds={departmentIds}
                 departmentLabel={departmentLabel}
               />
             )}

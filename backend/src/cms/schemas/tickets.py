@@ -138,7 +138,7 @@ class Ticket(_Base):
     source: TicketSource
     customer_email: str | None = None
     predicted_dept: str | None = Field(
-        default=None, description="The classifier's guess. Null until a classifier exists."
+        default=None, description="The classifier's top department. Null until the ticket graph has run."
     )
     dept_confidence: float | None = None
     escalated_dept: str | None = Field(
@@ -146,6 +146,18 @@ class Ticket(_Base):
         description="The department actually escalated to. Non-null implies the ticket took Path B.",
     )
     category: str | None = None
+    entities: dict = Field(
+        default_factory=dict,
+        description="Identifiers the classifier copied from the complaint: order_no, product, ...",
+    )
+    suggested_severity: TicketSeverity | None = Field(
+        default=None,
+        description="The classifier's suggestion. `severity` changes only when a person confirms it.",
+    )
+    dept_candidates: list[dict] = Field(
+        default_factory=list,
+        description="[{department, score}], best first, scores summing to 1. Empty until classified.",
+    )
     resolution_path: ResolutionPath | None = Field(
         default=None,
         description=(

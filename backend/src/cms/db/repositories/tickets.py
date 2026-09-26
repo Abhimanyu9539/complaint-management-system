@@ -26,6 +26,7 @@ TABLE = "tickets"
 TICKET_COLUMNS = (
     "id,ticket_no,status,severity,subject,body,source,customer_email,"
     "predicted_dept,dept_confidence,escalated_dept,category,resolution_path,"
+    "entities,suggested_severity,dept_candidates,"
     "created_at,updated_at,resolved_at"
 )
 
@@ -109,6 +110,24 @@ async def update_ticket(ticket_id: str, patch: dict) -> dict:
     if not response.data:
         raise LookupError(f"No ticket with id {ticket_id}")
     return response.data[0]
+
+
+async def list_unclassified_ticket_ids(limit: int = 500) -> list[str]:
+    """Ids of tickets the classifier has not filled in yet, oldest first — the backfill's input."""
+    try:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select("id")
+            .is_("predicted_dept", "null")
+            .order("created_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to list unclassified %s rows", TABLE)
+        raise
+    return [row["id"] for row in response.data or []]
 
 
 async def mark_resolved(ticket_id: str, resolution_path: str) -> dict:

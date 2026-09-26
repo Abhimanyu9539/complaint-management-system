@@ -213,6 +213,9 @@ interface WireTicket {
   customer_email: string | null;
   predicted_dept: string | null;
   dept_confidence: number | null;
+  dept_candidates: Ticket['deptCandidates'];
+  suggested_severity: Ticket['suggestedSeverity'];
+  entities: Ticket['entities'];
   escalated_dept: string | null;
   category: string | null;
   resolution_path: Ticket['resolutionPath'];
@@ -241,6 +244,9 @@ function toTicket(wire: WireTicket): Ticket {
     customerEmail: wire.customer_email,
     predictedDept: wire.predicted_dept,
     deptConfidence: wire.dept_confidence,
+    deptCandidates: wire.dept_candidates ?? [],
+    suggestedSeverity: wire.suggested_severity ?? null,
+    entities: wire.entities ?? {},
     escalatedDept: wire.escalated_dept,
     category: wire.category,
     resolutionPath: wire.resolution_path,

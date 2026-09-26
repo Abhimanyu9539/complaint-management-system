@@ -35,7 +35,7 @@ this publicly before both exist.
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 from cms.schemas.tickets import (
     CreateTicketRequest,
@@ -46,7 +46,7 @@ from cms.schemas.tickets import (
     TicketDetail,
     TicketPage,
 )
-from cms.services import ticket_service
+from cms.services import ticket_pipeline, ticket_service
 from cms.services.ticket_service import IllegalTransition, UnknownDepartment
 
 logger = logging.getLogger(__name__)
@@ -65,20 +65,22 @@ CREATE_FAILED = (
 
 
 @router.post("", response_model=TicketCreated, status_code=201)
-async def create_ticket(payload: CreateTicketRequest) -> TicketCreated:
+async def create_ticket(
+    payload: CreateTicketRequest, background_tasks: BackgroundTasks
+) -> TicketCreated:
     """Open a ticket from the customer-facing form.
 
     201, not 200: this creates a resource and returns its identity. The customer
     reference is `ticket_no`, which the database assigns, so the row is read back
     rather than echoed from the request.
 
-    Unlike the ingestion trigger — which returns 202 because the work happens
-    later — the ticket genuinely exists by the time this responds. There is no
-    background job: classification and drafting are a later phase, and a ticket
-    at `new` is a complete, valid ticket.
+    The ticket exists by the time this responds. The ticket graph then runs in
+    the background (`ticket_pipeline.process_ticket`) and fills in the
+    classification; the customer does not wait for it, and a ticket it never
+    reaches is still a complete ticket at `new`.
     """
     try:
-        return await ticket_service.create_ticket(
+        created = await ticket_service.create_ticket(
             subject=payload.subject.strip(),
             body=payload.body.strip(),
             customer_email=payload.customer_email.strip().lower(),
@@ -87,6 +89,9 @@ async def create_ticket(payload: CreateTicketRequest) -> TicketCreated:
     except Exception:
         logger.exception("Failed to create a ticket")
         raise HTTPException(status_code=503, detail=CREATE_FAILED) from None
+
+    background_tasks.add_task(ticket_pipeline.process_ticket, created.id)
+    return created
 
 
 @router.get("", response_model=TicketPage)
