@@ -22,10 +22,9 @@ TODO(lld.md §4): adopt problem+json across the API.
   as one change across every route, including the 409 and 422 the ticket state
   machine raises, which is where problem+json actually earns its extra fields.
 
-Auth: these routes are unauthenticated, because the whole API is. lld.md §4
-requires `role = admin` on `/admin/*`. See `backend/docs/admin-api.md` for the
-intended `Depends(require_admin)` dependency — do not expose this publicly
-before it exists.
+Auth: admins only (lld.md §4). `router.py` applies `require_admin` to this whole
+router. The escalate picker's department list lives in `departments.py`, because
+every agent needs it.
 """
 
 import logging
@@ -36,7 +35,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from cms.schemas.admin import (
     AgentRunPage,
     AgentSummaryResponse,
-    DepartmentOptionPage,
     DocumentOptionPage,
     EscalationSummaryResponse,
     IngestionSummaryResponse,
@@ -207,16 +205,6 @@ async def get_escalation_summary(days: int = Query(30, ge=1, le=90)) -> Escalati
         return await admin_stats.build_escalation_summary(days)
     except Exception:
         logger.exception("Failed to build the escalation summary for %d days", days)
-        raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
-
-
-@router.get("/departments", response_model=DepartmentOptionPage)
-async def list_departments() -> DepartmentOptionPage:
-    """The closed set of twelve routing targets, for the escalate picker."""
-    try:
-        return DepartmentOptionPage(items=await admin_stats.build_departments())
-    except Exception:
-        logger.exception("Failed to list departments")
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 

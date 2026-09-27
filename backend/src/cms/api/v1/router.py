@@ -7,11 +7,16 @@ is a second router, not an edit to every file.
 Health is the deliberate exception: probes and uptime checks point at bare
 `/health`, and versioning an infrastructure endpoint means every probe has to be
 reconfigured the day the API version changes.
+
+Access: `/admin/*` is admins only (applied here, for the whole router). The other
+routers check the signed-in agent per route, because each has a public exception:
+the customer form (`POST /tickets`) and n8n's shared-secret `/emails/inbound`.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from cms.api.v1.routes import admin, chat, emails, health, tickets
+from cms.api.deps import require_admin
+from cms.api.v1.routes import admin, chat, departments, emails, health, me, tickets
 
 V1_PREFIX = "/api/v1"
 
@@ -21,7 +26,9 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 
 # Versioned business routes.
-api_router.include_router(admin.router, prefix=V1_PREFIX)
+api_router.include_router(admin.router, prefix=V1_PREFIX, dependencies=[Depends(require_admin)])
 api_router.include_router(chat.router, prefix=V1_PREFIX)
+api_router.include_router(departments.router, prefix=V1_PREFIX)
 api_router.include_router(emails.router, prefix=V1_PREFIX)
+api_router.include_router(me.router, prefix=V1_PREFIX)
 api_router.include_router(tickets.router, prefix=V1_PREFIX)
