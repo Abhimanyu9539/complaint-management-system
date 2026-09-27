@@ -88,3 +88,7 @@ asyncio_mode = "auto"
 
 [tool.ruff.lint.isort]
 known-first-party = ["cms"]
+
+# FastAPI's parameter markers are declarations, not shared mutable defaults (B008).
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header"]

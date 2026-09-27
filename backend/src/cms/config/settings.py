@@ -164,8 +164,8 @@ class Settings(BaseSettings):
         "{body}\n\n"
         "Please reply to this email and keep [T-{ticket_no}] in the subject."
     )
-    # The API has no login yet, so an open send endpoint could mail anyone. Until
-    # it does, only a local SMTP server (Mailpit) is allowed.
+    # Off, only a local SMTP server (Mailpit) is allowed. Sending needs a signed-in
+    # agent, but a dev machine should still opt in before mail reaches real people.
     email_real_delivery_enabled: bool = False
     local_smtp_hosts: list[str] = ["localhost", "127.0.0.1", "mailpit"]
 
@@ -322,9 +322,6 @@ class Settings(BaseSettings):
     # Kill switch: False compiles the graph with no checkpointer, which is the
     # pre-Mongo behaviour — chat works, nothing is stored.
     chat_memory_enabled: bool = True
-    # Stands in for the authenticated user until JWT verification lands. It is
-    # recorded in checkpoint metadata, never used to authorise anything.
-    anonymous_user_id: str = "anonymous"
     # `input_guard` only masks PII on the *allowed* path; a blocked message is
     # still raw, and blocked is exactly when it holds a credential. Stored in its
     # place so a replayed transcript never shows what was rejected.
@@ -367,9 +364,24 @@ class Settings(BaseSettings):
     # Private bucket policy files upload into; created by migration 0018.
     supabase_policy_bucket: str = "policy-files"
 
+    # --- Auth (Supabase user JWTs, verified against the project's public keys) ---
+    supabase_jwt_audience: str = "authenticated"
+    supabase_jwt_algorithms: list[str] = ["ES256", "RS256"]
+    # Clock difference tolerated on `iat`/`exp`. This machine runs a second or two behind
+    # Supabase, which made a token used right after sign-in look issued in the future.
+    supabase_jwt_leeway_seconds: int = 30
+    # How long the fetched signing keys are reused before the key set is read again.
+    jwks_cache_seconds: int = 3600
+    jwks_timeout_seconds: float = 10.0
+
     @property
     def supabase_jwks_url(self) -> str:
         return f"{self.supabase_url}/auth/v1/.well-known/jwks.json"
+
+    @property
+    def supabase_jwt_issuer(self) -> str:
+        # Stripped: a trailing slash in SUPABASE_URL would fail every token's `iss` check.
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
 
     # --- CORS: comma-separated origins, e.g. "https://cms.example.com,https://admin.example.com" ---
     cors_origins: str = ""
