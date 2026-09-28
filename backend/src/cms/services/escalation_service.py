@@ -106,12 +106,17 @@ async def _question_edited(ticket_id: str, draft_id: str, question: str) -> bool
 
 
 async def escalate(
-    ticket_id: str, department_id: str, question: str, question_draft_id: str | None = None
+    ticket_id: str,
+    department_id: str,
+    question: str,
+    question_draft_id: str | None = None,
+    actor_id: str | None = None,
 ) -> Ticket:
     """Email the question to the department, then mark the ticket escalated.
 
     Every read happens before the email, and the email before any write: if the
     send fails (`EmailSendError`), nothing has changed and the agent can retry.
+    `actor_id` is the agent who escalated.
     """
     ticket = await tickets.fetch_ticket(ticket_id)
     ticket_service.assert_transition(ticket["status"], "escalated")
@@ -143,6 +148,7 @@ async def escalate(
                 "question_draft_id": question_draft_id,
                 "edited": edited,
             },
+            actor_id=actor_id,
         )
     except Exception:
         logger.exception(
@@ -153,11 +159,12 @@ async def escalate(
         raise
 
 
-async def record_answer(ticket_id: str, answer_text: str) -> Ticket:
+async def record_answer(ticket_id: str, answer_text: str, actor_id: str | None = None) -> Ticket:
     """Save the department's answer and move the ticket to `dept_responded`.
 
     The transition is checked before the insert, so a refused request leaves no row.
     The caller then runs the ticket graph again to redraft from the answer.
+    `actor_id` is the agent who pasted it; None when it arrived by email.
     """
     ticket = await tickets.fetch_ticket(ticket_id)
     ticket_service.assert_transition(ticket["status"], "dept_responded")
@@ -169,4 +176,4 @@ async def record_answer(ticket_id: str, answer_text: str) -> Ticket:
             "answer_text": answer_text.strip(),
         }
     )
-    return await ticket_service.mark_dept_responded(ticket_id, response)
+    return await ticket_service.mark_dept_responded(ticket_id, response, actor_id)

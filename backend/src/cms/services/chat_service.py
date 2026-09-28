@@ -43,6 +43,11 @@ logger = logging.getLogger(__name__)
 ANSWER_NODES = frozenset({GENERATE, LOOKUP_GENERATE, SMALLTALK})
 
 
+def thread_id(user_id: str, session_id: str) -> str:
+    """The checkpoint key for one user's session. Scoping it by user is what makes a session private."""
+    return f"{user_id}:{session_id}"
+
+
 def _event(name: str, data: Any) -> dict[str, str]:
     """One SSE record. JSON keeps every payload on a single `data:` line."""
     return {"event": name, "data": json.dumps(data)}
@@ -56,14 +61,13 @@ async def stream_turn(
     `values` rides alongside `messages` so the final state is in hand when the
     stream ends, without a second graph run.
 
-    `thread_id` is the session id as-is. `user_id` rides in `configurable`, which
-    LangGraph copies into the checkpoint metadata — so conversations can be
-    attributed once auth lands, without the thread key changing and orphaning
-    every session that already exists.
+    The checkpoint is keyed by user and session (`thread_id`), so a session id
+    sent by another user starts a fresh conversation instead of extending theirs.
+    The browser only ever sees the plain session id.
     """
     settings = get_settings()
     session = session_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": session, "user_id": user_id}}
+    config = {"configurable": {"thread_id": thread_id(user_id, session), "user_id": user_id}}
     streamed = ""
     step: int | None = None
     final: dict[str, Any] = {}
@@ -173,7 +177,7 @@ async def session_messages(session_id: str, user_id: str) -> list[ChatMessageOut
     checkpoint *is* the transcript. An unknown session has no snapshot, which
     reads as an empty list.
     """
-    config = {"configurable": {"thread_id": session_id, "user_id": user_id}}
+    config = {"configurable": {"thread_id": thread_id(user_id, session_id), "user_id": user_id}}
     try:
         snapshot = await get_graph().aget_state(config)
     except Exception:
@@ -186,10 +190,10 @@ async def session_messages(session_id: str, user_id: str) -> list[ChatMessageOut
     return messages
 
 
-async def delete_session(session_id: str) -> None:
-    """Remove every stored checkpoint of one session. An unknown id is a no-op."""
+async def delete_session(session_id: str, user_id: str) -> None:
+    """Remove every stored checkpoint of one of the user's sessions. An unknown id is a no-op."""
     try:
-        await get_checkpointer().adelete_thread(session_id)
+        await get_checkpointer().adelete_thread(thread_id(user_id, session_id))
     except Exception:
         logger.exception("chat: could not delete session %s", session_id)
         raise

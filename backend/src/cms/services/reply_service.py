@@ -60,8 +60,13 @@ async def _actionable_draft(ticket: dict, draft_id: str) -> dict:
     return draft
 
 
-async def  send_reply(ticket_id: str, draft_id: str, final_text: str) -> Ticket:
-    """Email the reply to the customer, record what was sent, and resolve the ticket."""
+async def send_reply(
+    ticket_id: str, draft_id: str, final_text: str, user_id: str | None = None
+) -> Ticket:
+    """Email the reply to the customer, record what was sent, and resolve the ticket.
+
+    `user_id` is the agent who sent it, recorded on the feedback and the events.
+    """
     ticket = await tickets.fetch_ticket(ticket_id)
     # Checked before anything is sent: a reply must not go out on a ticket that can't close.
     ticket_service.assert_transition(ticket["status"], "resolved")
@@ -82,7 +87,7 @@ async def  send_reply(ticket_id: str, draft_id: str, final_text: str) -> Ticket:
     action = "accepted" if unedited else "edited"
 
     feedback = await draft_feedback.insert_feedback(
-        {"draft_id": draft_id, "user_id": None, "action": action, "final_text": body}
+        {"draft_id": draft_id, "user_id": user_id, "action": action, "final_text": body}
     )
 
     subject = get_settings().reply_subject_template.format(
@@ -96,7 +101,9 @@ async def  send_reply(ticket_id: str, draft_id: str, final_text: str) -> Ticket:
             await draft_feedback.delete_feedback(feedback["id"])
         except Exception:
             logger.exception("Ticket %s: the draft stays locked after a failed send", ticket_id)
-        await ticket_events.append_event(ticket_id, "failed", {"stage": "send_email", "error": str(exc)})
+        await ticket_events.append_event(
+            ticket_id, "failed", {"stage": "send_email", "error": str(exc)}, actor_id=user_id
+        )
         raise
 
     await ticket_events.append_event(
@@ -109,23 +116,31 @@ async def  send_reply(ticket_id: str, draft_id: str, final_text: str) -> Ticket:
             "message_id": message_id,
             "to": to,
         },
+        actor_id=user_id,
     )
     logger.info("Ticket %s: reply sent (%s, draft v%d)", ticket_id, action, draft["version"])
-    return await ticket_service.resolve_ticket(ticket_id)
+    return await ticket_service.resolve_ticket(ticket_id, actor_id=user_id)
 
 
-async def discard_draft(ticket_id: str, draft_id: str, reason: str, note: str | None = None) -> Ticket:
+async def discard_draft(
+    ticket_id: str,
+    draft_id: str,
+    reason: str,
+    note: str | None = None,
+    user_id: str | None = None,
+) -> Ticket:
     """Reject the draft with a reason. The ticket stays where it is; the agent regenerates or escalates."""
     ticket = await tickets.fetch_ticket(ticket_id)
     draft = await _actionable_draft(ticket, draft_id)
 
     await draft_feedback.insert_feedback(
-        {"draft_id": draft_id, "user_id": None, "action": "rejected", "edit_reason": reason}
+        {"draft_id": draft_id, "user_id": user_id, "action": "rejected", "edit_reason": reason}
     )
     await ticket_events.append_event(
         ticket_id,
         "discarded",
         {"draft_id": draft_id, "version": draft["version"], "reason": reason, "note": note},
+        actor_id=user_id,
     )
     logger.info("Ticket %s: draft v%d discarded (%s)", ticket_id, draft["version"], reason)
     return ticket_service.to_ticket(ticket)

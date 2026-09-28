@@ -12,31 +12,22 @@ would leave clients parsing two error formats, which is worse than one uniform
 format that is not yet the specified one. The TODO stays open, and moving it is
 a single change across the whole API rather than a drip.
 
-──────────────────────────────────────────────────────────────────────────────
-⚠  `POST /tickets` IS AN UNAUTHENTICATED PUBLIC WRITE.
+Access: every route needs a signed-in agent (`get_current_user`), except
+`POST /tickets`, the customer form, which is public by design. Routes that act
+on a ticket record the agent as the event's actor.
 
-The whole API is unauthenticated (see `admin.py`), and it holds the Supabase
-*service-role* key, which bypasses RLS entirely — the row-level policies on
-`tickets` will not stop anything that reaches this handler. Exposing this to the
-internet as it stands means anonymous inserts into `tickets` and anonymous
-collection of customer email addresses.
-
-What guards this today: bounded fields on `CreateTicketRequest` (a rejected
-oversized body is a 422, not a multi-megabyte row) and nothing else. There is no
-rate limit, no CAPTCHA, and no origin check beyond CORS, which is not a security
-control.
-
-The fix is `Depends(require_admin)` on the read/act routes plus a rate limiter
-in front of the create route — see `backend/docs/admin-api.md` §9. Do not deploy
-this publicly before both exist.
-──────────────────────────────────────────────────────────────────────────────
+⚠ `POST /tickets` is still an unauthenticated write with no rate limit: only the
+bounded fields on `CreateTicketRequest` guard it. Put a rate limiter in front of
+it before deploying publicly.
 """
 
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
+from cms.api.deps import get_current_user
+from cms.schemas.auth import CurrentUser
 from cms.schemas.tickets import (
     CreateTicketRequest,
     DeptQuestion,
@@ -112,7 +103,7 @@ async def create_ticket(
     return created
 
 
-@router.get("", response_model=TicketPage)
+@router.get("", response_model=TicketPage, dependencies=[Depends(get_current_user)])
 async def list_tickets(
     status: Literal[
         "new",
@@ -140,7 +131,7 @@ async def list_tickets(
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
-@router.get("/{ticket_id}", response_model=TicketDetail)
+@router.get("/{ticket_id}", response_model=TicketDetail, dependencies=[Depends(get_current_user)])
 async def get_ticket(ticket_id: str) -> TicketDetail:
     """One ticket plus its audit trail."""
     try:
@@ -152,7 +143,9 @@ async def get_ticket(ticket_id: str) -> TicketDetail:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
-@router.post("/{ticket_id}/dept-question", response_model=DeptQuestion)
+@router.post(
+    "/{ticket_id}/dept-question", response_model=DeptQuestion, dependencies=[Depends(get_current_user)]
+)
 async def draft_dept_question(ticket_id: str, payload: DraftDeptQuestionRequest) -> DeptQuestion:
     """Draft the question to send the department. Nothing is sent or changed on the ticket."""
     try:
@@ -169,7 +162,11 @@ async def draft_dept_question(ticket_id: str, payload: DraftDeptQuestionRequest)
 
 
 @router.post("/{ticket_id}/escalate", response_model=Ticket)
-async def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Ticket:
+async def escalate_ticket(
+    ticket_id: str,
+    payload: EscalateTicketRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> Ticket:
     """Email the question to a specialist department and hand the ticket over (Path B).
 
     409 on an illegal transition, per lld.md §2. Not 400: the request is
@@ -178,7 +175,7 @@ async def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Tic
     """
     try:
         return await escalation_service.escalate(
-            ticket_id, payload.department_id, payload.note, payload.question_draft_id
+            ticket_id, payload.department_id, payload.note, payload.question_draft_id, user.id
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket.") from None
@@ -195,7 +192,10 @@ async def escalate_ticket(ticket_id: str, payload: EscalateTicketRequest) -> Tic
 
 @router.post("/{ticket_id}/dept-response", response_model=Ticket, status_code=202)
 async def record_dept_response(
-    ticket_id: str, payload: DeptResponseRequest, background_tasks: BackgroundTasks
+    ticket_id: str,
+    payload: DeptResponseRequest,
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
 ) -> Ticket:
     """Save the department's answer; the ticket graph then redrafts from it in the background.
 
@@ -203,7 +203,7 @@ async def record_dept_response(
     workbench shows the run as soon as it reloads the ticket.
     """
     try:
-        await escalation_service.record_answer(ticket_id, payload.answer_text)
+        await escalation_service.record_answer(ticket_id, payload.answer_text, user.id)
         ticket = ticket_service.to_ticket(
             await ticket_service.start_processing(ticket_id, resume=False)
         )
@@ -220,7 +220,11 @@ async def record_dept_response(
 
 
 @router.post("/{ticket_id}/resolve", response_model=Ticket)
-async def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticket:
+async def resolve_ticket(
+    ticket_id: str,
+    payload: ResolveTicketRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> Ticket:
     """Close a ticket, stamping `resolution_path`.
 
     The path is derived from the ticket's own history, not from the request —
@@ -228,7 +232,7 @@ async def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticke
     escalation-rate metric, which is why it does not accept the value.
     """
     try:
-        return await ticket_service.resolve_ticket(ticket_id, payload.note)
+        return await ticket_service.resolve_ticket(ticket_id, payload.note, user.id)
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket.") from None
     except IllegalTransition as exc:
@@ -240,7 +244,10 @@ async def resolve_ticket(ticket_id: str, payload: ResolveTicketRequest) -> Ticke
 
 @router.post("/{ticket_id}/send", response_model=Ticket)
 async def send_reply(
-    ticket_id: str, payload: SendReplyRequest, background_tasks: BackgroundTasks
+    ticket_id: str,
+    payload: SendReplyRequest,
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
 ) -> Ticket:
     """Email the (possibly edited) draft to the customer and resolve the ticket.
 
@@ -250,7 +257,9 @@ async def send_reply(
     does: a ticket resolved by hand has nothing to learn from.
     """
     try:
-        ticket = await reply_service.send_reply(ticket_id, payload.draft_id, payload.final_text)
+        ticket = await reply_service.send_reply(
+            ticket_id, payload.draft_id, payload.final_text, user.id
+        )
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket or draft.") from None
     except (IllegalTransition, DraftConflict) as exc:
@@ -268,11 +277,15 @@ async def send_reply(
 
 
 @router.post("/{ticket_id}/discard", response_model=Ticket)
-async def discard_draft(ticket_id: str, payload: DiscardDraftRequest) -> Ticket:
+async def discard_draft(
+    ticket_id: str,
+    payload: DiscardDraftRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> Ticket:
     """Reject the latest draft with a reason. The ticket's status does not change."""
     try:
         return await reply_service.discard_draft(
-            ticket_id, payload.draft_id, payload.reason, payload.note
+            ticket_id, payload.draft_id, payload.reason, payload.note, user.id
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="No such ticket or draft.") from None
@@ -283,7 +296,12 @@ async def discard_draft(ticket_id: str, payload: DiscardDraftRequest) -> Ticket:
         raise HTTPException(status_code=503, detail=UNAVAILABLE) from None
 
 
-@router.post("/{ticket_id}/regenerate", response_model=Ticket, status_code=202)
+@router.post(
+    "/{ticket_id}/regenerate",
+    response_model=Ticket,
+    status_code=202,
+    dependencies=[Depends(get_current_user)],
+)
 async def regenerate_draft(ticket_id: str, background_tasks: BackgroundTasks) -> Ticket:
     """Run the ticket graph again in the background; a new draft version follows.
 
