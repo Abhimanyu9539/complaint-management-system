@@ -252,12 +252,17 @@ async def get_department(department_id: str) -> dict:
 
 
 async def escalate_ticket(
-    ticket_id: str, department_id: str, note: str | None = None, email: dict | None = None
+    ticket_id: str,
+    department_id: str,
+    note: str | None = None,
+    email: dict | None = None,
+    actor_id: str | None = None,
 ) -> Ticket:
     """Hand a ticket to a specialist department (Path B).
 
     `email` describes the question already sent to the department (`to`,
     `message_id`, ...) and goes on the `escalated` event with the note.
+    `actor_id` is the agent who escalated; None means the system did.
     """
     await get_department(department_id)
 
@@ -277,14 +282,18 @@ async def escalate_ticket(
             "from_status": current["status"],
             **(email or {}),
         },
+        actor_id=actor_id,
     )
 
     logger.info("Ticket %s escalated to %s", ticket_id, department_id)
     return to_ticket(row)
 
 
-async def mark_dept_responded(ticket_id: str, response: dict) -> Ticket:
-    """Record that the escalated department answered. The redraft runs after this."""
+async def mark_dept_responded(ticket_id: str, response: dict, actor_id: str | None = None) -> Ticket:
+    """Record that the escalated department answered. The redraft runs after this.
+
+    `actor_id` is the agent who pasted the answer; None when it arrived by email.
+    """
     current = await tickets.fetch_ticket(ticket_id)
     assert_transition(current["status"], "dept_responded")
 
@@ -297,13 +306,16 @@ async def mark_dept_responded(ticket_id: str, response: dict) -> Ticket:
             "department_id": response["department_id"],
             "answer": response["answer_text"],
         },
+        actor_id=actor_id,
     )
 
     logger.info("Ticket %s: %s answered", ticket_id, response["department_id"])
     return to_ticket(row)
 
 
-async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
+async def resolve_ticket(
+    ticket_id: str, note: str | None = None, actor_id: str | None = None
+) -> Ticket:
     """Close a ticket and stamp the path it took.
 
     The path is read off the ticket, not off the request — see
@@ -319,6 +331,7 @@ async def resolve_ticket(ticket_id: str, note: str | None = None) -> Ticket:
         ticket_id,
         "resolved",
         {"resolution_path": path, "note": note, "from_status": current["status"]},
+        actor_id=actor_id,
     )
 
     logger.info("Ticket %s resolved via the %s path", ticket_id, path)
