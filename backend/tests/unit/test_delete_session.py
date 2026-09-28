@@ -7,7 +7,7 @@ import pytest
 from cms.services import chat_service
 
 
-async def test_the_thread_is_deleted_by_session_id(monkeypatch) -> None:
+async def test_only_the_users_own_thread_is_deleted(monkeypatch) -> None:
     calls: list[str] = []
 
     async def adelete_thread(thread_id):
@@ -16,9 +16,9 @@ async def test_the_thread_is_deleted_by_session_id(monkeypatch) -> None:
     monkeypatch.setattr(
         chat_service, "get_checkpointer", lambda: SimpleNamespace(adelete_thread=adelete_thread)
     )
-    await chat_service.delete_session("s-1")
+    await chat_service.delete_session("s-1", "user-9")
 
-    assert calls == ["s-1"]
+    assert calls == ["user-9:s-1"]
 
 
 async def test_a_failed_delete_is_raised(monkeypatch) -> None:
@@ -29,4 +29,4 @@ async def test_a_failed_delete_is_raised(monkeypatch) -> None:
         chat_service, "get_checkpointer", lambda: SimpleNamespace(adelete_thread=adelete_thread)
     )
     with pytest.raises(RuntimeError):
-        await chat_service.delete_session("s-1")
+        await chat_service.delete_session("s-1", "user-9")

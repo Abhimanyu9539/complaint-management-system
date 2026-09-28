@@ -29,7 +29,15 @@ def _install(
     monkeypatch, ticket=None, department=DEPARTMENT, email_error=None, question="Is it covered?"
 ) -> dict:
     """Stub every read, write, the model and the email. Returns a dict recording what happened."""
-    calls = {"model": [], "drafts": [], "emails": [], "escalated": [], "responses": [], "responded": []}
+    calls = {
+        "model": [],
+        "drafts": [],
+        "emails": [],
+        "escalated": [],
+        "responses": [],
+        "responded": [],
+        "actors": [],
+    }
     ticket = ticket or TICKET
 
     async def fetch_ticket(ticket_id):
@@ -65,16 +73,18 @@ def _install(
             raise email_error
         return "<m1@example.com>"
 
-    async def escalate_ticket(ticket_id, department_id, note=None, email=None):
+    async def escalate_ticket(ticket_id, department_id, note=None, email=None, actor_id=None):
         calls["escalated"].append((department_id, note, email))
+        calls["actors"].append(actor_id)
         return "escalated-ticket"
 
     async def insert_response(row):
         calls["responses"].append(row)
         return {"id": "r1", **row}
 
-    async def mark_dept_responded(ticket_id, response):
+    async def mark_dept_responded(ticket_id, response, actor_id=None):
         calls["responded"].append(response)
+        calls["actors"].append(actor_id)
         return "responded-ticket"
 
     monkeypatch.setattr(escalation_service.tickets, "fetch_ticket", fetch_ticket)
@@ -162,6 +172,14 @@ async def test_an_edited_question_is_recorded_as_edited(monkeypatch) -> None:
     assert calls["escalated"][0][2]["edited"] is True
 
 
+async def test_the_escalating_agent_is_recorded(monkeypatch) -> None:
+    calls = _install(monkeypatch)
+
+    await escalation_service.escalate("t1", "warranty", "Is it covered?", "q1", "agent-1")
+
+    assert calls["actors"] == ["agent-1"]
+
+
 async def test_a_failed_email_leaves_the_ticket_unescalated(monkeypatch) -> None:
     calls = _install(monkeypatch, email_error=EmailSendError("connection refused"))
 
@@ -189,6 +207,16 @@ async def test_answer_is_saved_and_the_ticket_moves_to_dept_responded(monkeypatc
     assert result == "responded-ticket"
     assert calls["responses"] == [{"ticket_id": "t1", "department_id": "warranty", "answer_text": "Replace it."}]
     assert calls["responded"][0]["id"] == "r1"
+    # No agent given, as on the email path: the actor is the system.
+    assert calls["actors"] == [None]
+
+
+async def test_the_agent_who_pasted_the_answer_is_recorded(monkeypatch) -> None:
+    calls = _install(monkeypatch, ticket={**TICKET, "status": "escalated", "escalated_dept": "warranty"})
+
+    await escalation_service.record_answer("t1", "Replace it.", "agent-1")
+
+    assert calls["actors"] == ["agent-1"]
 
 
 async def test_answer_on_a_ticket_that_is_not_escalated_saves_nothing(monkeypatch) -> None:

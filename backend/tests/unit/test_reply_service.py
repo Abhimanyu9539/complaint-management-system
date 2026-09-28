@@ -27,7 +27,7 @@ DRAFT = {
 
 def _install(monkeypatch, ticket=None, draft=None, latest=None, feedback=None, email_error=None) -> dict:
     """Stub every read and write. Returns a dict recording what happened."""
-    calls = {"feedback": [], "deleted": [], "events": [], "emails": [], "resolved": []}
+    calls = {"feedback": [], "deleted": [], "events": [], "emails": [], "resolved": [], "actors": []}
     ticket = ticket or TICKET
     draft = draft or DRAFT
 
@@ -52,6 +52,7 @@ def _install(monkeypatch, ticket=None, draft=None, latest=None, feedback=None, e
 
     async def append_event(ticket_id, event, payload=None, actor_id=None):
         calls["events"].append((event, payload))
+        calls["actors"].append((event, actor_id))
 
     async def send_email(to, subject, body):
         calls["emails"].append((to, subject, body))
@@ -59,8 +60,9 @@ def _install(monkeypatch, ticket=None, draft=None, latest=None, feedback=None, e
             raise email_error
         return "<m1@example.com>"
 
-    async def resolve_ticket(ticket_id, note=None):
+    async def resolve_ticket(ticket_id, note=None, actor_id=None):
         calls["resolved"].append(ticket_id)
+        calls["actors"].append(("resolved", actor_id))
         return "resolved-ticket"
 
     monkeypatch.setattr(reply_service.tickets, "fetch_ticket", fetch_ticket)
@@ -107,6 +109,15 @@ async def test_unedited_draft_is_sent_as_accepted(monkeypatch) -> None:
         )
     ]
     assert calls["resolved"] == ["t1"]
+
+
+async def test_the_sending_agent_is_recorded(monkeypatch) -> None:
+    calls = _install(monkeypatch)
+
+    await reply_service.send_reply("t1", "d1", DRAFT["draft_text"], "agent-1")
+
+    assert calls["feedback"][0]["user_id"] == "agent-1"
+    assert calls["actors"] == [("sent", "agent-1"), ("resolved", "agent-1")]
 
 
 async def test_changed_text_is_sent_as_edited(monkeypatch) -> None:
@@ -190,3 +201,12 @@ async def test_discard_records_a_rejection(monkeypatch) -> None:
     ]
     assert calls["emails"] == [] and calls["resolved"] == []
     assert ticket.id == "t1"
+
+
+async def test_the_discarding_agent_is_recorded(monkeypatch) -> None:
+    calls = _install(monkeypatch)
+
+    await reply_service.discard_draft("t1", "d1", "wrong_tone", user_id="agent-1")
+
+    assert calls["feedback"][0]["user_id"] == "agent-1"
+    assert calls["actors"] == [("discarded", "agent-1")]

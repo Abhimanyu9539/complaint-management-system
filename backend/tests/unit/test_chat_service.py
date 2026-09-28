@@ -152,15 +152,16 @@ async def test_graph_failure_becomes_an_error_event(monkeypatch) -> None:
     assert events[0]["data"]["message"]
 
 
-async def test_the_graph_is_run_on_a_thread_keyed_by_session(monkeypatch) -> None:
-    """`thread_id` is the session id as-is; `user_id` rides alongside it so
-    LangGraph copies it into the checkpoint metadata."""
+async def test_the_graph_is_run_on_a_thread_keyed_by_user_and_session(monkeypatch) -> None:
+    """Scoping the key by user is what stops one agent extending another's session."""
     calls = _install_graph(monkeypatch, [("values", {"draft": "d", "citations": []})])
-    await _collect(session_id="session-7", user_id="user-9")
+    events = await _collect(session_id="session-7", user_id="user-9")
 
     configurable = calls[0]["config"]["configurable"]
-    assert configurable["thread_id"] == "session-7"
+    assert configurable["thread_id"] == "user-9:session-7"
     assert configurable["user_id"] == "user-9"
+    # The browser only ever sees the plain session id.
+    assert events[-1]["data"]["session_id"] == "session-7"
     # One checkpoint per turn rather than one per super-step.
     assert calls[0]["durability"] == "exit"
 

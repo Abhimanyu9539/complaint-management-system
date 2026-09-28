@@ -49,12 +49,12 @@ async def test_messages_are_mapped_to_the_ui_shape(monkeypatch) -> None:
     assert messages[0].citations == []
 
 
-async def test_the_thread_is_keyed_on_the_session_id_alone(monkeypatch) -> None:
-    """`user_id` rides in configurable for metadata; it is not part of the key."""
+async def test_the_thread_is_keyed_on_user_and_session(monkeypatch) -> None:
+    """Another user's session id reads an empty thread, not their transcript."""
     calls = _install_state(monkeypatch, [])
     await chat_service.session_messages("s-1", "someone")
 
-    assert calls[0]["configurable"]["thread_id"] == "s-1"
+    assert calls[0]["configurable"]["thread_id"] == "someone:s-1"
     assert calls[0]["configurable"]["user_id"] == "someone"
 
 
