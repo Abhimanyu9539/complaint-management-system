@@ -1,3 +1,4 @@
+import { authFetch } from '@/lib/auth/authFetch';
 import { parseSSEStream } from './sse';
 import type {
   ChatEvent,
@@ -44,7 +45,7 @@ function createRealTransport(baseUrl: string): ChatTransport {
   ): AsyncGenerator<ChatEvent> {
     let res: Response;
     try {
-      res = await fetch(`${baseUrl}/api/v1/chat`, {
+      res = await authFetch(`${baseUrl}/api/v1/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({ session_id: req.sessionId ?? undefined, message: req.message }),
@@ -67,18 +68,16 @@ function createRealTransport(baseUrl: string): ChatTransport {
   return {
     streamChat,
 
-    // Transcripts live server-side, in the graph's Mongo checkpointer. The
-    // *index* of which sessions exist is local, because listing them on the
-    // server would mean listing every anonymous user's — there is no auth yet
-    // to scope it to one person. Swap this for a `GET /chat/sessions` when
-    // there is.
+    // Transcripts live server-side, in the graph's Mongo checkpointer, scoped
+    // to the signed-in agent. The *index* of which sessions exist is still
+    // local to this browser; a `GET /chat/sessions` would replace it.
     async listSessions(): Promise<SessionMeta[]> {
       return loadSessions().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
 
     async getMessages(sessionId: string): Promise<ChatMessage[]> {
       try {
-        const res = await fetch(
+        const res = await authFetch(
           `${baseUrl}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
         );
         if (!res.ok) {
@@ -102,7 +101,7 @@ function createRealTransport(baseUrl: string): ChatTransport {
 
     async deleteSession(sessionId: string): Promise<boolean> {
       try {
-        const res = await fetch(
+        const res = await authFetch(
           `${baseUrl}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}`,
           { method: 'DELETE' },
         );
@@ -126,7 +125,7 @@ function createRealTransport(baseUrl: string): ChatTransport {
       // `docType` picks which one to query.
       const collectionPath = docType === 'case' ? 'cases' : 'policies';
       try {
-        const res = await fetch(`${baseUrl}/${collectionPath}/${docId}`);
+        const res = await authFetch(`${baseUrl}/${collectionPath}/${docId}`);
         if (!res.ok) {
           console.warn(`getDocument(${docId}): backend responded ${res.status}`);
           return null;

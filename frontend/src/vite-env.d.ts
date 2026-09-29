@@ -10,6 +10,9 @@ interface ImportMetaEnv {
    * speeds every panel up proportionally. Values under 2000 are ignored.
    */
   readonly VITE_ADMIN_POLL_MS?: string;
+  /** Supabase project URL and publishable key, for agent sign-in. See `lib/auth/supabase.ts`. */
+  readonly VITE_SUPABASE_URL?: string;
+  readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 }
 
 interface ImportMeta {

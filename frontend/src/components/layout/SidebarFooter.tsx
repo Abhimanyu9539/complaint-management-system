@@ -1,7 +1,8 @@
-import { ChevronsUpDown, Gauge, Inbox, MessageCircle, MessageSquarePlus } from 'lucide-react';
+import { ChevronsUpDown, Gauge, Inbox, LogOut, MessageCircle, MessageSquarePlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router';
 import { ICON_SIZE } from '@/components/ui/IconButton';
+import { useAuth } from '@/state/AuthProvider';
 import { PalettePicker } from './PalettePicker';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -38,15 +39,19 @@ interface SidebarFooterProps {
 
 /**
  * The bottom row shared by every sidebar: a single trigger that opens a popover
- * with the four area destinations, the colour picker, and the connection badge —
- * replacing what used to be three bare links plus a whole extra row per sidebar.
+ * with the area destinations, the colour picker, the connection badge and the
+ * signed-in agent with Sign out — replacing what used to be three bare links
+ * plus a whole extra row per sidebar.
  */
 export function SidebarFooter({ mocked, mockedReason, onNavigate }: SidebarFooterProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const firstLinkRef = useRef<HTMLAnchorElement | null>(null);
   const { pathname } = useLocation();
+  const { me, signOut } = useAuth();
   const active = matchDestination(pathname);
+  // Agents can't open the admin panel, so it isn't offered to them.
+  const destinations = DESTINATIONS.filter((d) => d.to !== '/admin' || me?.role === 'admin');
 
   useEffect(() => {
     if (!open) return;
@@ -104,7 +109,7 @@ export function SidebarFooter({ mocked, mockedReason, onNavigate }: SidebarFoote
             style={{ animation: 'fade-in-up 0.15s ease-out' }}
           >
             <nav aria-label="Switch area" className="flex flex-col gap-0.5 p-1.5">
-              {DESTINATIONS.map((destination, index) => (
+              {destinations.map((destination, index) => (
                 <NavLink
                   key={destination.to}
                   ref={index === 0 ? firstLinkRef : undefined}
@@ -146,6 +151,25 @@ export function SidebarFooter({ mocked, mockedReason, onNavigate }: SidebarFoote
                 <span className="text-[11px] text-text-faint">Connected</span>
               )}
             </div>
+
+            {me && (
+              <div className="flex items-center justify-between gap-2 border-t border-border px-4 py-2.5">
+                <span className="min-w-0">
+                  <span className="block truncate text-[12px] font-medium text-text">
+                    {me.display_name || me.email}
+                  </span>
+                  <span className="block truncate text-[11px] text-text-faint capitalize">{me.role}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+                >
+                  <LogOut size={14} strokeWidth={1.75} />
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

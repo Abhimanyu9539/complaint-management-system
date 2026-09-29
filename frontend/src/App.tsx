@@ -1,7 +1,10 @@
 import { Suspense, lazy } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
+import { RequireAuth } from '@/components/auth/RequireAuth';
+import { LoginPage } from '@/pages/LoginPage';
 import { WorkbenchPage } from '@/pages/WorkbenchPage';
 import { NotFoundRoute } from '@/pages/NotFoundRoute';
+import { AuthProvider } from '@/state/AuthProvider';
 import { ThemeProvider } from '@/state/ThemeProvider';
 
 /**
@@ -60,15 +63,41 @@ function App() {
           properties of the whole app, and remounting it on navigation would
           re-read localStorage and flash. */}
       <ThemeProvider>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/" element={<WorkbenchPage />} />
-            <Route path="/chat" element={<ChatRoute />} />
-            <Route path="/ticket" element={<TicketFormPage />} />
-            <Route path="/admin/*" element={<AdminRoutes />} />
-            <Route path="*" element={<NotFoundRoute />} />
-          </Routes>
-        </Suspense>
+        {/* Agents sign in for the workbench, chat and admin; `/ticket` is the
+            customers' public form and `/login` is the way in. */}
+        <AuthProvider>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <RequireAuth>
+                    <WorkbenchPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/chat"
+                element={
+                  <RequireAuth>
+                    <ChatRoute />
+                  </RequireAuth>
+                }
+              />
+              <Route path="/ticket" element={<TicketFormPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/admin/*"
+                element={
+                  <RequireAuth role="admin">
+                    <AdminRoutes />
+                  </RequireAuth>
+                }
+              />
+              <Route path="*" element={<NotFoundRoute />} />
+            </Routes>
+          </Suspense>
+        </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
   );

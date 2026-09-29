@@ -40,6 +40,7 @@ import type {
   TicketEvent,
   TicketQuery,
 } from '@/lib/tickets/types';
+import { authFetch } from '@/lib/auth/authFetch';
 import { AdminRequestError } from './errors';
 
 function isAbort(err: unknown): boolean {
@@ -53,7 +54,7 @@ function isAbort(err: unknown): boolean {
 async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, { signal, headers: { Accept: 'application/json' } });
+    response = await authFetch(url, { signal, headers: { Accept: 'application/json' } });
   } catch (err) {
     if (isAbort(err)) throw err;
     console.warn(`admin: request to ${url} failed`, err);
@@ -116,7 +117,7 @@ function live<T>(data: T): AdminResult<T> {
 async function postJson<T>(url: string, body: unknown, signal: AbortSignal): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await authFetch(url, {
       method: 'POST',
       signal,
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -940,7 +941,11 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
   }
 
   async function listDepartments(signal: AbortSignal): Promise<AdminResult<DepartmentOption[]>> {
-    const wire = await getJson<{ items: DepartmentOption[] }>(`${api}/departments`, signal);
+    // Not under /admin: every agent's escalate picker needs it.
+    const wire = await getJson<{ items: DepartmentOption[] }>(
+      `${baseUrl}/api/v1/departments`,
+      signal,
+    );
     return live(wire.items);
   }
 
