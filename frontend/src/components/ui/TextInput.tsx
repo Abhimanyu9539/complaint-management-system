@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { InputHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, Ref } from 'react';
 import { Field } from './Field';
 import { CONTROL_BASE, controlBorder, describedBy } from '@/lib/forms';
 
@@ -10,6 +10,8 @@ interface TextInputProps
   onChange(value: string): void;
   hint?: string;
   error?: string;
+  /** React 19 passes `ref` as a prop; it reaches the input through `...props`. */
+  ref?: Ref<HTMLInputElement>;
 }
 
 /**

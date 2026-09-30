@@ -100,7 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithPassword = useCallback(async (email: string, password: string) => {
     if (!supabase) return NOT_CONFIGURED;
     const { error: failure } = await supabase.auth.signInWithPassword({ email, password });
-    return failure ? failure.message : null;
+    if (!failure) return null;
+    return failure.code === 'invalid_credentials' ? 'Incorrect email or password.' : failure.message;
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
