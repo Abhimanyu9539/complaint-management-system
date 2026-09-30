@@ -46,7 +46,7 @@ export function Panel({
       <header className="flex min-h-13 shrink-0 items-start justify-between gap-3 px-4 py-3">
         <div className="min-w-0">
           {eyebrow && (
-            <p className="mb-0.5 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+            <p className="mb-0.5 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
               {eyebrow}
             </p>
           )}

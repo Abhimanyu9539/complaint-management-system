@@ -50,7 +50,7 @@ export function TicketBody({ detail }: { detail: TicketDetail }) {
       </dl>
 
       <section>
-        <h4 className="mb-1.5 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h4 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Complaint
         </h4>
         {ticket.body ? (
@@ -65,7 +65,7 @@ export function TicketBody({ detail }: { detail: TicketDetail }) {
       </section>
 
       <section>
-        <h4 className="mb-1.5 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h4 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           History
         </h4>
         <TicketTimeline events={events} />
@@ -77,7 +77,7 @@ export function TicketBody({ detail }: { detail: TicketDetail }) {
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <dt className="text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+      <dt className="text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
         {label}
       </dt>
       <dd className="min-w-0 truncate">{children}</dd>

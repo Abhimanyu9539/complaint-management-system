@@ -34,7 +34,7 @@ export function MockBadge({ reason, variant = 'chip', className = '' }: MockBadg
   return (
     <span
       title={reason}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-warn ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-warn ${className}`}
     >
       <FlaskConical size={10} strokeWidth={2} aria-hidden="true" />
       Simulated

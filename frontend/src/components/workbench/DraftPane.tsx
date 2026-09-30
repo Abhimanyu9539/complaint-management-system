@@ -68,7 +68,7 @@ function DraftText({ draft, text }: { draft: TicketDraft; text: string }) {
           <sup
             key={index}
             title={sources.get(marker) ?? 'Unknown source'}
-            className="ml-0.5 cursor-help font-mono text-[9.5px] text-accent"
+            className="ml-0.5 cursor-help font-mono text-[11px] text-accent"
           >
             {marker}
           </sup>
@@ -364,7 +364,7 @@ export function DraftPane({
   return (
     <div className="flex flex-col gap-4 p-4">
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Draft reply to customer
         </h3>
 
@@ -432,7 +432,7 @@ export function DraftPane({
       </div>
 
       <div className="border-t border-border pt-4">
-        <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Actions
         </h3>
         {/* Keyed on id + status: a finished escalate/resolve, or another ticket, starts a fresh form. */}

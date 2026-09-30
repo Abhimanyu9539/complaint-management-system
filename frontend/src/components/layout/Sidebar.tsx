@@ -3,6 +3,7 @@ import { ICON_SIZE, IconButton } from '@/components/ui/IconButton';
 import { useChat } from '@/state/ChatProvider';
 import { SessionItem } from './SessionItem';
 import { SidebarFooter } from './SidebarFooter';
+import { BrandMark } from '@/components/layout/BrandMark';
 
 interface SidebarProps {
   /** Closes the mobile drawer (also fired after selecting a session). */
@@ -18,14 +19,7 @@ export function Sidebar({ onCloseMobile, onCollapse }: SidebarProps) {
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex h-13 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
-        <div className="flex min-w-0 items-center gap-2 pl-1">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-text">
-            <span className="font-display text-[13px] leading-none">R</span>
-          </div>
-          <span className="truncate font-display text-[14px] font-medium text-text">
-            Resolvr
-          </span>
-        </div>
+        <BrandMark className="pl-1" />
         <IconButton
           onClick={onCollapse ?? onCloseMobile}
           aria-label="Collapse conversations"

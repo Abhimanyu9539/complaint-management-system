@@ -91,7 +91,7 @@ export function DataTable<T>({
               <th
                 key={column.key}
                 scope="col"
-                className={`sticky top-0 z-10 border-b border-border bg-surface px-4 py-2 text-[10px] font-semibold tracking-[0.06em] text-text-faint uppercase ${
+                className={`sticky top-0 z-10 border-b border-border bg-surface px-4 py-2 text-[11px] font-semibold tracking-[0.06em] text-text-faint uppercase ${
                   column.numeric ? 'text-right' : 'text-left'
                 } ${column.width ?? ''} ${column.secondary ? 'hidden md:table-cell' : ''}`}
               >
@@ -131,9 +131,12 @@ export function DataTable<T>({
                 {columns.map((column) => (
                   <td
                     key={column.key}
+                    // The column without a width takes the leftover space and
+                    // truncates; without `max-w-0` a long value widens the table
+                    // past its panel instead.
                     className={`px-4 py-2.5 align-middle text-[12.5px] text-text ${
                       column.numeric ? 'text-right tabular-nums' : 'text-left'
-                    } ${column.secondary ? 'hidden md:table-cell' : ''}`}
+                    } ${column.width ? '' : 'w-full max-w-0'} ${column.secondary ? 'hidden md:table-cell' : ''}`}
                   >
                     {column.render(row)}
                   </td>

@@ -6,7 +6,7 @@ import { IconButton } from '@/components/ui/IconButton';
 
 export function SectionLabel({ children }: { children: string }) {
   return (
-    <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+    <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
       {children}
     </h3>
   );

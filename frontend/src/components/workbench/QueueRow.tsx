@@ -48,7 +48,7 @@ export function QueueRow({ ticket, active, onSelect, departmentLabel }: QueueRow
           ) : null}
         </span>
       </span>
-      <span className="shrink-0 self-start pt-0.5 text-[10.5px] text-text-faint tabular-nums">
+      <span className="shrink-0 self-start pt-0.5 text-[11px] text-text-faint tabular-nums">
         {formatRelativeTime(ticket.createdAt)}
       </span>
     </button>

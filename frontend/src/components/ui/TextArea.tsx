@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { TextareaHTMLAttributes } from 'react';
+import type { Ref, TextareaHTMLAttributes } from 'react';
 import { Field } from './Field';
 import { CONTROL_BASE, charactersLeft, controlBorder, describedBy } from '@/lib/forms';
 
@@ -13,6 +13,8 @@ interface TextAreaProps
   rows?: number;
   /** Shows a remaining-characters count as the limit approaches. */
   maxLength?: number;
+  /** React 19 passes `ref` as a prop; it reaches the textarea through `...props`. */
+  ref?: Ref<HTMLTextAreaElement>;
 }
 
 /**
@@ -57,7 +59,7 @@ export function TextArea({
           // it waits for a pause rather than interrupting every keystroke.
           <span
             aria-live="polite"
-            className={`pointer-events-none absolute right-2 bottom-2 rounded bg-bg-elevated px-1 text-[10px] tabular-nums ${
+            className={`pointer-events-none absolute right-2 bottom-2 rounded bg-bg-elevated px-1 text-[11px] tabular-nums ${
               remaining <= 0 ? 'text-danger' : 'text-text-faint'
             }`}
           >

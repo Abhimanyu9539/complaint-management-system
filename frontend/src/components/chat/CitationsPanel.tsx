@@ -26,7 +26,7 @@ export function CitationsPanelContent() {
         <div className="flex min-w-0 items-center gap-2 pl-1">
           <Library size={ICON_SIZE} strokeWidth={1.75} className="shrink-0 text-accent" />
           <span className="text-[13px] font-semibold text-text">Sources</span>
-          <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-text-muted">
+          <span className="rounded-full bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium text-text-muted">
             {citations.length}
           </span>
         </div>
@@ -46,7 +46,7 @@ export function CitationsPanelContent() {
             <button
               type="button"
               onClick={clearPin}
-              className="flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent transition-opacity hover:opacity-80"
+              className="flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent transition-opacity hover:opacity-80"
             >
               <Pin size={9} strokeWidth={2.5} />
               Unpin
@@ -71,7 +71,7 @@ export function CitationsPanelContent() {
                 }`}
               >
                 <div className="flex items-start gap-2">
-                  <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-text">
+                  <span className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full bg-accent text-[11px] font-semibold text-accent-text">
                     {index + 1}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -79,10 +79,10 @@ export function CitationsPanelContent() {
                       {citation.title}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[9.5px] font-medium text-accent">
+                      <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent">
                         {docTypeLabel(citation.doc_type)}
                       </span>
-                      <span className="font-mono text-[9.5px] text-text-faint">
+                      <span className="font-mono text-[11px] text-text-faint">
                         {citation.chunk_id}
                       </span>
                     </div>

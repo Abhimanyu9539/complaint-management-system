@@ -1,7 +1,8 @@
 import { PanelLeft } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Outlet } from 'react-router';
 import { ICON_SIZE, IconButton } from '@/components/ui/IconButton';
+import { useOverlayFocus } from '@/hooks/useOverlayFocus';
 import { AdminSidebar } from './AdminSidebar';
 
 /**
@@ -17,6 +18,8 @@ import { AdminSidebar } from './AdminSidebar';
  */
 export function AdminShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const navPanelRef = useRef<HTMLDivElement>(null);
+  useOverlayFocus(mobileNavOpen, () => setMobileNavOpen(false), navPanelRef);
 
   return (
     <div className="flex h-full flex-col overflow-hidden md:grid md:grid-cols-[260px_1fr]">
@@ -32,7 +35,14 @@ export function AdminShell() {
             onClick={() => setMobileNavOpen(false)}
             className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
           />
-          <div className="absolute inset-y-0 left-0 w-[85%] max-w-72 border-r border-border shadow-xl">
+          <div
+            ref={navPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Admin navigation"
+            tabIndex={-1}
+            className="absolute inset-y-0 left-0 w-[85%] max-w-72 border-r border-border shadow-xl focus:outline-none"
+          >
             <AdminSidebar onNavigate={() => setMobileNavOpen(false)} />
           </div>
         </div>

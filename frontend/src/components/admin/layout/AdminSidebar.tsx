@@ -2,6 +2,7 @@ import { Activity, ChartNoAxesColumn, Import, Inbox, LayoutDashboard } from 'luc
 import { NavLink } from 'react-router';
 import { SidebarFooter } from '@/components/layout/SidebarFooter';
 import { ICON_SIZE } from '@/components/ui/IconButton';
+import { BrandMark } from '@/components/layout/BrandMark';
 
 interface AdminSidebarProps {
   /** Closes the mobile drawer after a navigation. */
@@ -27,12 +28,7 @@ export function AdminSidebar({ onNavigate }: AdminSidebarProps) {
   return (
     <div className="flex h-full flex-col bg-surface">
       <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border px-3">
-        <div className="flex min-w-0 items-center gap-2 pl-1">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-text">
-            <span className="font-display text-[13px] leading-none">R</span>
-          </div>
-          <span className="truncate font-display text-[14px] font-medium text-text">Admin</span>
-        </div>
+        <BrandMark label="Admin" className="pl-1" />
       </div>
 
       <nav className="flex flex-col gap-0.5 p-2" aria-label="Admin sections">

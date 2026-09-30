@@ -7,7 +7,7 @@ export function PalettePicker() {
 
   return (
     <div className="px-4 py-3">
-      <div className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+      <div className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
         Colour
       </div>
 

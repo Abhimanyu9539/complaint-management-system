@@ -50,7 +50,9 @@ export function RunsTable({
       header: 'Trigger',
       width: 'w-[104px]',
       secondary: true,
-      render: (run) => <span className="text-text-muted">{runTriggerLabel(run.trigger)}</span>,
+      render: (run) => (
+        <span className="whitespace-nowrap text-text-muted">{runTriggerLabel(run.trigger)}</span>
+      ),
     },
     {
       key: 'department',

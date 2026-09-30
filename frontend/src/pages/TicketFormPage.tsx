@@ -1,6 +1,5 @@
-import { CircleCheck, MessageSquareWarning, TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router';
+import { CircleAlert, CircleCheck, MessageSquareWarning, TriangleAlert } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { TextArea } from '@/components/ui/TextArea';
@@ -9,6 +8,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { TICKET_LIMITS } from '@/lib/tickets/types';
 import { TicketRequestError, createTicket, ticketsConfigured } from '@/lib/tickets/transport';
 import type { CustomerSeverity, TicketCreated } from '@/lib/tickets/types';
+import { BrandMark } from '@/components/layout/BrandMark';
 
 const SEVERITY_OPTIONS = [
   { value: 'low', label: 'Low — a minor issue' },
@@ -53,6 +53,9 @@ function validate(subject: string, body: string, email: string): FieldErrors {
  * into nowhere.
  */
 export function TicketFormPage() {
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [email, setEmail] = useState('');
@@ -69,6 +72,10 @@ export function TicketFormPage() {
     const found = validate(subject, body, email);
     if (Object.keys(found).length > 0) {
       setErrors(found);
+      // Focus the first field that needs fixing, so its error is read out.
+      if (found.subject) subjectRef.current?.focus();
+      else if (found.body) bodyRef.current?.focus();
+      else emailRef.current?.focus();
       return;
     }
     setErrors({});
@@ -106,12 +113,7 @@ export function TicketFormPage() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg">
       <header className="flex h-13 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
-        <Link to="/" className="flex min-w-0 items-center gap-2">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-text">
-            <span className="font-display text-[13px] leading-none">R</span>
-          </div>
-          <span className="truncate font-display text-[14px] font-medium text-text">Support</span>
-        </Link>
+        <BrandMark label="Support" />
         <ThemeToggle />
       </header>
 
@@ -148,6 +150,7 @@ export function TicketFormPage() {
             noValidate
           >
             <TextInput
+              ref={subjectRef}
               label="Subject"
               value={subject}
               onChange={setSubject}
@@ -160,6 +163,7 @@ export function TicketFormPage() {
             />
 
             <TextArea
+              ref={bodyRef}
               label="What happened"
               value={body}
               onChange={setBody}
@@ -172,6 +176,7 @@ export function TicketFormPage() {
             />
 
             <TextInput
+              ref={emailRef}
               label="Your email"
               type="email"
               value={email}
@@ -193,12 +198,13 @@ export function TicketFormPage() {
             />
 
             {formError && (
-              <p
+              <div
                 role="alert"
-                className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-[12px] leading-relaxed text-danger"
+                className="flex items-start gap-2.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2.5"
               >
-                {formError}
-              </p>
+                <CircleAlert size={16} strokeWidth={1.75} className="mt-px shrink-0 text-danger" />
+                <p className="text-[12px] leading-relaxed text-danger">{formError}</p>
+              </div>
             )}
 
             <div className="flex items-center justify-between gap-3 border-t border-border pt-4">

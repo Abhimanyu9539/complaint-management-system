@@ -25,13 +25,14 @@ export function Composer() {
   return (
     <div className="shrink-0 border-t border-border bg-bg px-4 pt-3 pb-4 md:px-0">
       <div className="mx-auto max-w-3xl">
-        <div className="flex items-end gap-2 rounded-2xl border border-border bg-bg-elevated px-3 py-2 shadow-sm transition-colors focus-within:border-border-strong">
+        <div className="flex items-end gap-2 rounded-2xl border border-border bg-bg-elevated px-3 py-2 shadow-sm transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
           <textarea
             ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
+            aria-label="Message the assistant"
             placeholder="Ask about a policy, error code, or how to route a complaint…"
             className="max-h-[200px] min-h-[24px] flex-1 resize-none bg-transparent py-1 text-[14px] leading-relaxed text-text placeholder:text-text-faint focus:outline-none"
           />

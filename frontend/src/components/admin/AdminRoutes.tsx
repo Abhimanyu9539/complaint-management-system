@@ -29,7 +29,7 @@ export function AdminRoutes() {
           <Route path="ingestion" element={<IngestionPage />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="stats" element={<StatisticsPage />} />
-          <Route path="*" element={<NotFoundRoute />} />
+          <Route path="*" element={<NotFoundRoute withHeader={false} />} />
         </Route>
       </Routes>
     </AdminRefreshProvider>

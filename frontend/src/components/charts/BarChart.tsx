@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { bandScale, linearScale, niceMax, thinLabels } from './scale';
+import { bandScale, countLabel, linearScale, niceMax, thinLabels } from './scale';
 
 export interface BarSeries {
   key: string;
@@ -68,7 +68,7 @@ export function BarChart({
                 x={HORIZONTAL_PADDING.left - 8}
                 y={band.at(index) + band.bandwidth / 2 + 3}
                 textAnchor="end"
-                className="fill-text-muted text-[10px]"
+                className="fill-text-muted text-[11px]"
               >
                 {label}
               </text>
@@ -92,7 +92,7 @@ export function BarChart({
               <text
                 x={offset + 6}
                 y={band.at(index) + band.bandwidth / 2 + 3}
-                className="fill-text-faint text-[10px] tabular-nums"
+                className="fill-text-faint text-[11px] tabular-nums"
               >
                 {totals[index]}
               </text>
@@ -127,9 +127,9 @@ export function BarChart({
               x={PADDING.left - 6}
               y={y(value) + 3}
               textAnchor="end"
-              className="fill-text-faint text-[9.5px] tabular-nums"
+              className="fill-text-faint text-[11px] tabular-nums"
             >
-              {yFormat ? yFormat(value) : Math.round(value)}
+              {yFormat ? yFormat(value) : countLabel(value)}
             </text>
           </g>
         );
@@ -172,7 +172,7 @@ export function BarChart({
             x={band.at(index) + band.bandwidth / 2}
             y={height - 6}
             textAnchor="middle"
-            className="fill-text-faint text-[9.5px] tabular-nums"
+            className="fill-text-faint text-[11px] tabular-nums"
           >
             {label}
           </text>

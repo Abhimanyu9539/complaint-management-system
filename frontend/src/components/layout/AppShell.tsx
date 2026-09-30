@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { PanelLeft, PanelRight, SquarePen } from 'lucide-react';
 import { CitationsPanelContent } from '@/components/chat/CitationsPanel';
 import { ICON_SIZE, IconButton } from '@/components/ui/IconButton';
 import { useActiveCitations } from '@/hooks/useActiveCitations';
+import { useOverlayFocus } from '@/hooks/useOverlayFocus';
 import { useChat } from '@/state/ChatProvider';
 import { useCitationsPanel } from '@/state/CitationsPanelProvider';
 import { Sidebar } from './Sidebar';
@@ -26,6 +27,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { sessions, activeSessionId, newChat } = useChat();
   const { isOpen, isMobileOpen, expand, openMobile, close } = useCitationsPanel();
   const { citations } = useActiveCitations();
+  const navPanelRef = useRef<HTMLDivElement>(null);
+  const sourcesPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -41,6 +44,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // The sources rail is only meaningful once an answer has cited something.
   const hasSources = citations.length > 0;
   const showSourcesRail = hasSources && isOpen;
+
+  useOverlayFocus(mobileNavOpen, () => setMobileNavOpen(false), navPanelRef);
+  useOverlayFocus(hasSources && isMobileOpen, close, sourcesPanelRef);
 
   const gridCols = navOpen
     ? showSourcesRail
@@ -66,7 +72,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setMobileNavOpen(false)}
             className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
           />
-          <div className="absolute inset-y-0 left-0 w-[85%] max-w-72 border-r border-border shadow-xl">
+          <div
+            ref={navPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conversations"
+            tabIndex={-1}
+            className="absolute inset-y-0 left-0 w-[85%] max-w-72 border-r border-border shadow-xl focus:outline-none"
+          >
             <Sidebar onCloseMobile={() => setMobileNavOpen(false)} />
           </div>
         </div>
@@ -121,7 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <PanelRight size={ICON_SIZE} strokeWidth={1.75} />
                 <span className="hidden sm:inline">Sources</span>
-                <span className="rounded-full bg-accent px-1.5 text-[10px] font-semibold text-accent-text">
+                <span className="rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-text">
                   {citations.length}
                 </span>
               </IconButton>
@@ -136,7 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   <PanelRight size={ICON_SIZE} strokeWidth={1.75} />
                   <span>Sources</span>
-                  <span className="rounded-full bg-accent px-1.5 text-[10px] font-semibold text-accent-text">
+                  <span className="rounded-full bg-accent px-1.5 text-[11px] font-semibold text-accent-text">
                     {citations.length}
                   </span>
                 </IconButton>
@@ -162,7 +175,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={close}
             className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
           />
-          <div className="absolute inset-y-0 right-0 w-[88%] max-w-sm border-l border-border shadow-xl">
+          <div
+            ref={sourcesPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sources"
+            tabIndex={-1}
+            className="absolute inset-y-0 right-0 w-[88%] max-w-sm border-l border-border shadow-xl focus:outline-none"
+          >
             <CitationsPanelContent />
           </div>
         </div>

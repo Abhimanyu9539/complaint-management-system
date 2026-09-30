@@ -7,6 +7,7 @@ import { PasswordInput } from '@/components/ui/PasswordInput';
 import { TextInput } from '@/components/ui/TextInput';
 import { authConfigured } from '@/lib/auth/supabase';
 import { useAuth } from '@/state/AuthProvider';
+import { BrandMark } from '@/components/layout/BrandMark';
 
 const FEATURES = [
   {
@@ -217,17 +218,6 @@ export function LoginPage() {
           </div>
         </main>
       </div>
-    </div>
-  );
-}
-
-function BrandMark({ className = '' }: { className?: string }) {
-  return (
-    <div className={`flex min-w-0 items-center gap-2 ${className}`}>
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-text">
-        <span className="font-display text-[13px] leading-none">R</span>
-      </div>
-      <span className="truncate font-display text-[14px] font-medium text-text">Resolvr</span>
     </div>
   );
 }

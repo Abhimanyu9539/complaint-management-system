@@ -103,7 +103,7 @@ export function ComplaintPane({ detail, loading, departmentLabel }: ComplaintPan
       </div>
 
       <section>
-        <h3 className="mb-1.5 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Complaint
         </h3>
         {ticket.body ? (
@@ -131,7 +131,7 @@ export function ComplaintPane({ detail, loading, departmentLabel }: ComplaintPan
 
       {messages.length > 0 && (
         <section>
-          <h3 className="mb-1.5 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+          <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
             Messages
           </h3>
           <div className="flex flex-col gap-2">
@@ -140,7 +140,7 @@ export function ComplaintPane({ detail, loading, departmentLabel }: ComplaintPan
                 key={message.id}
                 className="rounded-lg border border-dashed border-border bg-surface px-3 py-2.5"
               >
-                <p className="mb-1 text-[10.5px] font-semibold tracking-[0.04em] text-text-muted uppercase">
+                <p className="mb-1 text-[11px] font-semibold tracking-[0.04em] text-text-muted uppercase">
                   {message.label} · {formatTimestamp(message.at)}
                 </p>
                 <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap text-text">
@@ -153,7 +153,7 @@ export function ComplaintPane({ detail, loading, departmentLabel }: ComplaintPan
       )}
 
       <section>
-        <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Progress
         </h3>
         <ProgressTracker ticket={ticket} events={events} departmentLabel={departmentLabel} />

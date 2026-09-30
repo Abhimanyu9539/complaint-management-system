@@ -117,14 +117,14 @@ export function QueueRail({
               {groupTicketsByStatus(items).map((group) => (
                 <section key={group.status}>
                   <div className="flex items-center justify-between px-1.5 pb-1">
-                    <h2 className="flex items-center gap-2 text-[10.5px] font-semibold tracking-[0.06em] text-text-muted uppercase">
+                    <h2 className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.06em] text-text-muted uppercase">
                       <span
                         aria-hidden="true"
                         className={`h-2 w-2 rounded-full ${TONE_CLASSES[ticketStatusTone(group.status)].dot}`}
                       />
                       {ticketStatusLabel(group.status)}
                     </h2>
-                    <span className="text-[10.5px] text-text-faint tabular-nums">
+                    <span className="text-[11px] text-text-faint tabular-nums">
                       {group.tickets.length}
                     </span>
                   </div>

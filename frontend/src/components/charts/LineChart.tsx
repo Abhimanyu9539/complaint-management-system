@@ -1,5 +1,13 @@
 import { useMemo, useState } from 'react';
-import { buildAreaPath, buildLinePath, linearScale, maxOf, niceMax, thinLabels } from './scale';
+import {
+  buildAreaPath,
+  buildLinePath,
+  countLabel,
+  linearScale,
+  maxOf,
+  niceMax,
+  thinLabels,
+} from './scale';
 
 export interface LineSeries {
   key: string;
@@ -90,9 +98,9 @@ export function LineChart({ width, height, labels, series, yFormat, yMax }: Line
             x={PADDING.left - 6}
             y={y(value) + 3}
             textAnchor="end"
-            className="fill-text-faint text-[9.5px] tabular-nums"
+            className="fill-text-faint text-[11px] tabular-nums"
           >
-            {yFormat ? yFormat(value) : Math.round(value)}
+            {yFormat ? yFormat(value) : countLabel(value)}
           </text>
         </g>
       ))}
@@ -120,7 +128,7 @@ export function LineChart({ width, height, labels, series, yFormat, yMax }: Line
             x={x(index)}
             y={height - 6}
             textAnchor={index === 0 ? 'start' : index === labels.length - 1 ? 'end' : 'middle'}
-            className="fill-text-faint text-[9.5px] tabular-nums"
+            className="fill-text-faint text-[11px] tabular-nums"
           >
             {label}
           </text>

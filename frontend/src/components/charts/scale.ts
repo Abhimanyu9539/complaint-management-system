@@ -70,6 +70,14 @@ export function niceMax(max: number): number {
   return rounded * magnitude;
 }
 
+/**
+ * A y-axis label for a count. Fractional gridlines (0.25, 2.5 …) stay unlabelled:
+ * rounding them printed repeated labels like "0, 0, 1, 1, 1".
+ */
+export function countLabel(value: number): string | null {
+  return Number.isInteger(value) ? String(value) : null;
+}
+
 /** The largest value across several series, for a shared y-axis. */
 export function maxOf(seriesValues: readonly (readonly number[])[]): number {
   let max = 0;

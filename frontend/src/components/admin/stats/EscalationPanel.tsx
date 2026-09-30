@@ -211,7 +211,7 @@ function CorpusSplit({ direct, escalated }: { direct: number; escalated: number 
 
   return (
     <div className="border-t border-border pt-3">
-      <p className="mb-1.5 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+      <p className="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
         Resolved case corpus
       </p>
       {total === 0 ? (

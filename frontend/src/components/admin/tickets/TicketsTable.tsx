@@ -33,7 +33,7 @@ export function TicketsTable({
       width: 'w-[104px]',
       render: (ticket) => (
         <span className="flex items-center gap-1.5">
-          <span className="font-mono text-[11.5px] text-text-muted tabular-nums">
+          <span className="font-mono text-[11.5px] whitespace-nowrap text-text-muted tabular-nums">
             T-{ticket.ticketNo}
           </span>
           <Link

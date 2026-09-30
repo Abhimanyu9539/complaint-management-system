@@ -7,6 +7,7 @@
    accent family — switching palette changes the whole mood, not just one hue.
    Light variants first, then dark; the [data-palette].dark selectors outrank
    the light attribute blocks, so ordering stays predictable.
+   --text-faint is kept at >= 4.5:1 on --surface-2: it labels every form field.
    --------------------------------------------------------------------------- */
 
 /* --- Violet (default) --- */
@@ -21,7 +22,7 @@
   --border-strong: #cfc0e8;
   --text: #1d1428;
   --text-muted: #5f5375;
-  --text-faint: #918aa3;
+  --text-faint: #6f687f;
   --accent: #7c3aed;
   --accent-strong: #6d28d9;
   --accent-soft: #ede4fd;
@@ -41,7 +42,7 @@
   --border-strong: #b2cee3;
   --text: #0e1e2b;
   --text-muted: #4a5f72;
-  --text-faint: #7f93a4;
+  --text-faint: #5b6e7d;
   --accent: #0284c7;
   --accent-strong: #0369a1;
   --accent-soft: #d8ecf9;
@@ -61,7 +62,7 @@
   --border-strong: #b6d3c1;
   --text: #10231a;
   --text-muted: #4d6357;
-  --text-faint: #849487;
+  --text-faint: #5f7064;
   --accent: #0f8a5f;
   --accent-strong: #0b6e4b;
   --accent-soft: #d9f0e4;
@@ -81,7 +82,7 @@
   --border-strong: #e6bcc7;
   --text: #27141a;
   --text-muted: #6d525a;
-  --text-faint: #a0888f;
+  --text-faint: #7c656c;
   --accent: #e11d48;
   --accent-strong: #be123c;
   --accent-soft: #fce0e7;
@@ -101,7 +102,7 @@
   --border-strong: #d3c7ae;
   --text: #201b13;
   --text-muted: #6b6252;
-  --text-faint: #9a9080;
+  --text-faint: #72695c;
   --accent: #c4562b;
   --accent-strong: #a8461f;
   --accent-soft: #f4e2d4;
@@ -121,7 +122,7 @@
   --border-strong: #c9c9c4;
   --text: #17171a;
   --text-muted: #5c5c60;
-  --text-faint: #8e8e93;
+  --text-faint: #6a6a6f;
   --accent: #18181b;
   --accent-strong: #000000;
   --accent-soft: #e7e7e4;
@@ -189,7 +190,7 @@
   --border-strong: #cdcdc8;
   --text: #1a1a1d;
   --text-muted: #5d5d63;
-  --text-faint: #8f8f96;
+  --text-faint: #6c6c72;
 }
 
 /* --- Dark variants ---------------------------------------------------------
@@ -213,7 +214,7 @@
 
   --text: #f1f1f3;
   --text-muted: #a5a5ad;
-  --text-faint: #73737c;
+  --text-faint: #8e8e97;
   --focus-ring: var(--accent);
   color-scheme: dark;
 }

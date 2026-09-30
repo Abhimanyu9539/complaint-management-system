@@ -146,7 +146,13 @@ export function WorkbenchPage() {
           <EmptyState
             icon={<Inbox size={22} strokeWidth={1.5} />}
             title="Select a ticket"
-            description="Pick a complaint from the queue — or press J to jump to the first one."
+            description={
+              <>
+                Pick a complaint from the queue
+                {/* Phones have no J key. */}
+                <span className="hidden sm:inline"> — or press J to jump to the first one</span>.
+              </>
+            }
           />
         </div>
       ) : (

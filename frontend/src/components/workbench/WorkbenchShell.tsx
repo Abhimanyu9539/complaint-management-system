@@ -1,10 +1,12 @@
 import { PanelLeft } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ICON_SIZE, IconButton } from '@/components/ui/IconButton';
 import type { AsyncData } from '@/hooks/useAsyncData';
+import { useOverlayFocus } from '@/hooks/useOverlayFocus';
 import type { Page } from '@/lib/admin/types';
 import type { Ticket } from '@/lib/tickets/types';
 import { QueueRail } from './QueueRail';
+import { BrandMark } from '@/components/layout/BrandMark';
 
 interface WorkbenchShellProps {
   queue: AsyncData<Page<Ticket>>;
@@ -35,6 +37,8 @@ export function WorkbenchShell({
   children,
 }: WorkbenchShellProps) {
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
+  const queuePanelRef = useRef<HTMLDivElement>(null);
+  useOverlayFocus(mobileQueueOpen, () => setMobileQueueOpen(false), queuePanelRef);
 
   const railProps = {
     queue,
@@ -50,29 +54,27 @@ export function WorkbenchShell({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <header className="flex h-13 shrink-0 items-center gap-2 border-b border-border px-3">
+        {/* Labelled on phones: it is the only way to reach the queue there. */}
         <IconButton
+          withLabel
           onClick={() => setMobileQueueOpen(true)}
           aria-label="Open queue"
           className="md:hidden"
         >
           <PanelLeft size={ICON_SIZE} strokeWidth={1.75} />
+          Queue
         </IconButton>
 
-        <div className="flex min-w-0 items-center gap-2 pl-1">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent text-accent-text">
-            <span className="font-display text-[13px] leading-none">R</span>
-          </div>
-          <span className="truncate font-display text-[14px] font-medium text-text">Resolvr</span>
-        </div>
+        <BrandMark className="pl-1" />
 
         <span className="flex-1" />
 
         <span className="hidden text-[11.5px] text-text-faint sm:inline">
-          <kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10.5px]">
+          <kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px]">
             J
           </kbd>
           /
-          <kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10.5px]">
+          <kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px]">
             K
           </kbd>{' '}
           next / previous ticket
@@ -92,7 +94,14 @@ export function WorkbenchShell({
               onClick={() => setMobileQueueOpen(false)}
               className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
             />
-            <div className="absolute inset-y-0 left-0 w-[88%] max-w-80 border-r border-border shadow-xl">
+            <div
+              ref={queuePanelRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Queue"
+              tabIndex={-1}
+              className="absolute inset-y-0 left-0 w-[88%] max-w-80 border-r border-border shadow-xl focus:outline-none"
+            >
               <QueueRail {...railProps} onCloseMobile={() => setMobileQueueOpen(false)} />
             </div>
           </div>

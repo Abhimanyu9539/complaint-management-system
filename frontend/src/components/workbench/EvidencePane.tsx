@@ -34,7 +34,7 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
     <div className="flex flex-col gap-4 p-4">
       {guidance.length > 0 && (
         <section className="rounded-lg border border-accent/30 bg-accent-soft p-3">
-          <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-accent uppercase">
+          <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-accent uppercase">
             Department guidance
           </h3>
           <div className="flex flex-col gap-2.5">
@@ -46,7 +46,7 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
                     {ref.title}
                   </span>
                   {ref.cited && (
-                    <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10.5px] font-medium text-accent">
+                    <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[11px] font-medium text-accent">
                       cited
                     </span>
                   )}
@@ -59,7 +59,7 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
       )}
 
       <section className="rounded-lg border border-border bg-surface p-3">
-        <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Predicted department
         </h3>
         {ticket.predictedDept ? (
@@ -92,7 +92,7 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
       </section>
 
       <section className="rounded-lg border border-border bg-surface p-3">
-        <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Similar past cases
         </h3>
         {draft?.noMatch && (
@@ -112,7 +112,7 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
                   <span className="font-mono text-[11px] text-accent">[{pastCase.marker}]</span>
                   <span className="min-w-0 truncate">{pastCase.title}</span>
                   {pastCase.cited && (
-                    <span className="shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-[10.5px] font-medium text-accent">
+                    <span className="shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent">
                       cited
                     </span>
                   )}
@@ -138,7 +138,7 @@ export function EvidencePane({ ticket, draft, departmentLabel }: EvidencePanePro
       </section>
 
       <section className="rounded-lg border border-border bg-surface p-3">
-        <h3 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-text-faint uppercase">
+        <h3 className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-text-faint uppercase">
           Policy context
         </h3>
         {citedPolicies.length === 0 ? (
