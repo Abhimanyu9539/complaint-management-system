@@ -261,8 +261,9 @@ uv run python evals/generator/aggregate.py --leg ticket-precedents --max-concurr
 | `policy-hybrid-rerank`       | hybrid candidates, reranked to`POLICY_TOP_N` |
 | **`policy-graph-rerank`**    | **the production path — see below**         |
 | `case-{dense,sparse,hybrid}` | the same three legs over the case corpus     |
+| **`case-graph-rerank`**      | **the case production path — see Case legs** |
 
-Every leg except `policy-graph-rerank` is driven by the raw `golden.input` — no query rewriting, no
+Every leg except the two `-graph-rerank` legs is driven by the raw `golden.input` — no query rewriting, no
 filter — at the `k` its retriever defaults to: **policies 20, cases 4**. That keeps legs comparable
 *within* a corpus, which is the comparison the suite exists for. It does not make policy and case
 numbers comparable to each other.
@@ -331,14 +332,18 @@ the union reranked as one call, `policy_top_k` is capped by `MAX_DOCUMENTS`: at 
 
 ### Case legs
 
-2026-09-14, 30 goldens, `gpt-5.4-mini`. `k=4`, no rerank. The `retrieve_cases` graph node calls
-`retrieve_cases_hybrid` with the original query, so `case-hybrid` *is* the graph path.
+2026-09-14, 30 goldens, `gpt-5.4-mini`; the raw legs at `k=4`, no rerank. The `retrieve_cases` graph node calls
+`retrieve_cases_core` with the original query, so `case-graph-rerank` *is* the graph path: a
+`case_pool_k=20` hybrid pool, reranked to `case_top_k=4`, then every case below
+`case_relevance_threshold` (0.50) dropped. Its context can be empty. `case-hybrid` is the
+pre-rerank baseline it has to beat: 0.62 recall overall, 0.728 on the 24 with a precedent.
 
 | Leg           | `k` | Runs | Precision | Recall | Recall (24 with a precedent) |
 | ------------- | --- | ---- | --------- | ------ | ---------------------------- |
 | `case-dense`  | 4   | 1    | 0.847     | 0.590  | 0.705                        |
 | `case-hybrid` | 4   | 2    | 0.722     | 0.620  | 0.728                        |
 | `case-sparse` | 4   | 0    | —         | —      | —                            |
+| `case-graph-rerank` | 20 → 4 | 0 | —     | —      | —                            |
 
 - **6 of the 30 goldens are "no precedent" by design.** Their `expected_output` says the corpus holds
   no matching case. ContextualRecall cannot attribute that sentence to any retrieved chunk, so these

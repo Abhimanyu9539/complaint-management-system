@@ -11,6 +11,8 @@ inheriting `RERANK_ENABLED`, so flipping that env var cannot quietly turn the
 baseline into a second copy of the reranked leg and make the comparison meaningless.
 `graph_reranked_policy_context` is the odd one out: it is the multi-query graph
 path, where breadth comes from the fan-out and one rerank over the union caps it.
+`graph_case_context` is the case corpus's graph path: a `CASE_POOL_K` pool reranked to
+`CASE_K`, then the per-case floor — so it can return an empty context.
 
 `asyncio.run` per call is safe here even though cli/retrieve.py warns "exactly one
 per process": that warning is about the cached *async* Qdrant and Supabase clients,
@@ -24,7 +26,9 @@ from collections.abc import Awaitable, Callable
 
 from langchain_core.documents import Document
 
+from cms.config.settings import get_settings
 from cms.rag.nodes.analyze_query import analyze_query_core, build_policy_queries
+from cms.rag.nodes.retrieve_cases import retrieve_cases_core
 from cms.rag.nodes.retrieve_policies import retrieve_policies_core
 from cms.retrieval.retrievers.case_retriever import (
     DEFAULT_K as CASE_K,
@@ -49,6 +53,9 @@ from cms.retrieval.retrievers.policy_retriever import (
 logger = logging.getLogger(__name__)
 
 Retriever = Callable[..., Awaitable[list[tuple[Document, float]]]]
+
+# Cases fetched before the rerank on the graph leg. Tune it with CASE_POOL_K.
+CASE_POOL_K = get_settings().case_pool_k
 
 # Goldens in flight at once on an async leg. Each one is already a fan-out of
 # several embedding and Qdrant calls, so this is not the place to be greedy.
@@ -152,5 +159,11 @@ def sparse_case_context(query: str) -> list[str]:
 
 
 def hybrid_case_context(query: str) -> list[str]:
-    """Production path: both legs, fused server-side by Qdrant (RRF)."""
+    """Both legs, fused server-side by Qdrant (RRF). The pre-rerank baseline."""
     return _context(retrieve_cases_hybrid, query, CASE_K)
+
+
+async def graph_case_context(query: str) -> list[str]:
+    """The graph path: a wide hybrid pool, reranked to CASE_K, cases below the floor dropped."""
+    hits = await retrieve_cases_core(query)
+    return [document.page_content for document, _ in hits]

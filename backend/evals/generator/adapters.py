@@ -19,10 +19,10 @@ from langchain_core.documents import Document
 from cms.rag.context import build_generation_context
 from cms.rag.nodes.analyze_query import analyze_query_core, build_policy_queries
 from cms.rag.nodes.generate import generate_core
+from cms.rag.nodes.retrieve_cases import retrieve_cases_core
 from cms.rag.nodes.retrieve_policies import retrieve_policies_core
 from cms.rag.ticket_graph import get_ticket_graph
 from cms.rag.ticket_state import drafting_sources, needs_holding_reply
-from cms.retrieval.retrievers.case_retriever import retrieve_cases_hybrid
 from cms.retrieval.retrievers.policy_retriever import DEFAULT_TOP_N as POLICY_TOP_N
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ async def graph_generation_case(query: str) -> GenerationCase:
     queries = build_policy_queries(query, analysis)
     policy_hits, case_hits = await asyncio.gather(
         retrieve_policies_core(queries, rerank=True, top_n=POLICY_TOP_N),
-        retrieve_cases_hybrid(query),
+        retrieve_cases_core(query),
     )
 
     _, _, offered = build_generation_context(policy_hits, case_hits)

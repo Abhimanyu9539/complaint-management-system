@@ -15,8 +15,9 @@ It only computes. `services/ticket_pipeline.py` runs it and saves what it
 produced, so status changes stay in `ticket_service`. No checkpointer: every run
 starts from the ticket row, and its results live on the ticket.
 
-A failing classifier, retriever, precedent rerank or drafter records its error in
-`errors` rather than raising, so the pipeline still saves what the other branch produced.
+A failing classifier, retriever (the case one includes its rerank) or drafter records
+its error in `errors` rather than raising, so the pipeline still saves what the other
+branch produced.
 """
 
 import logging
@@ -163,7 +164,7 @@ def build_ticket_graph() -> CompiledStateGraph:
     builder.add_edge(ANALYZE_TICKET, RETRIEVE_POLICIES)
     builder.add_edge(ANALYZE_TICKET, RETRIEVE_CASES)
     builder.add_edge([RETRIEVE_POLICIES, RETRIEVE_CASES], JOIN_RETRIEVAL)
-    # A failed rerank is recorded, and drafting goes on without precedents.
+    # Precedents reuse the rerank scores retrieve_cases attached; no model call here.
     builder.add_edge(JOIN_RETRIEVAL, FIND_PRECEDENTS)
     builder.add_conditional_edges(
         FIND_PRECEDENTS,

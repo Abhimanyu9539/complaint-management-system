@@ -12,6 +12,7 @@ Same goldens, same adapters, same judge as the six test files.
     uv run python evals/retriever/aggregate.py --leg policy-hybrid-rerank
     uv run python evals/retriever/aggregate.py --leg policy-graph-rerank
     uv run python evals/retriever/aggregate.py --leg case-dense
+    uv run python evals/retriever/aggregate.py --leg case-graph-rerank
 
 `policy-graph-rerank` is the graph's own path, so it writes the queries
 analyze_query generated to the log — one block per golden. Override the cap it
@@ -46,11 +47,13 @@ os.environ.setdefault("DEEPEVAL_RETRY_CAP_SECONDS", "10")
 
 from adapters import (
     CASE_K,
+    CASE_POOL_K,
     POLICY_K,
     POLICY_TOP_N,
     build_contexts,
     dense_case_context,
     dense_policy_context,
+    graph_case_context,
     graph_reranked_policy_context,
     hybrid_case_context,
     hybrid_policy_context,
@@ -100,6 +103,8 @@ LEGS = {
     "case-dense": ("cases.json", dense_case_context, CASE_K, None),
     "case-sparse": ("cases.json", sparse_case_context, CASE_K, None),
     "case-hybrid": ("cases.json", hybrid_case_context, CASE_K, None),
+    # Can return an empty context (every case below the floor); deepeval only rejects None.
+    "case-graph-rerank": ("cases.json", graph_case_context, CASE_POOL_K, CASE_K),
 }
 DEFAULT_LEG = "policy-hybrid"
 # Legs that retrieve with analyze_query's fan-out rather than the raw golden input.
