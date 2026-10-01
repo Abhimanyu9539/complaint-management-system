@@ -89,7 +89,14 @@ class Settings(BaseSettings):
     policy_chunk_overlap: int = 100
 
     # --- Retrieval ---
+    # Cases kept after the rerank in the complaint branch; also the raw retriever legs' default `k`.
     case_top_k: int = 4
+    # Cases fetched by hybrid search before the rerank. The seed corpus is 20 cases.
+    case_pool_k: int = 20
+    # Per-case floor on reranked scores: a case below it never reaches the drafter.
+    # Backed by the precedents eval's gap (best wrong case 0.44, intended 0.84+);
+    # not yet measured on the 30-case set.
+    case_relevance_threshold: float = 0.50
     policy_top_k: int = 20
 
     # --- Voyage reranking (policies) ---

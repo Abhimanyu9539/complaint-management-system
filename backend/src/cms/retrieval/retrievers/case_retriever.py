@@ -11,6 +11,7 @@ from langchain_core.documents import Document
 from langchain_qdrant import RetrievalMode
 
 from cms.config.settings import get_settings
+from cms.retrieval.rerank.openrouter_reranker import rerank_documents
 from cms.retrieval.vector_store.qdrant_store import get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -60,3 +61,13 @@ async def retrieve_cases_hybrid(query: str, k: int = DEFAULT_K) -> list[tuple[Do
     leg's cosine nor the sparse leg's BM25.
     """
     return await _search(query, k, RetrievalMode.HYBRID)
+
+
+async def retrieve_cases_reranked(
+    query: str, pool_k: int, top_n: int
+) -> list[tuple[Document, float]]:
+    """A wide hybrid pool reranked against `query` down to `top_n`; the hybrid order when reranking is off."""
+    hits = await retrieve_cases_hybrid(query, k=pool_k)
+    if not get_settings().rerank_enabled or not hits:
+        return hits[:top_n]
+    return await rerank_documents(query, hits, top_n)

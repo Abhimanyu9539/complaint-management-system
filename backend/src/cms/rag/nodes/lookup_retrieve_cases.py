@@ -8,8 +8,7 @@ from langsmith import traceable
 
 from cms.config.settings import get_settings
 from cms.rag.state import GraphState
-from cms.retrieval.rerank.openrouter_reranker import rerank_documents
-from cms.retrieval.retrievers.case_retriever import retrieve_cases_hybrid
+from cms.retrieval.retrievers.case_retriever import retrieve_cases_reranked
 
 logger = logging.getLogger(__name__)
 
@@ -17,22 +16,23 @@ logger = logging.getLogger(__name__)
 async def retrieve_lookup_cases_core(query: str) -> list[tuple[Document, float]]:
     """A wide hybrid pool of cases, reranked against `query`, then gated on the best score.
 
-    Unlike the complaint branch's top-4, a lookup can ask for a list, so the pool is
-    wider and the reranker decides what is relevant. The gate works like the policy
-    one: if even the best case scores below the threshold, nothing is returned.
+    Unlike the complaint branch's top-4 with a per-case floor, a lookup can ask for a
+    list, so more cases are kept and the gate works like the policy one: if even the
+    best case scores below the threshold, nothing is returned.
     With reranking off there is no gate — RRF scores are on another scale.
     """
     settings = get_settings()
-    hits = await retrieve_cases_hybrid(query, k=settings.lookup_case_pool_k)
-    if not settings.rerank_enabled or not hits:
-        logger.info("lookup_retrieve_cases: %d chunk(s), not reranked", len(hits))
-        return hits[: settings.lookup_case_top_n]
+    ranked = await retrieve_cases_reranked(
+        query, settings.lookup_case_pool_k, settings.lookup_case_top_n
+    )
+    if not settings.rerank_enabled:
+        logger.info("lookup_retrieve_cases: %d chunk(s), not reranked", len(ranked))
+        return ranked
 
-    ranked = await rerank_documents(query, hits, settings.lookup_case_top_n)
     best = ranked[0][1] if ranked else 0.0
     logger.info(
-        "lookup_retrieve_cases: %d chunk(s) -> %d after rerank, best score %.3f (gate %.2f)",
-        len(hits),
+        "lookup_retrieve_cases: pool k=%d -> %d after rerank, best score %.3f (gate %.2f)",
+        settings.lookup_case_pool_k,
         len(ranked),
         best,
         settings.lookup_case_relevance_threshold,

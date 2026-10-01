@@ -8,7 +8,6 @@ from langsmith import traceable
 
 from cms.config.settings import get_settings
 from cms.rag.ticket_state import TicketState
-from cms.retrieval.rerank.openrouter_reranker import rerank_documents
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +45,12 @@ def precedent_hit(document: Document, score: float) -> tuple[Document, float]:
 async def find_precedents(state: TicketState) -> dict:
     """The ticket-graph node: past cases whose department answer fits this complaint closely enough.
 
-    Only the retrieved cases that carry a department answer are reranked against
-    the complaint; those at or above `precedent_relevance_threshold` are kept.
-    A failed rerank raises, and the graph records it and drafts without them.
+    Only the retrieved cases that carry a department answer are candidates; those
+    whose score is at or above `precedent_relevance_threshold` are kept. The scores
+    are the rerank scores `retrieve_cases` attached, so no second rerank. The 0.70
+    threshold still holds: same query (the masked ticket text), same case text,
+    same model, and each score depends only on that query/case pair. With
+    reranking off the scores are RRF values, so nothing is offered.
     """
     settings = get_settings()
     candidates = [hit for hit in state.get("case_hits", []) if case_guidance(hit[0].page_content)]
@@ -62,9 +64,8 @@ async def find_precedents(state: TicketState) -> dict:
         return {"precedent_hits": []}
 
     threshold = settings.precedent_relevance_threshold
-    ranked = await rerank_documents(state["query"], candidates, len(candidates))
     precedents = []
-    for document, score in ranked:
+    for document, score in candidates:
         kept = score >= threshold
         logger.info(
             "find_precedents: %s scored %.3f (threshold %.2f), %s, for %r",
