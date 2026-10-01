@@ -2,6 +2,7 @@ import pytest
 from langchain_core.documents import Document
 from langchain_qdrant import RetrievalMode
 
+from cms.config.settings import get_settings
 from cms.retrieval.retrievers import case_retriever
 
 # Every assertion below holds for all three legs — only the mode the store is
@@ -101,3 +102,43 @@ async def test_returns_hits_unchanged_and_in_order(monkeypatch, retrieve, expect
     _install_stub(monkeypatch, hits)
 
     assert await retrieve("vacuum stopped charging") == hits
+
+
+# --- retrieve_cases_reranked ---
+
+
+def _install_pool(monkeypatch, rerank: bool) -> dict[str, list]:
+    """Stub the hybrid search and the reranker; the reranker scores every hit 0.9."""
+    calls: dict[str, list] = {"search": [], "rerank": []}
+
+    async def fake_hybrid(query, k):
+        calls["search"].append({"query": query, "k": k})
+        return _canned_hits()
+
+    async def fake_rerank(query, hits, top_n):
+        calls["rerank"].append({"query": query, "top_n": top_n})
+        return [(document, 0.9) for document, _ in hits][:top_n]
+
+    monkeypatch.setattr(case_retriever, "retrieve_cases_hybrid", fake_hybrid)
+    monkeypatch.setattr(case_retriever, "rerank_documents", fake_rerank)
+    monkeypatch.setattr(get_settings(), "rerank_enabled", rerank)
+    return calls
+
+
+async def test_reranked_pool_is_reranked_down_to_top_n(monkeypatch) -> None:
+    calls = _install_pool(monkeypatch, rerank=True)
+
+    hits = await case_retriever.retrieve_cases_reranked("won't charge", pool_k=20, top_n=1)
+
+    assert calls["search"] == [{"query": "won't charge", "k": 20}]
+    assert calls["rerank"] == [{"query": "won't charge", "top_n": 1}]
+    assert hits == [(_canned_hits()[0][0], 0.9)]
+
+
+async def test_reranking_off_cuts_the_hybrid_order_to_top_n(monkeypatch) -> None:
+    calls = _install_pool(monkeypatch, rerank=False)
+
+    hits = await case_retriever.retrieve_cases_reranked("won't charge", pool_k=20, top_n=1)
+
+    assert hits == _canned_hits()[:1]
+    assert calls["rerank"] == []

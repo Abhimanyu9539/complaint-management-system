@@ -2,6 +2,7 @@ from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
 from cms.rag.nodes import lookup_retrieve_cases as cases_module
+from cms.retrieval.retrievers import case_retriever
 
 HIT = (Document(page_content="past case", metadata={"chunk_id": "c1"}), 0.03)
 STATE = {"query": "cases where a refund was issued", "lookup_target": "cases"}
@@ -19,8 +20,8 @@ def _install(monkeypatch, score: float = 0.9) -> dict[str, list]:
         calls["rerank"].append({"query": query, "top_n": top_n})
         return [(document, score) for document, _ in hits][:top_n]
 
-    monkeypatch.setattr(cases_module, "retrieve_cases_hybrid", fake_search)
-    monkeypatch.setattr(cases_module, "rerank_documents", fake_rerank)
+    monkeypatch.setattr(case_retriever, "retrieve_cases_hybrid", fake_search)
+    monkeypatch.setattr(case_retriever, "rerank_documents", fake_rerank)
     monkeypatch.setattr(get_settings(), "rerank_enabled", True)
     monkeypatch.setattr(get_settings(), "lookup_case_relevance_threshold", 0.5)
     return calls
