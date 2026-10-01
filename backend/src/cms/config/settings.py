@@ -105,9 +105,10 @@ class Settings(BaseSettings):
     # How much of a chunk a citation carries for the UI's sources panel. Long
     # enough to judge the match, short enough not to resend the context block.
     citation_snippet_chars: int = 300
-    # v4 revises the failed draft on a retry; v3 (feedback only), v2 (no feedback)
-    # and v1 (policies only) are kept as the record and eval baselines.
-    generate_prompt_version: str = "v4"
+    # v5 adds the remedy-freeze override and the intake risk flags; v4 revises the
+    # failed draft on a retry; v3 (feedback only), v2 (no feedback) and v1 (policies
+    # only) are kept as the record and eval baselines.
+    generate_prompt_version: str = "v5"
     # v3 adds the knowledge_lookup intent and its lookup_target; v2 adds risk flags.
     analyze_query_prompt_version: str = "v3"
     # v2 mentions policy and case lookups in the "what can you do?" answer.
@@ -118,8 +119,9 @@ class Settings(BaseSettings):
     # Intake §7: a top department at or above this routes directly; below goes to human review.
     routing_confidence_floor: float = 0.60
     # The ticket graph's reply written to the customer (the chat's `generate` writes to the agent).
-    # v3 adds a department's answer from a similar past case; v2 the ticket's own answer.
-    customer_reply_prompt_version: str = "v3"
+    # v4 adds the remedy-freeze override and the intake risk flags; v3 adds a department's
+    # answer from a similar past case; v2 the ticket's own answer.
+    customer_reply_prompt_version: str = "v4"
     # The question emailed to a department when a ticket is escalated.
     dept_question_prompt_version: str = "v1"
     # Title of a department's answer when it is offered to the drafter as a source.

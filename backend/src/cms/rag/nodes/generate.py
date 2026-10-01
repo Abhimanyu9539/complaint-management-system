@@ -35,6 +35,7 @@ async def generate_core(
     previous_draft: str | None = None,
     prompt_name: str = "generate",
     prompt_version: str | None = None,
+    risk_flags: list[str] | None = None,
 ) -> tuple[str, list[Citation]]:
     """A grounded draft for `query`, plus the citations it actually used.
 
@@ -52,6 +53,9 @@ async def generate_core(
     the draft they apply to, so the model revises it rather than starting over.
     Prompt versions before v3 have no slot for either and ignore them.
 
+    `risk_flags` are intake's hints for which override rule to look for in the
+    extracts; only prompt versions from generate/v5 and customer_reply/v4 use them.
+
     `prompt_name` lets the ticket graph write to the customer with the same
     context and citations; `prompt_version` None means `generate_prompt_version`.
     """
@@ -67,6 +71,7 @@ async def generate_core(
                 "cases": cases,
                 "query": query,
                 "feedback": format_feedback(feedback, previous_draft),
+                "risk_flags": ", ".join(risk_flags or []),
             }
         )
     except Exception:
@@ -78,10 +83,11 @@ async def generate_core(
     draft = message.content
     cited = used_citations(draft, citations)
     logger.info(
-        "%s: %d policy + %d case chunk(s) in, %d cited, %d chars out",
+        "%s: %d policy + %d case chunk(s) in, risk_flags=%s, %d cited, %d chars out",
         prompt_name,
         len(policy_hits),
         len(case_hits),
+        risk_flags or [],
         len(cited),
         len(draft),
     )
@@ -109,6 +115,7 @@ async def generate(state: GraphState) -> dict:
         state.get("case_hits", []),
         feedback=feedback,
         previous_draft=previous_draft,
+        risk_flags=state.get("risk_flags", []),
     )
     update = {"draft": draft, "citations": citations}
     if retry:

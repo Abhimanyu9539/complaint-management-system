@@ -33,7 +33,7 @@ STATE = {
 def test_customer_reply_prompt_takes_the_generate_variables() -> None:
     prompt = load_prompt("customer_reply", get_settings().customer_reply_prompt_version)
 
-    assert set(prompt.input_variables) == {"context", "cases", "query", "feedback"}
+    assert set(prompt.input_variables) == {"context", "cases", "query", "feedback", "risk_flags"}
 
 
 # --- draft_reply ---
@@ -53,9 +53,10 @@ def _stub_generate_core(monkeypatch) -> list[dict]:
 async def test_draft_reply_uses_the_customer_prompt(monkeypatch) -> None:
     calls = _stub_generate_core(monkeypatch)
 
-    update = await draft_reply_module.draft_reply(STATE)
+    update = await draft_reply_module.draft_reply({**STATE, "risk_flags": ["legal"]})
 
     assert update == {"draft": "Dear customer [1].", "citations": []}
+    assert calls[0]["risk_flags"] == ["legal"]
     assert calls[0]["prompt_name"] == "customer_reply"
     assert calls[0]["prompt_version"] == get_settings().customer_reply_prompt_version
     assert calls[0]["feedback"] is None and calls[0]["previous_draft"] is None

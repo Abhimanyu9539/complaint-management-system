@@ -37,6 +37,7 @@ async def draft_reply(state: TicketState) -> dict:
         previous_draft=previous_draft,
         prompt_name=PROMPT_NAME,
         prompt_version=get_settings().customer_reply_prompt_version,
+        risk_flags=state.get("risk_flags", []),
     )
     update = {"draft": draft, "citations": citations}
     if retry:

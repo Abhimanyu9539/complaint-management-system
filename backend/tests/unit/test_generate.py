@@ -93,7 +93,9 @@ async def test_node_returns_the_draft_and_citations(monkeypatch) -> None:
     seen: list[tuple] = []
     citation = Citation(marker=1, doc_id="d", chunk_id="c", title="t", section="s")
 
-    async def fake_core(query, policy_hits, case_hits, feedback=None, previous_draft=None):
+    async def fake_core(
+        query, policy_hits, case_hits, feedback=None, previous_draft=None, risk_flags=None
+    ):
         seen.append((query, policy_hits, case_hits, feedback, previous_draft))
         return "the draft [1]", [citation]
 
@@ -159,10 +161,45 @@ async def test_retry_prompt_carries_the_failed_draft_before_the_feedback(monkeyp
     assert block in prompts[0]
 
 
+async def test_risk_flags_render_inside_their_block(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "No remedy; Legal owns it [1].")
+
+    await generate_module.generate_core("q", [_hit("c1")], [], risk_flags=["legal", "safety"])
+
+    assert "<risk_flags>\nlegal, safety\n</risk_flags>" in prompts[0]
+
+
+async def test_no_risk_flags_gives_an_empty_block(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Covered [1].")
+
+    await generate_module.generate_core("q", [_hit("c1")], [])
+
+    assert "<risk_flags>\n\n</risk_flags>" in prompts[0]
+    assert "{risk_flags}" not in prompts[0]
+
+
+async def test_node_forwards_the_risk_flags(monkeypatch) -> None:
+    seen: list[list[str] | None] = []
+
+    async def fake_core(
+        query, policy_hits, case_hits, feedback=None, previous_draft=None, risk_flags=None
+    ):
+        seen.append(risk_flags)
+        return "draft [1]", []
+
+    monkeypatch.setattr(generate_module, "generate_core", fake_core)
+
+    await generate_module.generate({"query": "q", "risk_flags": ["legal"]})
+
+    assert seen == [["legal"]]
+
+
 async def test_node_revises_the_failed_draft_after_an_ungrounded_verdict(monkeypatch) -> None:
     seen: list[tuple] = []
 
-    async def fake_core(query, policy_hits, case_hits, feedback=None, previous_draft=None):
+    async def fake_core(
+        query, policy_hits, case_hits, feedback=None, previous_draft=None, risk_flags=None
+    ):
         seen.append((feedback, previous_draft))
         return "better draft [1]", []
 

@@ -72,7 +72,7 @@ async def graph_generation_case(query: str) -> GenerationCase:
     _, _, offered = build_generation_context(policy_hits, case_hits)
     offered_policies = sum(1 for citation in offered if citation.doc_type == "policy")
     offered_cases = len(offered) - offered_policies
-    draft, cited = await generate_core(query, policy_hits, case_hits)
+    draft, cited = await generate_core(query, policy_hits, case_hits, risk_flags=analysis.risk_flags)
 
     logger.info(
         "generation leg | %s",
