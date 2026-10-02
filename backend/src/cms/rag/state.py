@@ -18,10 +18,16 @@ class GraphState(_RequiredState, total=False):
     # --- session ---
     session_id: str
     user_id: str
-    # The only slot that accumulates across turns; `record_turn` appends to it
-    # and nothing reads it during a run. Every other slot is last-write-wins,
+    # The only slot that accumulates across turns; `record_turn` appends to it.
+    # It is the full transcript the UI replays, so it is never trimmed — the
+    # model reads it through `rag/memory.py`. Every other slot is last-write-wins,
     # which is why `new_turn` exists.
     chat_history: Annotated[list[BaseMessage], add_messages]
+    # --- memory (compact_history) — carried across turns, never reset ---
+    history_summary: str  # running summary of the folded turns
+    summarized_count: int  # how many `chat_history` messages the summary covers
+    # The masked text the user typed this turn; `contextualize_query` may rewrite `query`.
+    user_message: str
 
     # --- guardrails (input_guard, output_guard) ---
     input_blocked: bool
@@ -64,12 +70,15 @@ def new_turn(query: str, session_id: str, user_id: str) -> GraphState:
     writes before anything reads it, so None would be a type lie. `chat_history`
     is absent too — `record_turn` owns it, and building the message here would
     store the query as the user typed it, before `input_guard` masked its PII.
+    `history_summary` and `summarized_count` are absent for the same reason:
+    `compact_history` owns them, and they must survive into the next turn.
     """
     return GraphState(
         query=query,
         session_id=session_id,
         user_id=user_id,
         # Correctness: each of these is read before it is written on some path.
+        user_message="",
         draft="",
         citations=[],
         grounded=None,
