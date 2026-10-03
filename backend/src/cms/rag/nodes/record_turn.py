@@ -21,13 +21,14 @@ def _user_text(state: GraphState) -> str:
     """What to store as the user's message.
 
     `input_guard` replaces `query` with the Presidio-masked text on the allowed
-    path, so reading it here is what keeps card numbers and the like out of
-    Mongo. On the blocked path it never rewrites `query`, and blocked is exactly
-    when the text holds something worth withholding — so that one is replaced.
+    path, and `contextualize_query` keeps that text in `user_message` before it
+    rewrites `query` — so the transcript shows what the user typed, masked. On
+    the blocked path neither runs, and blocked is exactly when the text holds
+    something worth withholding — so that one is replaced.
     """
     if state.get("input_blocked"):
         return get_settings().blocked_message_placeholder
-    return state["query"]
+    return state.get("user_message") or state["query"]
 
 
 @traceable(name="record_turn")

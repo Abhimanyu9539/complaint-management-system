@@ -51,6 +51,18 @@ async def test_an_allowed_query_is_stored_as_the_guard_left_it() -> None:
     assert update["chat_history"][0].content == "my card is <CREDIT_CARD>"
 
 
+async def test_the_typed_message_is_stored_not_the_rewrite() -> None:
+    """`contextualize_query` rewrites `query` for retrieval; the transcript keeps what was typed."""
+    update = await record_turn(
+        {
+            "query": "The customer's X200 stopped charging. What if it is past 12 months?",
+            "user_message": "what if it's past 12 months?",
+            "draft": "d",
+        }
+    )
+    assert update["chat_history"][0].content == "what if it's past 12 months?"
+
+
 async def test_retrieved_chunks_are_cleared() -> None:
     update = await record_turn({"query": "q", "draft": "d"})
     assert update["policy_hits"] == []
