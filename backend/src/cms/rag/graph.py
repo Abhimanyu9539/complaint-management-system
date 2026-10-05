@@ -1,17 +1,20 @@
 """Graph assembly: guard the input, analyze the query, hand it to one lane, record the turn.
 
-    START -> input_guard -+-> blocked_input ------------------------------+
-                          +-> analyze_query -+-> complaint_lane ----------+
-                                             +-> lookup_lane -------------+-> record_turn -> END
-                                             +-> smalltalk ---------------+
+    START -> input_guard -+-> blocked_input -----------------------------------------------+
+                          +-> contextualize_query -> analyze_query -+-> complaint_lane ----+
+                                                                    +-> lookup_lane -------+-> record_turn -> compact_history -> END
+                                                                    +-> smalltalk ---------+
 
 Each lane is a compiled subgraph with its own nodes — see `rag/subgraphs/complaint.py`
 and `rag/subgraphs/lookup.py` for their wiring. They share no node, so either can
 change without touching the other.
 
-Every path ends at record_turn, which writes the turn into `chat_history` for the
-checkpointer. Exactly one branch runs per turn, so each gets its own edge — a list
-edge would build an AND-join and wait forever.
+contextualize_query rewrites a follow-up into a standalone question from the
+session memory (`rag/memory.py`), so analysis and retrieval need no history of
+their own. Every path ends at record_turn, which writes the turn into
+`chat_history` for the checkpointer, then compact_history, which folds old turns
+into the running summary once they no longer fit. Exactly one branch runs per
+turn, so each gets its own edge — a list edge would build an AND-join and wait forever.
 
 Streaming a lane's tokens needs `astream(..., subgraphs=True)`: LangGraph drops
 messages from inside a subgraph without it. See `services/chat_service.py`.
@@ -29,6 +32,8 @@ from langgraph.graph.state import CompiledStateGraph
 from cms.db.mongo import get_checkpointer
 from cms.rag.nodes.analyze_query import analyze_query
 from cms.rag.nodes.blocked_input import blocked_input
+from cms.rag.nodes.compact_history import compact_history
+from cms.rag.nodes.contextualize_query import contextualize_query
 from cms.rag.nodes.input_guard import input_guard
 from cms.rag.nodes.record_turn import record_turn
 from cms.rag.nodes.smalltalk import smalltalk
@@ -41,11 +46,13 @@ logger = logging.getLogger(__name__)
 # Node names
 INPUT_GUARD = "input_guard"
 BLOCKED_INPUT = "blocked_input"
+CONTEXTUALIZE_QUERY = "contextualize_query"
 ANALYZE_QUERY = "analyze_query"
 COMPLAINT_LANE = "complaint_lane"
 LOOKUP_LANE = "lookup_lane"
 SMALLTALK = "smalltalk"
 RECORD_TURN = "record_turn"
+COMPACT_HISTORY = "compact_history"
 
 # Root run name in LangSmith; compile() defaults to "LangGraph".
 GRAPH_NAME = "chat_turn"
@@ -84,11 +91,13 @@ def build_graph(
     # Register nodes — a lane is one node holding its whole subgraph.
     builder.add_node(INPUT_GUARD, input_guard)
     builder.add_node(BLOCKED_INPUT, blocked_input)
+    builder.add_node(CONTEXTUALIZE_QUERY, contextualize_query)
     builder.add_node(ANALYZE_QUERY, analyze_query)
     builder.add_node(COMPLAINT_LANE, build_complaint_lane(lane_checkpointer))
     builder.add_node(LOOKUP_LANE, build_lookup_lane(lane_checkpointer))
     builder.add_node(SMALLTALK, smalltalk)
     builder.add_node(RECORD_TURN, record_turn)
+    builder.add_node(COMPACT_HISTORY, compact_history)
 
     builder.add_edge(START, INPUT_GUARD)
 
@@ -96,10 +105,11 @@ def build_graph(
         INPUT_GUARD,
         route_after_input_guard,
         {
-            "allowed": ANALYZE_QUERY,
+            "allowed": CONTEXTUALIZE_QUERY,
             "blocked": BLOCKED_INPUT,
         },
     )
+    builder.add_edge(CONTEXTUALIZE_QUERY, ANALYZE_QUERY)
 
     builder.add_conditional_edges(
         ANALYZE_QUERY,
@@ -117,7 +127,8 @@ def build_graph(
     builder.add_edge(COMPLAINT_LANE, RECORD_TURN)
     builder.add_edge(LOOKUP_LANE, RECORD_TURN)
     builder.add_edge(SMALLTALK, RECORD_TURN)
-    builder.add_edge(RECORD_TURN, END)
+    builder.add_edge(RECORD_TURN, COMPACT_HISTORY)
+    builder.add_edge(COMPACT_HISTORY, END)
 
     return builder.compile(checkpointer=checkpointer, name=GRAPH_NAME)
 

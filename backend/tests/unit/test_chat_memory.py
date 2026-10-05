@@ -16,10 +16,26 @@ def _install_nodes(monkeypatch, seen: list[dict]) -> None:
     The guard is scripted to fail, so turn 1 ends at `add_caveat` leaving
     `grounded=False` and `regenerated=True` behind — the exact state that would
     poison turn 2 without a reset.
+
+    The memory nodes keep the real nodes' contracts without a model: a follow-up
+    is rewritten, and every turn appends the history length to the summary, so
+    the summary only grows if it survives from one turn into the next.
     """
 
     async def input_guard(state):
         return {"query": state["query"], "input_blocked": False}
+
+    async def contextualize_query(state):
+        if not state.get("chat_history"):
+            return {"user_message": state["query"]}
+        return {"query": f"standalone: {state['query']}", "user_message": state["query"]}
+
+    async def compact_history(state):
+        history = state["chat_history"]
+        return {
+            "history_summary": f"{state.get('history_summary', '')}|{len(history)}",
+            "summarized_count": len(history) - 2,
+        }
 
     async def analyze_query(state):
         return {"intent": "complaint_query", "policy_queries": [state["query"]]}
@@ -33,6 +49,7 @@ def _install_nodes(monkeypatch, seen: list[dict]) -> None:
     async def generate(state):
         seen.append(
             {
+                "query": state["query"],
                 "grounded": state.get("grounded"),
                 "regenerated": state.get("regenerated"),
                 "draft": state.get("draft"),
@@ -53,7 +70,9 @@ def _install_nodes(monkeypatch, seen: list[dict]) -> None:
         return {"draft": f"caveat + {state.get('draft', '')}"}
 
     monkeypatch.setattr(graph_module, "input_guard", input_guard)
+    monkeypatch.setattr(graph_module, "contextualize_query", contextualize_query)
     monkeypatch.setattr(graph_module, "analyze_query", analyze_query)
+    monkeypatch.setattr(graph_module, "compact_history", compact_history)
     for name, fn in [
         ("retrieve_policies", retrieve_policies),
         ("retrieve_cases", retrieve_cases),
@@ -102,6 +121,37 @@ async def test_chat_history_accumulates_across_turns(monkeypatch) -> None:
     assert [message.type for message in history] == ["human", "ai", "human", "ai"]
     assert history[0].content == "first question"
     assert history[1].content.startswith("caveat +")
+
+
+async def test_a_follow_up_is_answered_rewritten_but_stored_as_typed(monkeypatch) -> None:
+    """The lanes get the standalone question; the transcript the UI replays keeps the typed one."""
+    seen: list[dict] = []
+    _install_nodes(monkeypatch, seen)
+    graph = graph_module.build_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "t-5", "user_id": "anonymous"}}
+
+    await graph.ainvoke(new_turn("first question", "t-5", "anonymous"), config=config)
+    await graph.ainvoke(new_turn("what if it's past 12 months?", "t-5", "anonymous"), config=config)
+
+    assert seen[0]["query"] == "first question"
+    assert seen[2]["query"] == "standalone: what if it's past 12 months?"
+    history = (await graph.aget_state(config)).values["chat_history"]
+    assert history[2].content == "what if it's past 12 months?"
+
+
+async def test_the_summary_survives_into_the_next_turn(monkeypatch) -> None:
+    """`new_turn` leaves the memory slots alone, so each turn's fold builds on the last."""
+    _install_nodes(monkeypatch, [])
+    graph = graph_module.build_graph(InMemorySaver())
+    config = {"configurable": {"thread_id": "t-6", "user_id": "anonymous"}}
+
+    for question in ("one", "two", "three"):
+        await graph.ainvoke(new_turn(question, "t-6", "anonymous"), config=config)
+
+    values = (await graph.aget_state(config)).values
+    assert values["history_summary"] == "|2|4|6"
+    assert values["summarized_count"] == 4
+    assert len(values["chat_history"]) == 6  # the transcript is never trimmed
 
 
 async def test_retrieved_chunks_are_not_carried_into_the_checkpoint(monkeypatch) -> None:
@@ -166,8 +216,16 @@ def test_the_turn_carries_its_identity() -> None:
 
 def test_history_and_intent_are_left_alone() -> None:
     """`chat_history` is owned by `record_turn` — resetting it here would wipe the
-    conversation. `intent` is a Literal that `analyze_query` always writes first,
-    so None would be a type lie."""
+    conversation — and the summary slots by `compact_history`, for the same
+    reason. `intent` is a Literal that `analyze_query` always writes first, so
+    None would be a type lie."""
     state = new_turn("a question", "s-1", "u-1")
     assert "chat_history" not in state
+    assert "history_summary" not in state
+    assert "summarized_count" not in state
     assert "intent" not in state
+
+
+def test_the_typed_message_is_cleared() -> None:
+    """A stale `user_message` would store the previous turn's text as this one's."""
+    assert new_turn("a question", "s-1", "u-1")["user_message"] == ""
