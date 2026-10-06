@@ -1,4 +1,5 @@
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableLambda
 
 from cms.rag.nodes import generate as generate_module
@@ -94,7 +95,13 @@ async def test_node_returns_the_draft_and_citations(monkeypatch) -> None:
     citation = Citation(marker=1, doc_id="d", chunk_id="c", title="t", section="s")
 
     async def fake_core(
-        query, policy_hits, case_hits, feedback=None, previous_draft=None, risk_flags=None
+        query,
+        policy_hits,
+        case_hits,
+        feedback=None,
+        previous_draft=None,
+        risk_flags=None,
+        conversation="",
     ):
         seen.append((query, policy_hits, case_hits, feedback, previous_draft))
         return "the draft [1]", [citation]
@@ -182,7 +189,13 @@ async def test_node_forwards_the_risk_flags(monkeypatch) -> None:
     seen: list[list[str] | None] = []
 
     async def fake_core(
-        query, policy_hits, case_hits, feedback=None, previous_draft=None, risk_flags=None
+        query,
+        policy_hits,
+        case_hits,
+        feedback=None,
+        previous_draft=None,
+        risk_flags=None,
+        conversation="",
     ):
         seen.append(risk_flags)
         return "draft [1]", []
@@ -198,7 +211,13 @@ async def test_node_revises_the_failed_draft_after_an_ungrounded_verdict(monkeyp
     seen: list[tuple] = []
 
     async def fake_core(
-        query, policy_hits, case_hits, feedback=None, previous_draft=None, risk_flags=None
+        query,
+        policy_hits,
+        case_hits,
+        feedback=None,
+        previous_draft=None,
+        risk_flags=None,
+        conversation="",
     ):
         seen.append((feedback, previous_draft))
         return "better draft [1]", []
@@ -218,3 +237,43 @@ async def test_node_revises_the_failed_draft_after_an_ungrounded_verdict(monkeyp
     assert seen == [(["uncited claim"], "failed draft [1]")]
     assert update["draft"] == "better draft [1]"
     assert update["regenerated"] is True
+
+
+async def test_conversation_renders_before_the_extracts(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Covered [1].")
+    conversation = "\n<conversation>\nAgent: my X200 stopped charging\n</conversation>\n"
+
+    await generate_module.generate_core("q", [_hit("c1")], [], conversation=conversation)
+
+    assert conversation.strip() in prompts[0]
+    assert prompts[0].index("<conversation>") < prompts[0].index("<policy_extracts>\n[1]")
+
+
+async def test_first_turn_has_no_conversation_block(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Covered [1].")
+
+    await generate_module.generate_core("q", [_hit("c1")], [])
+
+    # The system prompt names the section; only an earlier turn renders it.
+    assert "<conversation>\n" not in prompts[0]
+    assert "{conversation}" not in prompts[0]
+
+
+async def test_node_passes_the_session_memory(monkeypatch) -> None:
+    seen: list[str] = []
+
+    async def fake_core(query, policy_hits, case_hits, **kwargs):
+        seen.append(kwargs["conversation"])
+        return "draft [1]", []
+
+    monkeypatch.setattr(generate_module, "generate_core", fake_core)
+
+    await generate_module.generate(
+        {
+            "query": "what if it's past 12 months?",
+            "chat_history": [HumanMessage("X200 stopped charging"), AIMessage("Covered [1].")],
+        }
+    )
+
+    assert "Agent: X200 stopped charging" in seen[0]
+    assert "Assistant: Covered." in seen[0]

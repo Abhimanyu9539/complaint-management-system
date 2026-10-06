@@ -10,6 +10,7 @@ from cms.config.settings import get_settings
 from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
 from cms.rag.context import build_generation_context, used_citations
+from cms.rag.memory import format_conversation
 from cms.rag.state import GraphState
 from cms.schemas.generation import Citation
 
@@ -20,11 +21,13 @@ async def lookup_generate_core(
     query: str,
     policy_hits: list[tuple[Document, float]],
     case_hits: list[tuple[Document, float]],
+    conversation: str = "",
 ) -> tuple[str, list[Citation]]:
     """A cited answer to `query`, plus the citations it actually used.
 
     Same context block and marker sequence as `generate_core`, so either section
     may be empty — a cases-only lookup numbers its cases from [1].
+    `conversation` is the chat's `<conversation>` block, read from lookup/v2.
     """
     settings = get_settings()
     context, cases, citations = build_generation_context(policy_hits, case_hits)
@@ -32,7 +35,9 @@ async def lookup_generate_core(
     chain = prompt | get_chat_model(settings.openrouter_model_main)
 
     try:
-        message = await chain.ainvoke({"context": context, "cases": cases, "query": query})
+        message = await chain.ainvoke(
+            {"context": context, "cases": cases, "query": query, "conversation": conversation}
+        )
     except Exception:
         logger.exception("lookup_generate failed for query %r (%d chunk(s))", query, len(citations))
         raise
@@ -56,5 +61,6 @@ async def lookup_generate(state: GraphState) -> dict:
         state["query"],
         state.get("policy_hits", []),
         state.get("case_hits", []),
+        conversation=format_conversation(state),
     )
     return {"draft": answer, "citations": citations}

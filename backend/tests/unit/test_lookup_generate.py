@@ -1,4 +1,5 @@
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableLambda
 
 from cms.rag.nodes import lookup_generate as lookup_module
@@ -10,7 +11,7 @@ class _FakeMessage:
 
 
 def _install_model_stub(monkeypatch, reply: str) -> list[str]:
-    """Replace only the chat model, so the real `lookup/v1` template still renders."""
+    """Replace only the chat model, so the real `lookup` template still renders."""
     prompts: list[str] = []
 
     def fake_model(prompt_value) -> _FakeMessage:
@@ -64,3 +65,35 @@ async def test_a_cases_only_lookup_returns_only_the_cited_cases(monkeypatch) -> 
 
     assert update["draft"] == "- Charged twice, duplicate refunded [2]."
     assert [(citation.marker, citation.doc_type) for citation in update["citations"]] == [(2, "case")]
+
+
+async def test_the_earlier_conversation_reaches_the_prompt_without_its_markers(monkeypatch) -> None:
+    """An old answer's `[1]` pointed at that turn's sources, so it is stripped."""
+    prompts = _install_model_stub(monkeypatch, "Refunded [1].")
+
+    await lookup_module.lookup_generate(
+        {
+            "query": "and for annual plans?",
+            "policy_hits": [_policy_hit()],
+            "case_hits": [],
+            "chat_history": [
+                HumanMessage("duplicate charge policy?"),
+                AIMessage("Duplicates are refunded [1]."),
+            ],
+        }
+    )
+
+    prompt = prompts[0]
+    assert "Assistant: Duplicates are refunded.\n</conversation>" in prompt
+    assert prompt.index("<conversation>") < prompt.index("<policy_extracts>\n[1]")
+
+
+async def test_a_first_turn_lookup_has_no_conversation_block(monkeypatch) -> None:
+    prompts = _install_model_stub(monkeypatch, "Refunded [1].")
+
+    await lookup_module.lookup_generate(
+        {"query": "refund cases", "policy_hits": [_policy_hit()], "case_hits": []}
+    )
+
+    assert "<conversation>\n" not in prompts[0]
+    assert "{conversation}" not in prompts[0]

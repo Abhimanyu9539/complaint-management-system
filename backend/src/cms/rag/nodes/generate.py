@@ -10,6 +10,7 @@ from cms.config.settings import get_settings
 from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
 from cms.rag.context import build_generation_context, used_citations
+from cms.rag.memory import format_conversation
 from cms.rag.state import GraphState
 from cms.schemas.generation import Citation
 
@@ -36,6 +37,7 @@ async def generate_core(
     prompt_name: str = "generate",
     prompt_version: str | None = None,
     risk_flags: list[str] | None = None,
+    conversation: str = "",
 ) -> tuple[str, list[Citation]]:
     """A grounded draft for `query`, plus the citations it actually used.
 
@@ -56,6 +58,9 @@ async def generate_core(
     `risk_flags` are intake's hints for which override rule to look for in the
     extracts; only prompt versions from generate/v5 and customer_reply/v4 use them.
 
+    `conversation` is the chat's `<conversation>` block (`rag/memory.py`), read
+    from generate/v6; the ticket graph passes none.
+
     `prompt_name` lets the ticket graph write to the customer with the same
     context and citations; `prompt_version` None means `generate_prompt_version`.
     """
@@ -72,6 +77,7 @@ async def generate_core(
                 "query": query,
                 "feedback": format_feedback(feedback, previous_draft),
                 "risk_flags": ", ".join(risk_flags or []),
+                "conversation": conversation,
             }
         )
     except Exception:
@@ -116,6 +122,7 @@ async def generate(state: GraphState) -> dict:
         feedback=feedback,
         previous_draft=previous_draft,
         risk_flags=state.get("risk_flags", []),
+        conversation=format_conversation(state),
     )
     update = {"draft": draft, "citations": citations}
     if retry:

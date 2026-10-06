@@ -112,14 +112,17 @@ class Settings(BaseSettings):
     # How much of a chunk a citation carries for the UI's sources panel. Long
     # enough to judge the match, short enough not to resend the context block.
     citation_snippet_chars: int = 300
-    # v5 adds the remedy-freeze override and the intake risk flags; v4 revises the
-    # failed draft on a retry; v3 (feedback only), v2 (no feedback) and v1 (policies
-    # only) are kept as the record and eval baselines.
-    generate_prompt_version: str = "v5"
-    # v3 adds the knowledge_lookup intent and its lookup_target; v2 adds risk flags.
-    analyze_query_prompt_version: str = "v3"
-    # v2 mentions policy and case lookups in the "what can you do?" answer.
-    smalltalk_prompt_version: str = "v2"
+    # v6 adds the earlier conversation as background; v5 adds the remedy-freeze
+    # override and the intake risk flags; v4 revises the failed draft on a retry;
+    # v3 (feedback only), v2 (no feedback) and v1 (policies only) are kept as the
+    # record and eval baselines.
+    generate_prompt_version: str = "v6"
+    # v4 sends questions about the conversation itself to smalltalk_or_meta; v3 adds
+    # the knowledge_lookup intent and its lookup_target; v2 adds risk flags.
+    analyze_query_prompt_version: str = "v4"
+    # v3 adds the earlier conversation, so it can recap it; v2 mentions policy and
+    # case lookups in the "what can you do?" answer.
+    smalltalk_prompt_version: str = "v3"
     # Ticket triage: department candidates, suggested severity, category, entities.
     # v2 takes the subject and body as one masked text; v1 took them separately.
     classify_ticket_prompt_version: str = "v2"
@@ -205,7 +208,8 @@ class Settings(BaseSettings):
     )
 
     # --- Knowledge lookup (the agent's own policy and case questions) ---
-    lookup_prompt_version: str = "v1"
+    # v2 adds the earlier conversation as background.
+    lookup_prompt_version: str = "v2"
     # Cases fetched by hybrid search before the rerank. The seed corpus is 20 cases.
     lookup_case_pool_k: int = 20
     # Cases kept after the rerank — enough to list, few enough to read.

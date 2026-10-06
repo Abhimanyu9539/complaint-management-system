@@ -8,20 +8,21 @@ from langsmith import traceable
 from cms.config.settings import get_settings
 from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
+from cms.rag.memory import format_conversation
 from cms.rag.state import GraphState
 
 logger = logging.getLogger(__name__)
 
 
-async def smalltalk_core(query: str) -> str:
-    """A short conversational reply to `query`.
+async def smalltalk_core(query: str, conversation: str = "") -> str:
+    """A short conversational reply to `query`; from smalltalk/v3 it can recap `conversation`.
     """
     settings = get_settings()
     prompt = load_prompt("smalltalk", settings.smalltalk_prompt_version)
     chain = prompt | get_chat_model(settings.openrouter_model_cheap)
 
     try:
-        message = await chain.ainvoke({"query": query})
+        message = await chain.ainvoke({"query": query, "conversation": conversation})
     except Exception:
         logger.exception("smalltalk failed for query %r", query)
         raise
@@ -34,4 +35,4 @@ async def smalltalk_core(query: str) -> str:
 @traceable(name="smalltalk")
 async def smalltalk(state: GraphState) -> dict:
     """The graph node: a partial `GraphState` update."""
-    return {"draft": await smalltalk_core(state["query"])}
+    return {"draft": await smalltalk_core(state["query"], format_conversation(state))}
