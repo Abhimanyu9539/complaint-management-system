@@ -9,7 +9,7 @@ import logging
 import re
 
 from cms.config.settings import get_settings
-from cms.db.repositories import draft_feedback, drafts, ticket_events, tickets
+from cms.db.repositories import NotFound, draft_feedback, drafts, ticket_events, tickets
 from cms.schemas.tickets import Ticket
 from cms.services import ticket_service
 from cms.services.email_sender import EmailSendError, send_email
@@ -50,7 +50,7 @@ async def _actionable_draft(ticket: dict, draft_id: str) -> dict:
 
     draft = await drafts.fetch_draft(draft_id)
     if draft["ticket_id"] != ticket_id:
-        raise LookupError(f"Draft {draft_id} does not belong to ticket {ticket_id}")
+        raise NotFound(f"Draft {draft_id} does not belong to ticket {ticket_id}")
 
     latest = await drafts.fetch_latest_draft(ticket_id)
     if latest and latest["id"] != draft_id:

@@ -8,7 +8,7 @@ own `status` because a document has one current state but many attempts.
 import asyncio
 import logging
 
-from cms.db.repositories import ERROR_MAX_CHARS, utc_now_iso
+from cms.db.repositories import ERROR_MAX_CHARS, NotFound, utc_now_iso
 from cms.db.session import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ async def fetch_job(job_id: str) -> dict:
         .execute()
     )
     if not response.data:
-        raise LookupError(f"No {TABLE} row with id {job_id}")
+        raise NotFound(f"No {TABLE} row with id {job_id}")
     return response.data[0]
 
 

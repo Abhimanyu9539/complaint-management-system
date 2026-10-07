@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Path
 from sse_starlette.sse import EventSourceResponse
 
 from cms.api.deps import get_current_user
+from cms.api.errors import ErrorRoute
 from cms.db.mongo import get_checkpointer
 from cms.schemas.auth import CurrentUser
 from cms.schemas.chat import ChatMessageOut, ChatRequest
@@ -25,7 +26,7 @@ from cms.services.chat_service import delete_session, session_messages, stream_t
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(prefix="/chat", tags=["chat"], route_class=ErrorRoute)
 
 @router.post("")
 async def chat(

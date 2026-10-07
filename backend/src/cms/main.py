@@ -11,6 +11,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from cms.api.errors import register_error_handlers
 from cms.api.v1.router import api_router
 from cms.config.logging_config import setup_logging
 from cms.config.settings import get_settings
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    register_error_handlers(app)
     app.include_router(api_router)
     return app
 

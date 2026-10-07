@@ -8,6 +8,7 @@ are both written against this exact set.
 
 import logging
 
+from cms.db.repositories import NotFound
 from cms.db.session import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ async def fetch_department(department_id: str) -> dict:
 
     rows = response.data or []
     if not rows:
-        raise LookupError(f"No department with id {department_id}")
+        raise NotFound(f"No department with id {department_id}")
     return rows[0]
 
 

@@ -15,6 +15,10 @@ from datetime import UTC, datetime
 ERROR_MAX_CHARS = 2000
 
 
+class NotFound(LookupError):
+    """No row with that id. The API maps it to 404."""
+
+
 def utc_now_iso() -> str:
     """Timestamp in the format the `timestamptz` columns expect."""
     return datetime.now(UTC).isoformat()

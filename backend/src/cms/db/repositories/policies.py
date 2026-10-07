@@ -9,7 +9,7 @@ publication state, cases do not.
 import asyncio
 import logging
 
-from cms.db.repositories import ERROR_MAX_CHARS, utc_now_iso
+from cms.db.repositories import ERROR_MAX_CHARS, NotFound, utc_now_iso
 from cms.db.session import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ async def fetch_policy(policy_id: str) -> dict:
         get_supabase().table(TABLE).select(POLICY_COLUMNS).eq("id", policy_id).execute()
     )
     if not response.data:
-        raise LookupError(f"No {TABLE} row with id {policy_id}")
+        raise NotFound(f"No {TABLE} row with id {policy_id}")
     return response.data[0]
 
 
@@ -51,7 +51,7 @@ async def fetch_policy_for_reingest(policy_id: str) -> dict:
         .execute()
     )
     if not response.data:
-        raise LookupError(f"No {TABLE} row with id {policy_id}")
+        raise NotFound(f"No {TABLE} row with id {policy_id}")
     return response.data[0]
 
 

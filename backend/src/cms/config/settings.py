@@ -320,6 +320,27 @@ class Settings(BaseSettings):
         "The assistant could not finish this answer. Please try again."
     )
 
+    # --- API errors (sent as `detail`; the real cause is logged) ---
+    api_unavailable_message: str = (
+        "The server could not finish this request. Try again in a moment, or check the server log."
+    )
+    # The email did not leave, so a retry is safe.
+    email_send_failed_message: str = (
+        "The email could not be sent. Nothing was recorded — try again in a moment."
+    )
+    # Shown to the customer on the complaint form, whose text is still in it.
+    ticket_create_failed_message: str = (
+        "We could not record your complaint just now. Your message has not been lost — "
+        "please try again in a moment."
+    )
+    dept_question_failed_message: str = (
+        "Could not draft a question. Write it yourself, or try again in a moment."
+    )
+    seed_corpus_unavailable_message: str = (
+        "The seed corpus directory is not readable. Set SEED_DATA_DIR — see the server log "
+        "for the paths tried."
+    )
+
     # --- Mongo / chat memory ---
     # Mongo backs the LangGraph checkpointer, which is where a conversation is
     # stored. Supabase cannot hold it yet: `chat_sessions` and `messages` are

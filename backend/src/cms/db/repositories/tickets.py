@@ -12,7 +12,7 @@ It is null until the ticket is resolved, and that null is meaningful: it means
 import asyncio
 import logging
 
-from cms.db.repositories import utc_now_iso
+from cms.db.repositories import NotFound, utc_now_iso
 from cms.db.session import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ async def fetch_ticket(ticket_id: str) -> dict:
 
     rows = response.data or []
     if not rows:
-        raise LookupError(f"No ticket with id {ticket_id}")
+        raise NotFound(f"No ticket with id {ticket_id}")
     return rows[0]
 
 
@@ -111,7 +111,7 @@ async def fetch_ticket_by_no(ticket_no: int) -> dict:
 
     rows = response.data or []
     if not rows:
-        raise LookupError(f"No ticket T-{ticket_no}")
+        raise NotFound(f"No ticket T-{ticket_no}")
     return rows[0]
 
 
@@ -129,7 +129,7 @@ async def update_ticket(ticket_id: str, patch: dict) -> dict:
         raise
 
     if not response.data:
-        raise LookupError(f"No ticket with id {ticket_id}")
+        raise NotFound(f"No ticket with id {ticket_id}")
     return response.data[0]
 
 
