@@ -1,23 +1,8 @@
-"""Graph assembly: guard the input, analyze the query, hand it to one lane, record the turn.
+"""The chat graph: input_guard → contextualize → analyze → one lane → record_turn → compact_history.
 
-    START -> input_guard -+-> blocked_input -----------------------------------------------+
-                          +-> contextualize_query -> analyze_query -+-> complaint_lane ----+
-                                                                    +-> lookup_lane -------+-> record_turn -> compact_history -> END
-                                                                    +-> smalltalk ---------+
-
-Each lane is a compiled subgraph with its own nodes — see `rag/subgraphs/complaint.py`
-and `rag/subgraphs/lookup.py` for their wiring. They share no node, so either can
-change without touching the other.
-
-contextualize_query rewrites a follow-up into a standalone question from the
-session memory (`rag/memory.py`), so analysis and retrieval need no history of
-their own. Every path ends at record_turn, which writes the turn into
-`chat_history` for the checkpointer, then compact_history, which folds old turns
-into the running summary once they no longer fit. Exactly one branch runs per
-turn, so each gets its own edge — a list edge would build an AND-join and wait forever.
-
-Streaming a lane's tokens needs `astream(..., subgraphs=True)`: LangGraph drops
-messages from inside a subgraph without it. See `services/chat_service.py`.
+The lane is the complaint or lookup subgraph, or smalltalk; a blocked message goes straight to record_turn.
+Each branch has its own edge into record_turn: a list edge would wait for all of them. Streaming a lane's
+tokens needs `astream(..., subgraphs=True)`.
 """
 
 import logging

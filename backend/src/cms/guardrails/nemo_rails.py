@@ -21,7 +21,7 @@ OUTPUT_FLOWS = {"output": {"flows": [FACTS_RAIL, "self check output"]}}
 
 
 def _build_rails(model: str, rails: dict, prompts_file: Path = PROMPTS_FILE) -> LLMRails:
-    """One `LLMRails` over OpenRouter with the shared self-check prompts. NeMo takes one model per instance."""
+    """One `LLMRails` over OpenRouter with the shared self-check prompts, for one model."""
     settings = get_settings()
     config = {
         "models": [
@@ -54,7 +54,7 @@ def get_input_rails() -> LLMRails:
 
 @lru_cache
 def get_output_rails() -> LLMRails:
-    """The output rails on the judge model: the cheap one missed invented remedies (see `guard_judge_model`)."""
+    """The output rails, on the judge model: the cheap one missed invented remedies."""
     return _build_rails(get_settings().guard_judge_model, OUTPUT_FLOWS)
 
 

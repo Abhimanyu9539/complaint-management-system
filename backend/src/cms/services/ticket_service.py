@@ -1,19 +1,6 @@
-"""The ticket lifecycle — creation, escalation, resolution.
+"""The ticket lifecycle. `ALLOWED` is the state machine; an illegal move raises `IllegalTransition`.
 
-Owns two things nothing else may duplicate:
-
-1. **The state machine** from lld.md §2. `ALLOWED` below is that diagram as a
-   table, and `transition()` is the only function permitted to change a ticket's
-   status. An illegal move raises `IllegalTransition`, which the route layer maps
-   to 409 Conflict — as lld.md specifies, and not 400: the request is well-formed,
-   it is the ticket's current state that refuses it.
-
-2. **How `resolution_path` is decided.** It is derived, never supplied. See
-   `_resolution_path_for`.
-
-Layering is the same as `admin_stats`: repositories return raw dicts, the
-`_to_*` adapters here are the only place their keys are read, and everything
-downstream of an adapter handles Pydantic models.
+`resolution_path` is derived from the ticket (`_resolution_path_for`), never supplied by a client.
 """
 
 import asyncio
@@ -48,10 +35,8 @@ class UnknownDepartment(Exception):
     """An escalation target outside the closed set of twelve. Maps to 422."""
 
 
-# lld.md §2, verbatim as a table. Every edge in that diagram appears here;
-# statuses with no outgoing edge are still listed with an empty set so that a
-# new status added to the CHECK constraint fails loudly here rather than
-# silently permitting nothing.
+# The ticket state machine as a table: every status in the CHECK constraint is a key,
+# so a new status fails loudly here instead of silently permitting nothing.
 #
 # `processing` and the three statuses after it are written by the ticket
 # pipeline: `start_processing` on the way in, the gate (`finish_processing`) on
@@ -65,7 +50,7 @@ ALLOWED: dict[str, frozenset[str]] = {
     "needs_review": frozenset({"escalated", "resolved", "processing"}),
     "escalated": frozenset({"dept_responded", "resolved"}),
     "dept_responded": frozenset({"escalated", "resolved", "processing"}),
-    # Reopening: lld.md has resolved → drafted; a customer's email reply reopens to needs_review.
+    # Reopening: an agent reopens to drafted; a customer's email reply reopens to needs_review.
     "resolved": frozenset({"drafted", "needs_review"}),
     "processing_failed": frozenset({"processing"}),
 }
@@ -230,7 +215,7 @@ async def start_processing(ticket_id: str, resume: bool = True) -> dict:
 
 
 async def finish_processing(ticket_id: str, status: str, reasons: list[str]) -> None:
-    """The run's outcome: `drafted`, `needs_review`, `dept_responded` or `processing_failed`, with the reasons."""
+    """Gate the run: move to `drafted`, `needs_review`, `dept_responded` or `processing_failed`."""
     current = await tickets.fetch_ticket(ticket_id)
     assert_transition(current["status"], status)
 

@@ -1,9 +1,4 @@
-"""Dense, sparse and hybrid retrieval over the cases collection.
-
-`asimilarity_search_with_score` is LangChain's base-class thread offload —
-`QdrantVectorStore` implements no async methods of its own. It still keeps the
-event loop free, which is what an async caller needs.
-"""
+"""Dense, sparse and hybrid search over the cases collection."""
 
 import logging
 

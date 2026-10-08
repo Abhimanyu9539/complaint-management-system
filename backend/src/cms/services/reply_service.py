@@ -1,8 +1,6 @@
-"""Act on a ticket's draft: send it to the customer by email, or discard it.
+"""Send a ticket's draft to the customer by email, or discard it.
 
-Every action writes one `draft_feedback` row — the flywheel's signal. The row
-is written before the email goes out: `draft_id` is UNIQUE, so a second send of
-the same draft fails there instead of mailing the customer twice.
+The `draft_feedback` row is written before the email: `draft_id` is UNIQUE, so a draft can't be sent twice.
 """
 
 import logging

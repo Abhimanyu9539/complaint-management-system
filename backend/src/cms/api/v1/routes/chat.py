@@ -1,15 +1,6 @@
-"""The chat endpoint: one complaint question in, one streamed answer out, plus replay.
+"""The agent chat: one turn in, an SSE-streamed answer out, plus transcript replay and delete.
 
-Server-sent events rather than a plain JSON response because the graph takes
-seconds to answer — guards, two retrievals and a generation — and a support
-agent watching an answer appear is waiting far better than one watching a
-spinner. `EventSourceResponse` also pings on its own, which keeps the
-connection alive across the silent stretch before the first token.
-
-Turns are stored in Mongo by the graph's checkpointer, keyed by the signed-in
-user and `session_id` together, so one agent can never read or extend another's
-conversation. Not in Supabase: `chat_sessions` and `messages` are RLS'd to
-`auth.uid()` and this API holds the service-role key, which bypasses RLS.
+Turns are stored in Mongo, keyed by user and session together, so an agent only ever sees their own.
 """
 
 import logging

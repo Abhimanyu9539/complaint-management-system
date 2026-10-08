@@ -1,15 +1,6 @@
-"""CLI entrypoint for the graph probe: run one query through the compiled graph.
+"""Run one query through the chat graph: `cms-graph "my order never arrived" [--json] [--context]`.
 
-Usage (from anywhere, once the project is installed):
-
-    cms-graph "my ProBlend 300 is showing ERR-22 and won't start"
-    cms-graph "hey, what can you do?"
-    cms-graph "refund for a delayed order" --json
-    cms-graph "my order never arrived" --context
-
-Prints the branch taken and, for a complaint, every reranked chunk retrieved
-with the generated policy queries. `--context` prints the assembled context
-block and citations instead — what the generate node will hand the model.
+Prints the branch and the retrieved chunks; `--context` prints what the generate node is given.
 """
 
 import argparse

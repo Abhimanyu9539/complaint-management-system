@@ -1,12 +1,6 @@
-"""Document-level metadata, copied onto every point of a document.
+"""Document metadata copied onto every point.
 
-These are the payload fields retrieval filters and cites on, so they are built
-in one place per corpus rather than inline in the pipeline — the keys here must
-stay in step with the payload indexes declared in
-`retrieval.vector_store.qdrant_store`.
-
-Neither corpus writes `doc_type`: cases and policies live in separate
-collections, so the collection itself is the type discriminator.
+The keys must match the payload indexes in `create_qdrant_collections`.
 """
 
 

@@ -10,12 +10,12 @@ The importable code lives under `src/cms/`, a single top-level package:
 ```
 backend/
 ├── pyproject.toml
-├── data/seed/            # fixture corpus (git-ignored, not packaged)
+├── data/seed/            # fixture corpus (in git, not packaged into the wheel)
 ├── supabase/migrations/  # applied with the Supabase CLI, not from Python
 ├── tests/
 └── src/cms/
     ├── main.py           # FastAPI app factory -> cms.main:app
-    ├── cli/              # console entrypoints (cms-seed, cms-create-collections, cms-analyze)
+    ├── cli/              # console entrypoints (the cms-* commands in pyproject.toml)
     ├── config/           # settings + process bootstrap (trust store, LangSmith env)
     ├── api/              # routers
     ├── db/               # Supabase session + repositories
@@ -65,9 +65,8 @@ at all, which is why "not found" is a log line rather than an error. The
 required fields still fail fast at startup if nothing supplies them.
 
 The seed corpus is located the same way — `$SEED_DATA_DIR`, then `./data/seed`
-under the cwd, then the source tree. It is deliberately *not* packaged: it is
-git-ignored fixture data, so a container that needs to re-seed mounts it and
-sets `SEED_DATA_DIR`.
+under the cwd, then the source tree. It is deliberately *not* packaged into the
+wheel, so a container that needs to re-seed mounts it and sets `SEED_DATA_DIR`.
 
 ## Building
 

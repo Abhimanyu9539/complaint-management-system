@@ -14,7 +14,9 @@ class InboundEmailRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     message_id: str = Field(min_length=1, max_length=998)
-    from_address: str = Field(min_length=3, max_length=320, description="The From header; a display name is fine.")
+    from_address: str = Field(
+        min_length=3, max_length=320, description="The From header; a display name is fine."
+    )
     subject: str = Field(default="", max_length=998)
     text: str = Field(default="", max_length=100_000, description="The plain-text body.")
     auto_submitted: str | None = Field(default=None, max_length=100)

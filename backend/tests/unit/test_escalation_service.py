@@ -205,7 +205,9 @@ async def test_answer_is_saved_and_the_ticket_moves_to_dept_responded(monkeypatc
     result = await escalation_service.record_answer("t1", "  Replace it.  ")
 
     assert result == "responded-ticket"
-    assert calls["responses"] == [{"ticket_id": "t1", "department_id": "warranty", "answer_text": "Replace it."}]
+    assert calls["responses"] == [
+        {"ticket_id": "t1", "department_id": "warranty", "answer_text": "Replace it."}
+    ]
     assert calls["responded"][0]["id"] == "r1"
     # No agent given, as on the email path: the actor is the system.
     assert calls["actors"] == [None]

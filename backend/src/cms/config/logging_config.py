@@ -1,10 +1,4 @@
-"""One logging setup, shared by the API and every CLI script.
-
-Previously each script called `logging.basicConfig` with its own copy of the
-format string; centralising it means a log line looks the same whether it came
-from a request handler or from `scripts/seed_data.py`, which matters when both
-write into the same terminal during a seed run.
-"""
+"""One logging setup, shared by the API and every CLI."""
 
 import logging
 
@@ -24,6 +18,5 @@ def setup_logging(level: int = DEFAULT_LEVEL) -> None:
     """
     try:
         logging.basicConfig(level=level, format=LOG_FORMAT)
-    except Exception:
-        # No logger here on purpose: logging is what just failed.
+    except Exception:  # noqa: BLE001 — logging is what failed, so there is no logger to use
         print("WARNING: logging configuration failed; using library defaults")

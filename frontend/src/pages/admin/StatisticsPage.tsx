@@ -298,7 +298,7 @@ export function StatisticsPage() {
           <EmptyState
             icon={<Activity size={18} strokeWidth={1.5} />}
             title="No request counter exists yet"
-            description="Wiring this means ASGI middleware writing a request log, not a query over an existing table — see backend/docs/admin-api.md §7."
+            description="Counting requests needs middleware that logs each one; nothing does yet."
           />
         </Panel>
 
@@ -311,29 +311,20 @@ export function StatisticsPage() {
 }
 
 /**
- * What is left of cms.md §4.4 once escalation rate is real.
- *
- * That section names four north-star metrics. Escalation rate now has a writer
- * — the ticket queue — and lives in `EscalationPanel` above, computed from
- * `tickets.resolution_path`. The other three still have no writer: nothing
- * generates a draft, so nothing accepts or edits one, and no request is priced.
- *
- * They stay blank rather than simulated for the same reason as before. A
- * plausible draft-acceptance trend would demo well and mislead the one person
- * this page is built for, and the conditional that prevents it costs one branch.
+ * Outcome metrics with no endpoint yet. Left blank rather than simulated, so a
+ * plausible-looking trend can never mislead the person reading this page.
  */
 function OutcomeMetricsPanel() {
   return (
-    <Panel title="Remaining outcome metrics" eyebrow="Blocked" span={3}>
+    <Panel title="Remaining outcome metrics" eyebrow="Not built yet" span={3}>
       <EmptyState
         icon={<Lock size={18} strokeWidth={1.5} />}
         title="Draft acceptance, time-to-response and cost per ticket"
         description={
           <>
-            These three need the drafting pipeline. The <code>drafts</code> and{' '}
-            <code>draft_feedback</code> tables exist but nothing writes to them yet — no draft is
-            generated, so none is accepted or edited (cms.md §6). Escalation rate, the fourth
-            metric from §4.4, is live above.
+            Every draft and what the agent did with it is recorded in <code>drafts</code> and{' '}
+            <code>draft_feedback</code>, but no endpoint aggregates them yet, and token cost is not
+            recorded per run. Escalation rate, the fourth outcome metric, is live above.
           </>
         }
       />

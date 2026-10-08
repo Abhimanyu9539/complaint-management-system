@@ -108,5 +108,5 @@ def test_an_unreadable_policy_file_still_lists_with_its_stem_as_title(seed_dir, 
 def test_a_malformed_cases_file_raises(seed_dir) -> None:
     (seed_dir / "cases.json").write_text("not valid json", encoding="utf-8")
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         seed.list_seed_entries("case")

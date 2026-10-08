@@ -10,9 +10,9 @@ import type { DeptQuestion, Ticket } from '@/lib/tickets/types';
 /**
  * Escalate and resolve.
  *
- * Escalation opens a department picker rather than firing immediately — cms.md
- * §4.3 wants the prediction pre-selected and every override recorded, because
- * an override is a training label. Picking a department asks the model for a
+ * Escalation opens a department picker rather than firing immediately: the
+ * prediction is pre-selected and every override is recorded, because an
+ * override is a training label. Picking a department asks the model for a
  * question to send it; the agent edits it, and Escalate emails it.
  *
  * Shared by `/admin/tickets` and the workbench — one form, driven by

@@ -1,27 +1,6 @@
-"""Service logic behind the admin ingestion trigger/retry routes.
+"""Admin ingestion trigger, retry and re-run: queue a job row, then ingest in a background task.
 
-The route layer must return before the embedding run finishes (admin-api.md
-§4: an inline call would hold the request for the length of an embedding run
-and time out at the proxy long before it finishes). Every path here queues a
-job row, then hands the actual `ingest_case`/`ingest_policy` call to a
-`BackgroundTasks` callback that FastAPI runs after the response is sent.
-
-Those callbacks are `async def`, so FastAPI awaits them on the event loop
-rather than dispatching them to the threadpool. Everything they reach is
-either awaited I/O or thread-offloaded — see `ingestion/load/vector_loader.py`,
-where the embed-and-upsert step is the one call long enough to matter.
-
-Two distinct background paths exist, over two distinct identifiers:
-
-- The **trigger** (`mode="document"`) names a file in the on-disk seed corpus
-  by its `source_ref` (a policy filename or a case id) — it may or may not
-  already have a Postgres row. `_run_seed_document` registers it (upsert on
-  `source_ref`) and ingests the freshly-read body, exactly as `cms-seed` does.
-- The **retry** route names an existing job's *row*, a real Postgres id.
-  `_run_document` recovers that row's text via `cms.ingestion.reingest`
-  (Storage first, seed file second for policies) and re-ingests it. This is
-  the only path that can act on a document with no seed file at all — e.g. one
-  a future ticket-minted-case feature would create.
+The trigger names a seed-corpus file by `source_ref`; retry and re-run name an existing document by id.
 """
 
 import logging

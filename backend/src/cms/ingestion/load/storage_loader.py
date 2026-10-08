@@ -1,24 +1,6 @@
-"""Upload seed policy files to Supabase Storage.
+"""Upload seed policy files to Supabase Storage, so a citation can link to the source document."""
 
-Completes the `load/` trio alongside `doc_store_loader.py` (Postgres chunk
-rows) and `vector_loader.py` (Qdrant points): this one writes the raw file
-itself, so a citation can eventually link back to the source document rather
-than only its chunked text.
-
-Unlike its two siblings this loader is called from `ingestion/seed.py` rather
-than `pipeline.py` — uploading is an ingest-*time* concern with no relation to
-chunking or embedding, and a future admin upload route will call this same
-function on a file that has not been chunked yet. `pipeline.py`'s docstring
-still owns the chunk -> Postgres -> Qdrant order; this module is deliberately
-outside that.
-
-`storage3` (the Supabase Storage client) is only a transitive dependency of
-`supabase`, not declared in pyproject.toml, so this module never imports from
-it directly and catches bare `Exception` rather than its typed errors — the
-same reasoning `ingestion/extract/policy_extractor.py` gives for declining
-pyyaml.
-"""
-
+import asyncio
 import logging
 from pathlib import Path
 
@@ -62,7 +44,7 @@ async def upload_policy_file(path: Path) -> tuple[str, str]:
             .storage.from_(bucket)
             .upload(
                 key,
-                path.read_bytes(),
+                await asyncio.to_thread(path.read_bytes),
                 {"content-type": content_type, "upsert": "true"},
             )
         )

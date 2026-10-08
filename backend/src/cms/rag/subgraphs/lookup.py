@@ -1,14 +1,7 @@
 """Lookup lane: answer the agent's own policy or case question.
 
-    START -> lookup_retrieve_policies -+
-    START -> lookup_retrieve_cases ----+-> lookup_join_retrieval -+-> lookup_no_match -> END       (nothing relevant)
-                                                                 +-> lookup_generate -> lookup_guard -+-> END  (grounded)
-                                                                                                      +-> lookup_caveat -> END
-
-Both retrievals always run — the one `lookup_target` excludes returns empty — and
-lookup_join_retrieval decides whether anything was found. The guard does not
-demand a policy citation, and there is no retry. Compiled with
-`checkpointer=False`, for the same reason as the complaint lane.
+Both retrievals run in parallel → lookup_generate → lookup_guard. No retry: a failure gets a caveat.
+Compiled with `checkpointer=False`, like the complaint lane.
 """
 
 import logging

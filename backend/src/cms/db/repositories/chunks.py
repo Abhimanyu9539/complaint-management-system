@@ -1,9 +1,4 @@
-"""Reads and writes of the two chunk tables — `case_chunks` and `policy_chunks`.
-
-Parameterised by table and foreign-key column rather than split in two, unlike
-the parent tables: the chunk tables have identical shapes and no reason to
-diverge, so two copies would be duplication with nothing behind it.
-"""
+"""Reads and writes of `case_chunks` and `policy_chunks`, which share one shape."""
 
 import logging
 

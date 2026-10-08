@@ -1,33 +1,8 @@
-"""Composes Extract → Transform → Load: one case or policy in, chunks + points out.
+"""Ingest one case or policy: chunk → Postgres rows → Qdrant points → mark indexed.
 
-Cases and policies are separate corpora — separate tables, separate chunk
-tables, separate Qdrant collections — so ingestion has two entry points,
-`ingest_case` and `ingest_policy`, rather than one function dispatching on a
-type string. They are not merged because the corpora genuinely differ (chunking
-strategy, payload fields, write permissions); they share a module because the
-crash-safety protocol below must not drift between two independent copies.
-
-This module owns only orchestration. The steps live in the packages named after
-them — `extract/`, `transform/`, `load/` — and every table write goes through
-`db.repositories`, so what remains here is the *order*, which is the part that
-matters.
-
-The write order both entry points follow is the consistency protocol from
-build.md §0.5 and is not arbitrary:
-
-    chunk → write chunk rows → embed + upsert Qdrant points → mark indexed
-
-Postgres before Qdrant, because Postgres is the source of truth and Qdrant is a
-rebuildable cache of it. A crash in between leaves the parent row visibly stuck
-at `status='processing'` and a re-run finishes the job. The reverse order would
-leave Qdrant points that retrieval can find but Postgres cannot explain — ghost
-chunks are the dangerous failure direction.
-
-Idempotency has three layers, so re-running a seed or a retry is free and safe:
-  1. ingest-key short-circuit — unchanged documents cost zero OpenAI calls, and
-     a changed chunking or embedding recipe re-ingests instead of skipping;
-  2. chunk-table upsert on `(fk_column, chunk_index)` — rows update in place;
-  3. deterministic Qdrant point ids — points overwrite instead of duplicating.
+Postgres goes first, so a crash leaves a row stuck at `processing` that a re-run finishes, never Qdrant
+points Postgres can't explain. Re-runs are free: unchanged documents are skipped, rows upsert, and point
+ids are deterministic.
 """
 
 import logging
@@ -67,8 +42,7 @@ from cms.ingestion.transform.enricher import case_metadata, policy_metadata
 
 logger = logging.getLogger(__name__)
 
-# Ingest traces go to their own LangSmith project (build.md §0.3.3) so they do
-# not bury the chat traces we actually read day to day.
+# Ingest traces go to their own LangSmith project, so they don't bury the chat traces.
 INGEST_PROJECT = f"{get_settings().langsmith_project}-ingest"
 
 

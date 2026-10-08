@@ -86,6 +86,20 @@ testpaths = ["tests"]
 # test without a per-test marker.
 asyncio_mode = "auto"
 
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+# Named explicitly: ruff's default rule set changes between releases.
+select = [
+    "E", "W", "F", "I", "B", "UP", "BLE", "ASYNC", "RUF", "SIM",
+    "PLE", "LOG", "G", "DTZ", "PIE", "C4", "RET",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# deepeval reads its environment at import, so these scripts set it before importing.
+"evals/*/aggregate.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["cms"]
 

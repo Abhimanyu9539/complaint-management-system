@@ -1,7 +1,6 @@
-"""Incoming email. n8n reads the support mailbox and posts each message here.
+"""Incoming email: n8n posts each message from the support mailbox here, with a shared secret.
 
-Guarded by a shared secret in `X-Inbound-Secret` (see `_check_secret`, the one
-place to swap in an HMAC later). Unset in settings, inbound email is off.
+Inbound email is off while `INBOUND_EMAIL_SECRET` is unset. A failure answers 500, which makes n8n retry.
 """
 
 import hmac

@@ -1,14 +1,6 @@
-"""LangSmith setup.
+"""Export the LangSmith settings into `os.environ`, the only place its SDK reads them.
 
-The LangSmith SDK is configured exclusively through environment variables — it
-never sees our `Settings` object — while `pydantic-settings` reads `.env`
-without exporting anything into `os.environ`. `setup_tracing()` is the bridge
-between the two. Skipping it does not raise anywhere: `@traceable` degrades to a
-no-op and every run is silently dropped, which is the failure mode this module
-exists to prevent.
-
-Called once at import time from `config/__init__.py`, so no entrypoint has to
-remember it.
+Without it `@traceable` silently drops every run. Called once from `cms.config`.
 """
 
 import logging

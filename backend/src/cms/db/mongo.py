@@ -1,18 +1,6 @@
-"""The Mongo handle and the LangGraph checkpointer built on it.
+"""The Mongo client and the LangGraph checkpointer that stores chat transcripts.
 
-Mongo stores chat transcripts because Supabase cannot yet: `chat_sessions` and
-`messages` are RLS'd to `auth.uid()` and this API holds the service-role key,
-which bypasses RLS. Mongo has no RLS, so the transcript lives here until auth
-lands. See `cms.rag.nodes.record_turn` for what is written.
-
-`MongoDBSaver` takes a *synchronous* `MongoClient` — the async saver was removed
-in langgraph-checkpoint-mongodb 0.5.0. Its `aget_tuple`/`aput` run the blocking
-calls on a thread executor, and `MongoClient` is thread-safe, so the event loop
-is never blocked inside the graph. Unlike the Supabase client in `session.py`,
-this one is not bound to an event loop.
-
-Both factories are cached but lazy: nothing connects at import time, so a worker
-forked by uvicorn builds its own client rather than inheriting a broken socket.
+`MongoDBSaver` needs a sync `MongoClient` and runs each call on a thread. Both are built lazily.
 """
 
 import logging

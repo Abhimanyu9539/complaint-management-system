@@ -1,10 +1,4 @@
-"""CLI entrypoint for the standalone `analyze_query` probe.
-
-Usage (from anywhere, once the project is installed):
-
-    cms-analyze "my ProBlend 300 is showing ERR-22 and won't start"
-    cms-analyze "what can you do?" --json
-"""
+"""Probe `analyze_query` on one text: `cms-analyze "my ProBlend 300 shows ERR-22" [--json]`."""
 
 import argparse
 import asyncio

@@ -46,7 +46,11 @@ async def test_the_prompt_carries_the_question_and_both_blocks(monkeypatch) -> N
     prompts = _install_model_stub(monkeypatch, "Refunded [1].")
 
     await lookup_module.lookup_generate(
-        {"query": "cases where a refund was issued", "policy_hits": [_policy_hit()], "case_hits": [_case_hit("c1")]}
+        {
+            "query": "cases where a refund was issued",
+            "policy_hits": [_policy_hit()],
+            "case_hits": [_case_hit("c1")],
+        }
     )
 
     prompt = prompts[0]

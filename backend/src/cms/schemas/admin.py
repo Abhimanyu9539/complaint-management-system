@@ -1,19 +1,4 @@
-"""Response contracts for the read-only admin surface.
-
-These are the first DTOs in the codebase, so this module sets the pattern:
-
-- One module per API surface, under `cms/schemas/`.
-- Response models only. Request bodies arrive as query parameters today, and
-  there is nothing to model until there is a POST.
-- Field names are snake_case, matching the wire format exactly. The frontend
-  camelCases at its own transport boundary; doing it here would put a
-  presentation concern in the schema layer.
-- `frozen=True` throughout. A response object is a value, and mutating one after
-  construction has never once been the intent.
-- `Literal[...]` rather than `Enum` for status fields — it publishes the same
-  constraint into the OpenAPI schema without adding a second definition of a
-  vocabulary the database already constrains with a CHECK.
-"""
+"""Response models for the admin panel: frozen, snake_case like the wire, `Literal` for statuses."""
 
 from typing import Literal
 
@@ -102,7 +87,7 @@ class JobSummary(_Base):
     finished_at: str | None = None
     duration_ms: int | None = Field(
         default=None,
-        description="finished_at − started_at. Null while queued or still running.",
+        description="finished_at - started_at. Null while queued or still running.",
     )
 
 
@@ -114,7 +99,7 @@ class JobPage(_Base):
 
 
 class TriggerIngestionRequest(_Base):
-    """`POST /admin/ingestion/jobs` body — see `backend/docs/admin-api.md` §4."""
+    """`POST /admin/ingestion/jobs` body."""
 
     doc_type: DocType
     mode: Literal["seed", "document"]
@@ -190,7 +175,7 @@ class CollectionStorage(_Base):
     segment_count: int
     estimated_vector_bytes: int = Field(
         description=(
-            "points × embedding_dims × 4. An ESTIMATE: Qdrant reports no byte "
+            "points x embedding_dims x 4. An ESTIMATE: Qdrant reports no byte "
             "figure, and this excludes payloads, sparse vectors and the HNSW "
             "graph, so treat it as a floor. Clients must label it as estimated."
         )
@@ -249,7 +234,7 @@ class IngestionSummaryResponse(_Base):
 
 
 # ---------------------------------------------------------------------------
-# Escalation — the north-star metric (cms.md §2, §5)
+# Escalation — the north-star metric
 # ---------------------------------------------------------------------------
 
 

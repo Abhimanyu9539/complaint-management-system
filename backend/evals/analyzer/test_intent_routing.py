@@ -31,7 +31,7 @@ async def _classify_all(queries: list[str]) -> list[QueryAnalysis]:
 def analyses() -> dict[str, QueryAnalysis]:
     """Every query classified once, on one event loop — the cached chat client binds to it."""
     queries = COMPLAINTS + [item["input"] for item in LOOKUPS]
-    return dict(zip(queries, asyncio.run(_classify_all(queries))))
+    return dict(zip(queries, asyncio.run(_classify_all(queries)), strict=True))
 
 
 @pytest.mark.parametrize("query", COMPLAINTS, ids=[f"complaint-{i}" for i in range(len(COMPLAINTS))])

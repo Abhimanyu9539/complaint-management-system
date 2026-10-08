@@ -1,11 +1,4 @@
-"""Build chunk rows and write them to Postgres — the source of truth for chunk text.
-
-These rows are also what parent-document retrieval reads back: a Qdrant hit
-carries a `chunk_id`, and that id resolves in Postgres to the full text plus its
-position in the parent document.
-
-The row *shape* is decided here; the SQL is `db.repositories.chunks`.
-"""
+"""Build chunk rows and write them to Postgres, the source of truth for chunk text."""
 
 import logging
 

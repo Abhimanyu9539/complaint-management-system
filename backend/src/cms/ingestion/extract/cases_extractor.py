@@ -1,10 +1,4 @@
-﻿"""Extract historical resolved complaints through LangChain loaders.
-
-The source corpus is a JSON array, so JSONLoader emits one LangChain Document
-per case. Structured fields are copied into Document.metadata; the seed runner
-then projects that metadata back into the existing database record shape.
-Reading a case row remains a table access in db.repositories.cases.
-"""
+"""Extract resolved cases from the seed JSON with LangChain's `JSONLoader`, one Document per case."""
 
 import logging
 from pathlib import Path

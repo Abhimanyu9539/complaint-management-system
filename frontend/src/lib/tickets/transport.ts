@@ -8,7 +8,7 @@
  * rejects with a message saying the form is not connected, rather than
  * pretending to succeed.
  *
- * Contract: `POST /api/v1/tickets` → 201. See `backend/docs/admin-api.md` §10.
+ * Contract: `POST /api/v1/tickets` → 201 (`CreateTicketRequest` in `cms/schemas/tickets.py`).
  */
 
 import type { CreateTicketRequest, TicketCreated } from './types';

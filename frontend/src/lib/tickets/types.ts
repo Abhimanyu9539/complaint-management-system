@@ -11,7 +11,7 @@
  * as `lib/chat` and `lib/admin` already do.
  */
 
-/** `tickets.status` (migration 0004). The lifecycle in lld.md §2. */
+/** `tickets.status` (migration 0004). The lifecycle is `ticket_service.ALLOWED`. */
 export type TicketStatus =
   | 'new'
   | 'processing'
@@ -35,7 +35,7 @@ export type CustomerSeverity = 'low' | 'normal' | 'high';
 export type TicketSource = 'email' | 'web' | 'agent';
 
 /**
- * Path A or Path B (cms.md §1.2). Null until the ticket is resolved, and that
+ * Path A (direct) or Path B (escalated). Null until the ticket is resolved, and that
  * null means "not yet decided" rather than "direct" — the escalation rate is
  * computed only over non-null values.
  */

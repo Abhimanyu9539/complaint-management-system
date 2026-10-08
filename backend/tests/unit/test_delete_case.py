@@ -3,7 +3,12 @@ import pytest
 from cms.cli import delete_case
 
 TICKET = {"id": "t1", "ticket_no": 14}
-FLYWHEEL_CASE = {"id": "c1", "title": "T-14 — warranty / faulty_product", "source": "flywheel", "status": "indexed"}
+FLYWHEEL_CASE = {
+    "id": "c1",
+    "title": "T-14 — warranty / faulty_product",
+    "source": "flywheel",
+    "status": "indexed",
+}
 
 
 def _install(monkeypatch, case=FLYWHEEL_CASE) -> list:

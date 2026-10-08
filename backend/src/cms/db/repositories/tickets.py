@@ -1,12 +1,6 @@
-"""Every read and write of the `tickets` table.
+"""Reads and writes of `tickets`. Whether a status change is legal is `ticket_service`'s call.
 
-A ticket is one customer complaint and its lifecycle. The state machine that
-governs which status may follow which lives in `services/ticket_service.py` —
-this module moves rows and does not decide whether a move is legal.
-
-`resolution_path` is the column the escalation-rate metric reads (lld.md:257).
-It is null until the ticket is resolved, and that null is meaningful: it means
-"not yet decided", not "direct". Every read here preserves it.
+A null `resolution_path` means "not resolved yet", not "direct".
 """
 
 import asyncio
@@ -118,7 +112,7 @@ async def fetch_ticket_by_no(ticket_no: int) -> dict:
 async def update_ticket(ticket_id: str, patch: dict) -> dict:
     """Apply a partial update and return the updated row.
 
-    No status validation here on purpose — `ticket_service.transition` owns the
+    No status validation here on purpose — `ticket_service.assert_transition` owns the
     state machine, and duplicating the rules in the repository is how the two
     copies drift apart.
     """

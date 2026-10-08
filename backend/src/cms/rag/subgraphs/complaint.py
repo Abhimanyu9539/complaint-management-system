@@ -1,15 +1,7 @@
-"""Complaint lane: resolve one customer's complaint from policy and past cases.
+"""Complaint lane: help an agent resolve a customer's complaint.
 
-    START -> retrieve_policies -+
-    START -> retrieve_cases ----+-> join_retrieval -+-> no_match -> END
-                                                    +-> generate -> output_guard -+-> END           (grounded)
-                                                           ^                      +-> generate      (ungrounded, first time)
-                                                           |______________________|
-                                                                                  +-> add_caveat -> END  (still ungrounded)
-
-Both retrievals run in parallel; join_retrieval waits for both, so generate gets
-policy and case hits. Compiled with `checkpointer=False`: the parent graph stores
-the turn, and a lane checkpoint would persist the retrieved chunks record_turn clears.
+Policies and cases are retrieved in parallel → generate → output_guard, with one retry, then a caveat if it
+still fails. No policy match goes to no_match. Compiled with `checkpointer=False`: the parent stores the turn.
 """
 
 import logging

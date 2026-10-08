@@ -1,9 +1,4 @@
-"""Every read and write of the `ingestion_jobs` table.
-
-A job row is the audit trail for one ingest attempt: when it started, what it
-produced, and — if it broke — what the error was. Separate from the document's
-own `status` because a document has one current state but many attempts.
-"""
+"""Reads and writes of `ingestion_jobs`: one row per ingest attempt, with its result or its error."""
 
 import asyncio
 import logging

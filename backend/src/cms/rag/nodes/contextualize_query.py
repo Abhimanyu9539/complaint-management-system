@@ -47,7 +47,7 @@ async def contextualize_query(state: GraphState) -> dict:
     try:
         standalone = await contextualize_query_core(query, conversation)
     except Exception:
-        logger.warning("contextualize_query: rewrite failed, using the message as typed")
+        logger.warning("contextualize_query: rewrite failed, using the message as typed", exc_info=True)
         return {"user_message": query}
 
     logger.info("contextualize_query: %r -> %r", query, standalone)

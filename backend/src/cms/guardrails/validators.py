@@ -1,7 +1,6 @@
 """Custom Guardrails AI validators: credential masking and the draft's grounding checks.
 
-Failure messages are written as instructions, because the output guard feeds them
-back to the model when it regenerates a draft.
+Failure messages are instructions: they are fed back to the model when it revises a draft.
 """
 
 import re

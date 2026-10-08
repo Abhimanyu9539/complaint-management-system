@@ -151,7 +151,9 @@ async def test_a_summary_with_an_unsupported_figure_falls_back_to_the_reply(monk
     await case_minting.mint_case("t1")
 
     [row] = calls["upserts"]
-    assert row["resolution_text"] == "Dear <PERSON>, we will replace the kettle from order <ORDER_NO> at no cost."
+    assert row["resolution_text"] == (
+        "Dear <PERSON>, we will replace the kettle from order <ORDER_NO> at no cost."
+    )
     [(_event, payload)] = calls["events"]
     assert payload["fallback"] is True
 

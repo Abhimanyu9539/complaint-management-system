@@ -1,8 +1,14 @@
+"""Liveness (`/health`) and a dependency check (`/health/deps`) for Supabase and Qdrant."""
+
+import logging
+
 import httpx
 from fastapi import APIRouter
 from qdrant_client import AsyncQdrantClient
 
 from cms.config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
@@ -28,6 +34,7 @@ async def health_deps() -> dict:
             resp.raise_for_status()
         results["supabase"] = "ok"
     except Exception as exc:
+        logger.warning("health: the Supabase check failed", exc_info=True)
         results["supabase"] = f"error: {exc}"
 
     try:
@@ -41,6 +48,7 @@ async def health_deps() -> dict:
             await qdrant.close()
         results["qdrant"] = "ok"
     except Exception as exc:
+        logger.warning("health: the Qdrant check failed", exc_info=True)
         results["qdrant"] = f"error: {exc}"
 
     overall = "ok" if all(v == "ok" for v in results.values()) else "degraded"

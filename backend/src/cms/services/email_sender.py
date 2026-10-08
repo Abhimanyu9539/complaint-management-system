@@ -46,8 +46,8 @@ def _send(message: EmailMessage) -> None:
 async def send_email(to: str, subject: str, body: str) -> str:
     """Send `body` to `to` and return the Message-ID. Raises `EmailSendError` on any failure.
 
-    Until the API has a login, only a local SMTP server is allowed: an open send
-    endpoint pointed at a real mail server would mail anyone on request.
+    Only a local SMTP server (Mailpit) is allowed until `EMAIL_REAL_DELIVERY_ENABLED` is set,
+    so a development machine opts in before mail can reach real people.
     """
     settings = get_settings()
     if not settings.email_real_delivery_enabled and settings.smtp_host not in settings.local_smtp_hosts:

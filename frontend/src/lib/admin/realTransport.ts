@@ -1,6 +1,5 @@
 /**
- * Live admin transport. Every `AdminTransport` method hits a real route —
- * see `backend/docs/admin-api.md` for the endpoint each one calls.
+ * Live admin transport. Every `AdminTransport` method hits a real route.
  *
  * Error handling deliberately diverges from `lib/chat/realTransport.ts`. Chat
  * swallows failures and returns an empty list, because an empty session list is

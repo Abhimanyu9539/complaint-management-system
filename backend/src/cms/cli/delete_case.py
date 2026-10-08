@@ -1,10 +1,4 @@
-"""CLI entrypoint to remove a ticket's past case from the knowledge base.
-
-    cms-delete-case T-14
-    cms-delete-case 14
-
-Only a flywheel case can be removed this way; seed cases come from the seed corpus.
-"""
+"""Remove a ticket's flywheel case from the knowledge base: `cms-delete-case T-14`. Not for seed cases."""
 
 import argparse
 import asyncio

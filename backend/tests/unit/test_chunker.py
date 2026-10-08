@@ -1,4 +1,4 @@
-﻿from cms.ingestion.transform.chunker import chunk_case, chunk_policy
+from cms.ingestion.transform.chunker import chunk_case, chunk_policy
 
 
 def test_case_chunking_remains_atomic() -> None:

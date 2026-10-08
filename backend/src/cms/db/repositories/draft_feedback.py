@@ -1,7 +1,6 @@
-"""Every read and write of the `draft_feedback` table.
+"""Reads and writes of `draft_feedback`: what an agent did with a draft.
 
-One row per draft, at most (`draft_id` is UNIQUE): what an agent did with it.
-That uniqueness is also what stops one draft being sent twice.
+`draft_id` is UNIQUE, so a draft is only ever sent once.
 """
 
 import logging

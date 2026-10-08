@@ -1,21 +1,4 @@
-"""Request and response contracts for the ticket surface.
-
-`schemas/admin.py` set the pattern for this package and stated one rule it could
-not yet test: "Response models only. Request bodies arrive as query parameters
-today, and there is nothing to model until there is a POST." This module is that
-POST, so the rule extends rather than breaks:
-
-- Request models are named `*Request` and live beside the responses they cause.
-- Everything else from `admin.py` still holds: snake_case matching the wire,
-  `frozen=True`, `Literal[...]` rather than `Enum`, timestamps as raw ISO `str`.
-
-One addition the response-only modules never needed: **every string field on a
-request model is bounded.** `POST /api/v1/tickets` is reachable without
-authentication (see the route module and `backend/docs/admin-api.md` §9), so an
-unbounded TEXT column is an unbounded write. These limits are the only thing
-standing between the form and a multi-megabyte insert, which makes them part of
-the contract rather than defensive decoration.
-"""
+"""Ticket request and response models. Every request string is bounded: `POST /tickets` is public."""
 
 from typing import Literal
 
@@ -205,7 +188,7 @@ class Ticket(_Base):
         description=(
             "Null until resolved, and that null is meaningful: it means 'not yet "
             "decided', not 'direct'. This is the column the escalation-rate "
-            "metric reads (lld.md:257)."
+            "metric reads."
         ),
     )
     created_at: str

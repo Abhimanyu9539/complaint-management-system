@@ -15,7 +15,7 @@ from what the team actually did.
 Agents also get a chat assistant built on the same retrieval stack. It answers questions like
 *"what's our replacement window for a defective unit?"* or *"have we seen this error code before?"*
 
-The seed corpus models an Indian D2C e-commerce brand: 34 policies and 200 resolved cases across 12
+The seed corpus models an Indian D2C e-commerce brand: 34 policies and 20 resolved cases across 12
 departments.
 
 ### At a glance

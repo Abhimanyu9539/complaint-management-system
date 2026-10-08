@@ -50,7 +50,7 @@ async def compact_history(state: GraphState) -> dict:
     try:
         summary = await compact_history_core(state.get("history_summary", ""), format_turns(fold))
     except Exception:
-        logger.warning("compact_history: fold failed, keeping the old summary")
+        logger.warning("compact_history: fold failed, keeping the old summary", exc_info=True)
         return {}
 
     if not summary:

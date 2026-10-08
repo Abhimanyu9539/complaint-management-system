@@ -33,7 +33,7 @@ function statusLabel(status: DocStatus | null): string {
   return status === null ? 'not ingested' : STATUS_LABELS[status];
 }
 
-/** Manual ingestion trigger. Queues a real job — see `backend/docs/admin-api.md` §4. */
+/** Manual ingestion trigger. Queues a real job (`POST /api/v1/admin/ingestion/jobs`). */
 export function TriggerIngestionCard({ onTriggered }: TriggerIngestionCardProps) {
   const [docType, setDocType] = useState<DocType>('case');
   const [mode, setMode] = useState<Mode>('seed');

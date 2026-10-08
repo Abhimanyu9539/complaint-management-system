@@ -1,16 +1,7 @@
-"""Aggregates every v1 route into the one router `main.py` mounts.
+"""Mounts every route: `/health` unversioned for probes, the rest under `/api/v1`.
 
-Business routes carry the `/api/v1` prefix the frontend already calls
-(`/api/v1/chat`), applied here rather than in each route module so a future v2
-is a second router, not an edit to every file.
-
-Health is the deliberate exception: probes and uptime checks point at bare
-`/health`, and versioning an infrastructure endpoint means every probe has to be
-reconfigured the day the API version changes.
-
-Access: `/admin/*` is admins only (applied here, for the whole router). The other
-routers check the signed-in agent per route, because each has a public exception:
-the customer form (`POST /tickets`) and n8n's shared-secret `/emails/inbound`.
+`/admin/*` is admins only. The other routers check the agent per route, because each has a public
+exception: the customer form and n8n's `/emails/inbound`.
 """
 
 from fastapi import APIRouter, Depends

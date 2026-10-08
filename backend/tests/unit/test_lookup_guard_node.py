@@ -11,7 +11,12 @@ CASE_HIT = (
     ),
     0.9,
 )
-STATE = {"query": "refund cases", "draft": "- Duplicate refunded [1].", "policy_hits": [], "case_hits": [CASE_HIT]}
+STATE = {
+    "query": "refund cases",
+    "draft": "- Duplicate refunded [1].",
+    "policy_hits": [],
+    "case_hits": [CASE_HIT],
+}
 
 
 def _install(monkeypatch, gai: GuardResult | Exception, nemo: GuardResult | None = None) -> list[tuple]:

@@ -1,23 +1,8 @@
-"""The ticket graph: one run per ticket, separate from the chat graph.
+"""The ticket graph, one run per ticket: input_guard, then classification and drafting in parallel.
 
-    START -> input_guard -+-> END                                           (blocked)
-                          +-> classify_ticket -> END                        (allowed)
-                          +-> analyze_ticket -+-> retrieve_policies -+
-                                              +-> retrieve_cases ----+-> join_retrieval
-    join_retrieval -> find_precedents -+-> END                     (retrieval failed)
-                                       +-> ticket_no_match -> END  (no policy matched, no dept answer)
-                                       +-> draft_reply
-    draft_reply -+-> END                                  (drafting failed)
-                 +-> ticket_output_guard -+-> END          (grounded, or still not)
-                                          +-> draft_reply  (ungrounded, first time)
-
-It only computes. `services/ticket_pipeline.py` runs it and saves what it
-produced, so status changes stay in `ticket_service`. No checkpointer: every run
-starts from the ticket row, and its results live on the ticket.
-
-A failing classifier, retriever (the case one includes its rerank) or drafter records
-its error in `errors` rather than raising, so the pipeline still saves what the other
-branch produced.
+Drafting: analyze → retrieve policies and cases → find_precedents → draft_reply → guard, with one retry,
+or a holding reply when nothing matches. It only computes; `ticket_pipeline` saves the results. A failing
+node records its error in `errors`, so the other branch's work is still saved.
 """
 
 import logging

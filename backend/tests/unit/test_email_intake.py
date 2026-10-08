@@ -136,7 +136,9 @@ async def test_a_customer_reply_is_recorded_on_the_ticket(monkeypatch) -> None:
         ({"from_address": "warranty@example.com"}, TICKET, "without a ticket reference"),
     ],
 )
-async def test_emails_that_fit_no_case_are_ignored_with_a_reason(monkeypatch, overrides, ticket, reason) -> None:
+async def test_emails_that_fit_no_case_are_ignored_with_a_reason(
+    monkeypatch, overrides, ticket, reason
+) -> None:
     calls = _install(monkeypatch, ticket=ticket)
 
     result, trigger = await email_intake.ingest_email(_email(**overrides))

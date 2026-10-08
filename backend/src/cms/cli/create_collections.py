@@ -1,16 +1,4 @@
-"""CLI entrypoint for creating the Qdrant collections.
-
-The collections' shape and the code that applies it live in
-`cms/retrieval/vector_store/create_qdrant_collections.py`; this file only wires
-a client to it and turns the outcome into an exit code.
-
-Safe to re-run: an existing collection is left untouched and index creation is
-a server-side no-op when the index already matches.
-
-Usage (from anywhere, once the project is installed):
-
-    cms-create-collections
-"""
+"""Create the Qdrant collections (`cms-create-collections`). Safe to re-run."""
 
 import logging
 import sys

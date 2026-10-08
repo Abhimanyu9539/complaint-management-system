@@ -1,10 +1,4 @@
-"""CLI entrypoint for a full re-index after a hyperparameter change.
-
-Edit the knobs in `.env`, run this, then probe with `cms-retrieve`.
-
-    cms-reindex          # recreate the collections at the current dims, re-embed everything
-    cms-reindex --keep   # keep the collections as they are, just re-embed
-"""
+"""Re-index after a setting change: `cms-reindex` recreates the collections, `--keep` only re-embeds."""
 
 import argparse
 import asyncio

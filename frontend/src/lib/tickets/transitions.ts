@@ -1,5 +1,5 @@
 /**
- * The two edges of `ticket_service.ALLOWED` (lld.md §2) the UI can drive.
+ * The two edges of `ticket_service.ALLOWED` the UI can drive.
  *
  * Mirrored from the backend so a button disables instead of offering an action
  * that will come back 409. The backend is still the authority — this is the

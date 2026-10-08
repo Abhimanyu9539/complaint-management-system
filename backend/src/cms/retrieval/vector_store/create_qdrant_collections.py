@@ -1,40 +1,7 @@
-"""The shape of the two Qdrant collections, and the code that creates it.
+"""The shape of the two Qdrant collections, and the code that creates them.
 
-The vector index is derived, rebuildable state (build.md §0.5) — but its *shape*
-is schema, so it is declared here and applied by a versioned entrypoint rather
-than by dashboard clicks, exactly like the SQL migrations in
-supabase/migrations/.
-
-Cases and policies are separate corpora — separate Postgres tables, separate
-write permissions, separate chunking — and that separation carries through to
-retrieval as two collections rather than one collection filtered by a `doc_type`
-field. The collection itself is the discriminator, so `doc_type` is not a
-payload field in either collection.
-
-Everything that touches vectors imports its vector names and indexed fields from
-here, so the collections that get *created* and the collections that get
-*written to* can never drift apart.
-
-Payload layout
---------------
-Writes and reads go through ``langchain_qdrant.QdrantVectorStore``, which
-hardcodes its payload shape: chunk text under ``page_content``, all metadata
-nested under a single ``metadata`` key. There is no flat-metadata option
-(``metadata_payload_key`` renames the wrapper, it cannot remove it)::
-
-    {
-      "page_content": "<chunk text>",
-      "metadata": {"doc_id": ..., "department": ..., ...}
-    }
-
-Consequence: every payload filter — and every index below — must use the dotted
-path ``metadata.department``, never ``department``. Qdrant indexes and filters
-nested paths natively, so this costs nothing at retrieval time, but a filter
-written against the flat name silently matches zero points.
-
-Takes its `QdrantClient` as an argument rather than importing one, so this
-module stays a leaf: `qdrant_store` imports the names below, and a cycle would
-form the moment this file imported back.
+LangChain nests all metadata under `metadata`, so every payload index and filter uses `metadata.<field>`;
+a filter on the bare name silently matches nothing.
 """
 
 import logging
@@ -46,9 +13,8 @@ from cms.config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
-# Named vectors, per build.md §0.4. LangChain's defaults ("" and
-# "langchain-sparse") are accepted as constructor args, so we keep the clearer
-# names rather than inheriting them.
+# Named vectors. LangChain's defaults ("" and "langchain-sparse") can be overridden,
+# so the clearer names are used.
 DENSE_VECTOR_NAME = "dense"
 SPARSE_VECTOR_NAME = "sparse"
 

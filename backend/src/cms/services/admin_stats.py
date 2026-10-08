@@ -1,16 +1,4 @@
-"""Assembles the admin panel's read models from the repositories.
-
-This module exists so the route handlers stay four lines each and so the
-"nothing above `db/repositories` names a column" rule survives contact with an
-endpoint that has to join three tables.
-
-How that rule is honoured here: repositories return raw dicts (the existing
-precedent — `ingestion/pipeline.py` already reads `case["status"]`), and the
-private `_to_*` adapters below are the *only* place those dict keys are read.
-They immediately produce Pydantic models, so nothing downstream of an adapter
-ever touches a string key. Filtering, ordering and pagination are expressed as
-repository *arguments*, never as `.eq()` / `.order()` calls in this file.
-"""
+"""Builds the admin panel's read models. The `_to_*` adapters are the only readers of repository dict keys."""
 
 import asyncio
 import logging
@@ -68,7 +56,7 @@ BYTES_PER_DIMENSION = 4
 
 
 def _duration_ms(row: dict) -> int | None:
-    """finished_at − started_at in milliseconds, or None if either is missing.
+    """finished_at - started_at in milliseconds, or None if either is missing.
 
     A job can carry `finished_at` without `started_at` if it failed before being
     claimed, so both are checked rather than assuming the pair.
@@ -488,9 +476,8 @@ def _escalation_rate(direct: int, escalated: int) -> float | None:
 async def build_escalation_summary(days: int) -> EscalationSummaryResponse:
     """The escalation metric: rate, funnel, trend and per-department split.
 
-    cms.md §2 calls this the north star — "the % of complaints where retrieval +
-    draft was not enough and a department had to be contacted. Every improvement
-    should push it down." lld.md:257 names the column it reads.
+    The north star: the share of complaints where the retrieved sources and the draft
+    were not enough and a department had to be contacted. It reads `resolution_path`.
 
     All seven reads are independent, so this panel costs one wave rather than
     seven sequential round-trips.

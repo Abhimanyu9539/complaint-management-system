@@ -1,11 +1,4 @@
-"""CLI entrypoint for running the ticket graph on stored tickets and saving the result.
-
-Usage (from anywhere, once the project is installed):
-
-    cms-triage 3f2c...-ticket-uuid
-    cms-triage --unclassified        # backfill every ticket with no predicted_dept
-    cms-triage --new                 # re-run every ticket still at `new` (before the gate existed)
-"""
+"""Re-run the ticket graph on stored tickets: `cms-triage <ticket-id> | --unclassified | --new`."""
 
 import argparse
 import asyncio

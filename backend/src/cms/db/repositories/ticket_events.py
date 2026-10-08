@@ -1,13 +1,6 @@
-"""Every read and write of the `ticket_events` table.
+"""Reads and writes of `ticket_events`, an append-only audit log. Never add an update or delete helper.
 
-An append-only audit log: who did what to a ticket, and when. There is
-deliberately no update or delete helper, and none should be added — migration
-0016 withholds the UPDATE and DELETE policies for exactly that reason, and its
-comment says so outright: "Do not 'fix' this by adding one."
-
-The `event` column is free TEXT with no CHECK. The vocabulary lives in 0016's
-comment and is mirrored by `EVENTS` below so callers have one spelling to use
-rather than a string literal per call site.
+`EVENTS` below is the event vocabulary; the column itself has no CHECK.
 """
 
 import logging

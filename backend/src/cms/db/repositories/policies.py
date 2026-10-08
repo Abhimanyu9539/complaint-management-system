@@ -1,10 +1,4 @@
-"""Every read and write of the `policies` table.
-
-Deliberately a near-mirror of `cases.py` rather than a shared parameterised
-module: the two corpora differ in the columns that matter (`lifecycle` here,
-`category` there) and are expected to keep diverging — policies gain review and
-publication state, cases do not.
-"""
+"""Reads and writes of `policies`. A near-mirror of `cases.py`; the two are expected to diverge."""
 
 import asyncio
 import logging

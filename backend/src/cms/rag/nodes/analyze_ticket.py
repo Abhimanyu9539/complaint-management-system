@@ -22,7 +22,9 @@ async def analyze_ticket(state: TicketState) -> dict:
     try:
         analysis = await analyze_query_core(query)
     except Exception:
-        logger.warning("analyze_ticket: analysis failed, searching with the original text only")
+        logger.warning(
+            "analyze_ticket: analysis failed, searching with the original text only", exc_info=True
+        )
         return {"policy_queries": [query], "risk_flags": []}
 
     return {

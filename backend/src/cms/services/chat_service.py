@@ -1,22 +1,7 @@
-"""Runs the RAG graph for one chat turn and yields it to the browser as SSE events.
+"""Run the chat graph for one turn and stream it as SSE: `token`* → `citations` → `done`, or `error`.
 
-Two things make this more than a loop over `astream`:
-
-1. `output_guard` can send an ungrounded draft back to `generate`, so a second
-   draft streams right after the first. The browser appends every token it is
-   given, so it is told to drop the first one with a `reset` event.
-2. `blocked_input`, `no_match` and `add_caveat` set `draft` with no LLM call, so
-   nothing streams for them at all — and `add_caveat` prefixes a draft that did.
-   The final state is therefore the authority, and the stream is reconciled
-   against it before `citations` goes out.
-
-The answer nodes live inside the lane subgraphs, and LangGraph drops a subgraph's
-messages unless `astream` gets `subgraphs=True` — so events arrive as
-`(namespace, mode, payload)`, and only the parent's `values` (empty namespace) is
-the final state.
-
-`session_messages` is the other half: the same conversation read back out of the
-checkpointer when the browser reopens it.
+A `reset` event drops the tokens already sent, when the guard makes generate run again or a node replaces
+the streamed answer. `session_messages` reads a conversation back from the checkpointer.
 """
 
 import json

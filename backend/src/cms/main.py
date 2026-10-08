@@ -1,10 +1,4 @@
-"""FastAPI app factory.
-
-The project is installed (`uv sync` gives you an editable install), so this is
-importable and runnable from any working directory:
-
-    uv run uvicorn cms.main:app --reload
-"""
+"""FastAPI app factory. Run with `uv run uvicorn cms.main:app --reload`."""
 
 import logging
 

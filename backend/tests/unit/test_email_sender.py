@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import pytest
 
 from cms.config.settings import get_settings
@@ -7,7 +9,7 @@ from cms.services import email_sender
 class _FakeSMTP:
     """Stands in for `smtplib.SMTP`: records the host and every message sent."""
 
-    sent: list = []
+    sent: ClassVar[list] = []
 
     def __init__(self, host, port, timeout=None) -> None:
         self.host = host

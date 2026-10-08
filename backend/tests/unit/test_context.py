@@ -171,7 +171,9 @@ def test_department_guidance_is_cited_first_and_keeps_its_type() -> None:
 
     policy_context, _, citations = build_generation_context([answer, _hit("c1")], [_hit("k1")])
 
-    assert policy_context.startswith("[1] Department guidance — Warranty\nDepartment guidance\nReplace the unit.")
+    assert policy_context.startswith(
+        "[1] Department guidance — Warranty\nDepartment guidance\nReplace the unit."
+    )
     assert [(c.marker, c.doc_type) for c in citations] == [(1, "guidance"), (2, "policy"), (3, "case")]
     assert citations[0].section == "Department guidance"
     assert citations[0].snippet == "Replace the unit."

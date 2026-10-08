@@ -165,7 +165,12 @@ async def test_analyze_ticket_failure_falls_back_to_the_original_text(monkeypatc
 ANSWER = (
     Document(
         page_content="Department guidance\nReplace the unit.",
-        metadata={"doc_id": "r1", "chunk_id": "r1", "title": "Department guidance — Warranty", "doc_type": "guidance"},
+        metadata={
+            "doc_id": "r1",
+            "chunk_id": "r1",
+            "title": "Department guidance — Warranty",
+            "doc_type": "guidance",
+        },
     ),
     1.0,
 )

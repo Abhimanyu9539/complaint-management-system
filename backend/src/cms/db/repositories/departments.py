@@ -1,10 +1,4 @@
-"""Reads of the `departments` table.
-
-A small reference table seeded by migration 0003 with the twelve routing
-targets. Read-only from the application's side — departments change through a
-migration, not through the API, because the classifier and the retrieval filters
-are both written against this exact set.
-"""
+"""Reads of `departments`: the twelve routing targets, seeded by migration 0003."""
 
 import logging
 

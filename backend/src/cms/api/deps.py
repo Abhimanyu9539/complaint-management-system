@@ -1,8 +1,6 @@
-"""Shared route dependencies: who is calling, and whether they may.
+"""Route dependencies: verify the caller's Supabase JWT and load their active profile.
 
-A caller sends the Supabase access token as `Authorization: Bearer <jwt>`. It is
-verified against the project's public signing keys (fetched once, then cached),
-and the caller must have an active `profiles` row. The token itself is never logged.
+The token itself is never logged.
 """
 
 import asyncio

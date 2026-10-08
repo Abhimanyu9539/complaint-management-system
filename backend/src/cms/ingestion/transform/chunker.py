@@ -1,11 +1,6 @@
-"""The two chunking strategies from build.md §0.4.
+"""Chunking: a case is one chunk; a policy is split on headers, then by size.
 
-`case`   — no split. A resolved complaint is semantically atomic: separating a
-           resolution from the complaint it resolves destroys the retrieval
-           unit, because neither half answers "how was this handled?" alone.
-`policy` — header-aware split, then a size split. Policies are long-form and
-           cited by clause ("per warranty §2.3"), so each chunk carries its
-           heading breadcrumb and stays small enough to be precise.
+Each policy chunk carries its heading breadcrumb, so it can be cited by clause.
 """
 
 import logging
@@ -55,7 +50,7 @@ def chunk_policy(text: str) -> list[str]:
     Manufacturing Defects > 2.3 …" tells the agent which clause they are
     quoting.
 
-    Size and overlap come from settings (~800/100, build.md §0.4) — they are the
+    Size and overlap come from settings (~800/100) — they are the
     tunable half of the strategy, and `Settings.policy_recipe` folds them into
     the ingest key so changing them actually re-ingests. `POLICY_HEADERS` stays
     here: it is structural, not tunable, and a list of tuples is a poor env var.

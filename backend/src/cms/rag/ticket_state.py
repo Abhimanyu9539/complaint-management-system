@@ -1,7 +1,6 @@
-"""`TicketState`: what the ticket graph carries for one ticket run.
+"""`TicketState`: what one ticket-graph run carries.
 
-Key names match `GraphState` where the meaning is the same, so shared nodes
-such as `input_guard` and the retrieval nodes run on either graph unchanged.
+Keys match `GraphState`, so shared nodes run on either graph.
 """
 
 import operator

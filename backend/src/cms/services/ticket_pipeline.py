@@ -1,15 +1,6 @@
-"""Run the ticket graph for one ticket and save what it produced.
+"""Run the ticket graph for one ticket, save the classification and the draft, then gate it.
 
-Runs as a background task after a ticket is created, so it never raises: a
-failure is logged and written as a `failed` event, and the ticket stays visible
-for a person to handle. The classification and the draft are saved separately,
-so one failing never loses the other.
-
-The ticket moves `processing` → `drafted` | `needs_review` | `processing_failed`;
-`ticket_gate.review_reasons` decides between the first two. A ticket a department
-has answered is drafted from that answer too, and goes back to `dept_responded`.
-A draft citing a similar past case's department answer gets a review reason.
-Every graph run is recorded in `agent_runs` for the admin's activity page.
+A background task, so it never raises: failures become `failed` events. Every run is saved to `agent_runs`.
 """
 
 import logging
@@ -102,19 +93,19 @@ def evidence_rows(
             "snippet": citation.snippet,
             "cited": citation.marker in cited_markers,
         }
-        for citation, (document, _score) in zip(offered_guidance, guidance_hits)
+        for citation, (document, _score) in zip(offered_guidance, guidance_hits, strict=False)
     ]
 
     policy_refs = [
         {**_evidence_row(citation, score, cited_markers, "policy_id"), "section": citation.section}
-        for citation, (_document, score) in zip(offered_policies, policy_hits)
+        for citation, (_document, score) in zip(offered_policies, policy_hits, strict=False)
     ]
     retrieved_cases = [
         {
             **_evidence_row(citation, score, cited_markers, "case_id"),
             "resolution": case_resolution(document.page_content),
         }
-        for citation, (document, score) in zip(offered_cases, case_hits)
+        for citation, (document, score) in zip(offered_cases, case_hits, strict=False)
     ]
     return retrieved_cases, policy_refs, guidance_refs
 

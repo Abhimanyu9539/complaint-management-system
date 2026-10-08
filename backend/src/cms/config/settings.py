@@ -239,8 +239,8 @@ class Settings(BaseSettings):
     ]
     # Credentials Presidio has no recognizer for: an OTP, UPI PIN or CVV and its digits.
     credential_pattern: str = r"(?i)\b(?:otp|one[- ]time password|upi pin|cvv)\b\D{0,15}\d{3,8}\b"
-    # No match when the best reranked policy chunk scores below this (lld.md
-    # NO_MATCH_THRESHOLD). Reranked hits only — RRF scores are on another scale.
+    # No match when the best reranked policy chunk scores below this.
+    # Reranked hits only — RRF scores are on another scale.
     # 0.50 measured on the 30 eval goldens: lowest golden best score 0.539;
     # clearly off-topic complaints topped out at 0.47-0.50.
     policy_relevance_threshold: float = 0.50
@@ -342,10 +342,7 @@ class Settings(BaseSettings):
     )
 
     # --- Mongo / chat memory ---
-    # Mongo backs the LangGraph checkpointer, which is where a conversation is
-    # stored. Supabase cannot hold it yet: `chat_sessions` and `messages` are
-    # RLS'd to `auth.uid()` and this API holds the service-role key. Mongo has
-    # no RLS, so the transcript lands here until auth arrives.
+    # Mongo backs the LangGraph checkpointer, which is where a conversation is stored.
     # 27018 is the compose file's host port — see the note there about a native
     # mongod shadowing 27017.
     mongo_url: str = "mongodb://localhost:27018"

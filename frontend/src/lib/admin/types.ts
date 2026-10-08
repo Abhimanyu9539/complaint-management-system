@@ -1,9 +1,8 @@
 /**
  * Domain types and the transport contract for the admin panel.
  *
- * These shapes are normative. `backend/docs/admin-api.md` documents the wire
- * format they correspond to and which endpoints are live versus contract-only;
- * changing anything here means changing that document in the same commit.
+ * These shapes mirror the backend's response models in `cms/schemas/admin.py`;
+ * change both together.
  *
  * Casing follows the existing frontend convention: wire payloads are snake_case
  * and are mapped to camelCase view models at the transport boundary
@@ -303,7 +302,7 @@ export interface AgentSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Escalation — the north-star metric (cms.md §2, §5)
+// Escalation — the north-star metric
 // ---------------------------------------------------------------------------
 
 export interface DepartmentOption {
@@ -417,7 +416,7 @@ export interface TriggerIngestionResponse {
  * A picker entry for "ingest one document". Deliberately minimal.
  *
  * Lists the on-disk seed corpus, not the `cases`/`policies` tables — a
- * partially seeded corpus otherwise looks complete (see `backend/docs/admin-api.md` §3).
+ * partially seeded corpus would otherwise look complete.
  */
 export interface DocumentOption {
   /** The seed corpus's natural key (a policy filename or a case id), not a Postgres id. */
@@ -435,7 +434,7 @@ export interface DocumentOption {
 /**
  * The admin data surface. Real-only — see `AdminResult`. Every method here has
  * a route behind it; `ApiUsageSummary` above is kept as the contract for the
- * API-usage counter once it exists (see `backend/docs/admin-api.md` §7), but has
+ * API-usage counter once it exists, but has
  * no transport method until a backend does.
  */
 export interface AdminTransport {
@@ -475,8 +474,7 @@ export interface AdminTransport {
 
   /**
    * LIVE. Queues a job row and returns immediately (202 semantics) — the
-   * embedding run happens in a background task, not inline. See
-   * `backend/docs/admin-api.md` §4.
+   * embedding run happens in a background task, not inline.
    */
   triggerIngestion(
     req: TriggerIngestionRequest,

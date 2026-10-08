@@ -1,14 +1,4 @@
-"""Recover a document's raw text from an id alone, for the admin retry route.
-
-`pipeline.ingest_case`/`ingest_policy` take `(id, raw_text)` because `seed.py`
-already holds the text it just read off disk when it calls them. `retry_job`
-(`services/admin_ingest.py`) only has a job's Postgres row id — this module is
-the missing extraction step for that one path. The sibling trigger path
-(`mode="document"`) never needs this: it names a seed-corpus file by
-`source_ref` and reads it straight off disk via `seed.register_seed_*`.
-`seed.py` never calls this module and never will: it always has the text for
-free.
-"""
+"""Recover a document's raw text from its id alone, for the admin retry and re-run routes."""
 
 import logging
 

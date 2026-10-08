@@ -162,7 +162,10 @@ async def test_blocked_ticket_goes_no_further(monkeypatch) -> None:
 
 async def test_no_match_with_a_department_answer_is_drafted(monkeypatch) -> None:
     ran = _install_nodes(monkeypatch, no_match=True)
-    answer = (Document(page_content="Department guidance\nReplace it.", metadata={"doc_type": "guidance"}), 1.0)
+    answer = (
+        Document(page_content="Department guidance\nReplace it.", metadata={"doc_type": "guidance"}),
+        1.0,
+    )
 
     state = await ticket_graph_module.build_ticket_graph().ainvoke(
         {"ticket_id": "t1", "ticket_no": 1042, "query": "X200 won't charge", "guidance_hits": [answer]}

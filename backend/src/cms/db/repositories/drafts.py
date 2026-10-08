@@ -1,9 +1,4 @@
-"""Every read and write of the `drafts` table.
-
-A draft is one generated reply for a ticket, versioned per ticket and kind. Rows
-are only ever added: a re-run writes the next version, and the history of what
-the model wrote stays for failure attribution.
-"""
+"""Reads and writes of `drafts`: replies versioned per ticket and kind. Rows are only ever added."""
 
 import logging
 

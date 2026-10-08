@@ -1,15 +1,6 @@
-"""CLI entrypoint for the standalone policy retrieval probe.
-Usage (from anywhere, once the project is installed):
+"""Probe retrieval: `cms-retrieve "<query>" [--corpus policies|cases] [--mode dense|sparse|hybrid] [-k N]`.
 
-    cms-retrieve "how long is the warranty period on a replacement unit" --corpus policies --mode dense
-    cms-retrieve "refund for a delayed order" -k 8 --json
-    cms-retrieve "CarePlan+" --mode sparse
-    cms-retrieve "my X200 vacuum stopped charging" --corpus cases
-
-Policies are reranked by default (Voyage via OpenRouter). `--no-rerank` gives the
-raw candidate pool, and `--compare` prints both so the rerank can be judged by eye:
-
-    cms-retrieve "how long is the warranty period" --compare
+Policies are reranked by default; `--no-rerank` shows the raw pool and `--compare` shows both.
 """
 
 import argparse

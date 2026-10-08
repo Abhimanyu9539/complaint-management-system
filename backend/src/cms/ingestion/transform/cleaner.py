@@ -1,19 +1,7 @@
-"""Normalization and dedup helpers, shared by both corpora.
+"""Normalisation and hashing for both corpora.
 
-Two hashes, deliberately separate, because they answer different questions:
-
-`compute_content_hash` is a **content address** — it hashes one chunk's text and
-nothing else, which is what makes a re-ingest land on the same Qdrant point ids
-instead of duplicating them. It must never be versioned: folding config into it
-would re-mint every point id for text nobody edited.
-
-`compute_ingest_key` is a **cache key** — it hashes a document's text *and* the
-recipe used to process it, which is what lets an unchanged document short-circuit
-before a single embedding call is made. Changing chunk size or the embedding
-model changes the key, so the corpus it affects re-ingests rather than silently
-skipping.
-
-PII scrubbing belongs here too when it arrives.
+`compute_content_hash` hashes one chunk's text and fixes its point id, so it is never versioned.
+`compute_ingest_key` hashes a document plus its processing recipe, so a recipe change re-ingests.
 """
 
 import hashlib

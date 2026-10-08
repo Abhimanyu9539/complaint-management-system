@@ -14,7 +14,7 @@ interface EscalationPanelProps {
 }
 
 /**
- * The north-star metric (cms.md §2): the share of complaints that retrieval and
+ * The north-star metric: the share of complaints that retrieval and
  * a draft could not settle, where a specialist department had to be brought in.
  *
  * Two things here are deliberate and easy to get wrong on a rewrite:

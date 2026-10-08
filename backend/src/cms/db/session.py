@@ -1,19 +1,6 @@
-"""The database handle, for backend-side writes.
+"""The service-role Supabase client. It bypasses RLS, so it must stay server-side.
 
-This is the Supabase equivalent of a SQLAlchemy session factory: the one place
-that knows how to open a connection, cached so the rest of the codebase asks for
-a client instead of constructing one.
-
-Uses the **service role** key, which bypasses RLS. That is deliberate and
-necessary here: the ingestion pipeline writes chunk rows on behalf of the whole
-org (build.md §0.5, shared KB per D2), so it cannot run under a single user's
-policies. The flip side is that this key must never reach a browser — the API
-layer uses the publishable key + a verified JWT for user-scoped reads.
-
-The client is async: every repository awaits `.execute()`. `AsyncClient` binds
-its httpx connection pool to the event loop that first uses it, so a process
-must drive it from one loop only — uvicorn has one, and each CLI does exactly
-one `asyncio.run`. Never add a second `asyncio.run` to a process.
+It binds to the first event loop that uses it: never add a second `asyncio.run` to a process.
 """
 
 import logging

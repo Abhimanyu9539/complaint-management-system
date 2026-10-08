@@ -1,38 +1,7 @@
-"""Register the on-disk seed corpus in Postgres and run it through the pipeline.
+"""Register the on-disk seed corpus in Postgres and ingest it.
 
-Policy files also get uploaded to Supabase Storage (the private `policy-files`
-bucket created by migration 0018) so `policies.storage_path` is populated and a
-future citation card can link back to the source document. Cases have no file
-on disk to upload — a case is a record of what happened, never something
-someone drags in — so `cases.storage_path` does not exist and this module
-never sets one. `source='seed'` still marks every row here as fixture data
-rather than a user upload.
-
-Storage is written before the Postgres row — the opposite order from
-`pipeline.py`'s Postgres-before-Qdrant rule (see that module's docstring). The
-two rules do not conflict: both mean "never let the source of truth reference
-something that is not there yet," and the direction depends on whether the
-*other* store is discoverable. Qdrant is enumerated by retrieval, so a ghost
-point gets found and cited with nothing in Postgres to explain it — Postgres
-must come first there. Nothing enumerates the Storage bucket, so an orphaned
-object from a failed upsert is simply unreachable, and the next run's
-deterministic `seed/{filename}` key overwrites it in place — whereas a
-Postgres row pointing at an object that was never written would be a live 404
-in a citation card. Storage first is the safer direction for the same reason.
-
-Re-running must update the same 54 rows rather than duplicate them. Both `cases`
-and `policies` have a `source_ref TEXT UNIQUE` column for exactly this: the case
-id (`C-1001`) for cases, the source filename (`warranty-policy.md`) for
-policies. Upserting on `source_ref` makes the whole run idempotent without
-deriving synthetic ids — and the pipeline's own content-hash short-circuit means
-a second run costs zero OpenAI calls. The Storage upload is *not* gated on that
-hash: the hash covers the policy body only (frontmatter is split off first
-below), so a `version:` bump changes the file without changing the hash, and
-gating would mean a run right after applying migration 0018 skips uploading
-every already-indexed policy instead of backfilling them.
-
-This module is the corpus-level runner; `pipeline.py` handles one document.
-`cms/cli/seed.py` is the CLI wrapper around `run_seed`.
+A policy file is uploaded to Storage before its row is written. Rows upsert on `source_ref`, so a re-run
+updates the same rows, and unchanged documents cost no embedding calls.
 """
 
 import logging

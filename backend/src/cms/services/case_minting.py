@@ -1,9 +1,4 @@
-"""The flywheel: a ticket whose reply was sent becomes a past case the drafter can cite.
-
-Runs as a background task after `/send`, so it never raises: a failure is logged
-and written as a `failed` event with `stage: mint_case`. The reply has already
-gone out; only the case is missing.
-"""
+"""The flywheel: a ticket whose reply was sent becomes a past case. A background task, so it never raises."""
 
 import logging
 

@@ -1,18 +1,5 @@
-"""CLI entrypoint for the seed corpus ingest.
-
-The run itself lives in `cms/ingestion/seed.py`; this file only parses arguments
-and turns the summary into an exit code.
-
-Usage (from anywhere, once the project is installed):
-
-    cms-seed --one           # one case, the walking-skeleton gate
-    cms-seed --one-policy    # one policy, the same gate for the policy corpus
-    cms-seed                 # the full corpus
-    cms-seed --force         # the full corpus, ignoring the short-circuit
-
-Where the corpus is read from, and how `.env` is located, are both
-cwd-independent — see `cms.ingestion.seed.resolve_seed_dir` and
-`cms.config.settings`.
+"""Ingest the seed corpus: `cms-seed` (everything), `--one` / `--one-policy` (one document), `--force`
+(re-ingest unchanged documents too).
 """
 
 import argparse

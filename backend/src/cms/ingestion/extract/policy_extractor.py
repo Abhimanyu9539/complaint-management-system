@@ -1,9 +1,4 @@
-﻿"""Extract company policies through LangChain text loaders.
-
-TextLoader owns filesystem decoding and returns a LangChain Document. The
-existing lightweight frontmatter parser remains the normalization boundary:
-metadata goes to the policy row and the body alone goes to chunking/embedding.
-"""
+"""Extract policies with `TextLoader`: frontmatter goes to the policy row, the body to chunking."""
 
 import logging
 from pathlib import Path

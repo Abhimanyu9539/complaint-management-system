@@ -1,9 +1,4 @@
-"""The response body of OpenRouter's `/rerank` endpoint.
-
-`extra="ignore"` throughout: OpenRouter echoes `document` back when
-`return_documents` is set and is free to add fields, none of which we read —
-the candidates are already in hand, and `index` maps a result to its original.
-"""
+"""The response body of OpenRouter's `/rerank`. Extra fields are ignored."""
 
 from pydantic import BaseModel, ConfigDict, Field
 

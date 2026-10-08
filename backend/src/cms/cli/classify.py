@@ -1,10 +1,4 @@
-"""CLI entrypoint for the standalone `classify_ticket` probe.
-
-Usage (from anywhere, once the project is installed):
-
-    cms-classify "X200 stopped charging" "My X200 stopped charging after 3 months..."
-    cms-classify "Charged twice" "Two charges of 249 for order #6120" --json
-"""
+"""Probe `classify_ticket` on one ticket: `cms-classify "<subject>" "<body>" [--json]`."""
 
 import argparse
 import asyncio

@@ -1,9 +1,4 @@
-"""Session memory: what the model sees of the earlier conversation.
-
-A running summary of the folded turns, plus every turn not yet in it.
-`chat_history` itself is never trimmed — the UI replays it — so the summary's
-reach is tracked by `summarized_count` instead. No LLM call, no I/O.
-"""
+"""Session memory: a running summary of the folded turns, plus every turn not yet in it. No LLM call."""
 
 import logging
 import re

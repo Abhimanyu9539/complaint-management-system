@@ -1,13 +1,7 @@
-"""Embed chunk rows and upsert them into Qdrant, then clean up what they replaced.
+"""Embed chunk rows and upsert them into Qdrant, then delete the points they replaced.
 
-Point ids are deterministic — `uuid5(namespace, "doc_id:index:chunk_hash")` —
-which is idempotency layer 3: re-ingesting unchanged content overwrites the same
-points instead of duplicating them.
-
-The flip side of putting the chunk hash in the id is that *edited* text produces
-a *new* id, so the point holding the old text would linger and stay retrievable.
-That is why callers snapshot `existing_point_ids` before the upsert and pass the
-difference to `delete_stale_points` after it.
+Point ids come from the document id, chunk index and chunk hash: unchanged text overwrites its own point,
+edited text gets a new one, and callers pass the old ids to `delete_stale_points`.
 """
 
 import logging
@@ -32,7 +26,7 @@ _SCROLL_PAGE = 256
 
 
 def build_point_id(document_id: str, chunk_index: int, chunk_hash: str) -> str:
-    """Deterministic point id per build.md §0.4: uuid5(doc_id, index, hash)."""
+    """Deterministic point id: uuid5(doc_id, index, hash)."""
     return str(uuid.uuid5(POINT_ID_NAMESPACE, f"{document_id}:{chunk_index}:{chunk_hash}"))
 
 
@@ -79,8 +73,7 @@ async def upsert_points(
     `ingestion.transform.enricher`; this function adds the per-chunk ones.
 
     `add_documents` batches the embedding calls internally, so a document costs
-    one OpenAI round-trip rather than one per chunk — the silent cost/latency
-    trap called out in steps.md §4.
+    one embeddings round-trip rather than one per chunk.
 
     Called as `aadd_documents`: `QdrantVectorStore` implements no async methods,
     so this is the LangChain base class's thread offload. That is the point —

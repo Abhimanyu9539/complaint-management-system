@@ -1,9 +1,4 @@
-"""Retrieved chunks -> one numbered context block plus the citations for it.
-
-The augmentation half of RAG. No LLM call, no I/O — given the same hits it
-returns the same string, so it is cheap to test and cheap to eyeball
-(`cms-graph ... --context`).
-"""
+"""Retrieved chunks → one numbered context block plus its citations. No LLM call and no I/O."""
 
 import logging
 import re

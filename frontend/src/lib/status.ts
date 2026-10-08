@@ -316,7 +316,7 @@ export function severityLabel(severity: TicketSeverity): string {
   return SEVERITY_LABELS[severity] ?? severity;
 }
 
-/** Path A / Path B (cms.md §1.2), coloured to match the `escalated` / `resolved` statuses. */
+/** Path A (direct) / Path B (escalated), coloured to match the `escalated` / `resolved` statuses. */
 export function resolutionPathTone(path: ResolutionPath): Tone {
   return path === 'escalated' ? 'danger' : 'ok';
 }

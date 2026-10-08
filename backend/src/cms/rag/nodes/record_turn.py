@@ -1,8 +1,4 @@
-"""Terminal node: append the finished turn to `chat_history` so the checkpointer stores it.
-
-Runs on every path out of the graph, including the blocked and no-match ones —
-whatever the user saw is what gets stored.
-"""
+"""Last node on every path: append the turn to `chat_history`, so the checkpointer stores it."""
 
 import logging
 import uuid

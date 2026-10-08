@@ -1,21 +1,6 @@
-"""Runtime access to Qdrant: the client, the sparse embedder, and the stores.
+"""Runtime access to Qdrant: the clients, the BM25 sparse embedder and the vector stores.
 
-This module is about *reaching* the collections. Their shape — vector names,
-payload fields, and the code that creates them — lives in
-`create_qdrant_collections.py`, and the names below are imported from there so
-reads and writes can never drift from what was created.
-
-Every payload filter must use the dotted path `metadata.department`, never
-`department`: LangChain nests all metadata under a `metadata` key. See
-`create_qdrant_collections.py` for the full explanation.
-
-BM25 IDF is computed per collection, so the sparse half of a hybrid score is
-calibrated against whichever corpus it came from. Scores from the `cases` and
-`policies` collections are therefore not comparable — merge results with RRF,
-or take a fixed top-k from each, rather than sorting a combined list by raw
-score. Reranked results are the exception: a cross-encoder scores the query and
-chunk together, so `cms.retrieval.rerank` scores *are* comparable across
-collections.
+BM25 IDF is per collection, so raw case and policy scores are not comparable; reranked scores are.
 """
 
 import logging
@@ -205,7 +190,7 @@ def get_vector_store(
     vector_loader`), which needs both vectors produced together, is unaffected
     by this parameter's addition.
 
-    Requires the collection to exist — run scripts/create_qdrant_collection.py first.
+    Requires the collection to exist — run `cms-create-collections` first.
     """
     try:
         store = QdrantVectorStore(
@@ -220,7 +205,7 @@ def get_vector_store(
     except Exception:
         logger.exception(
             "Failed to open vector store for collection '%s' in mode %s — "
-            "run scripts/create_qdrant_collection.py if it does not exist yet",
+            "run `cms-create-collections` if it does not exist yet",
             collection_name,
             mode,
         )
