@@ -76,6 +76,16 @@ def get_async_qdrant_client() -> AsyncQdrantClient:
     return client
 
 
+async def close_qdrant_clients() -> None:
+    """Close whichever of the two Qdrant clients were built."""
+    if get_async_qdrant_client.cache_info().currsize:
+        await get_async_qdrant_client().close()
+        logger.info("Async Qdrant client closed")
+    if get_qdrant_client.cache_info().currsize:
+        get_qdrant_client().close()
+        logger.info("Qdrant client closed")
+
+
 @lru_cache
 def get_sparse_embeddings() -> FastEmbedSparse:
     """Local BM25 sparse embeddings.

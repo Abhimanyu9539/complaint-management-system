@@ -451,7 +451,10 @@ class Settings(BaseSettings):
     # --- Seed corpus ---
     seed_data_dir: Path | None = None
 
-    # --- Health checks ---
+    # --- Startup and health checks ---
+    # Loads spaCy (the Presidio guards) and BM25 before the port opens; a failure stops startup.
+    # Off, they load on the first request that needs them — set it off for a fast `--reload`.
+    warm_up_on_startup: bool = True
     # Cap on each dependency check. A load balancer's probe usually gives up at about 5s.
     health_check_timeout_seconds: float = 3.0
     # What `/health/ready` checks; any of them down is a 503. Mongo, OpenRouter and SMTP are

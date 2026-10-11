@@ -35,6 +35,14 @@ def get_mongo_client() -> MongoClient:
     return client
 
 
+async def close_mongo_client() -> None:
+    """Close the Mongo client, if it was built."""
+    if get_mongo_client.cache_info().currsize == 0:
+        return
+    get_mongo_client().close()
+    logger.info("Mongo client closed")
+
+
 @lru_cache
 def get_checkpointer() -> MongoDBSaver | None:
     """The graph's checkpointer, or None when chat memory is turned off.

@@ -9,6 +9,7 @@ from cms.api.errors import register_error_handlers
 from cms.api.v1.router import api_router
 from cms.config.logging_config import setup_logging
 from cms.config.settings import get_settings
+from cms.lifespan import lifespan
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def create_app() -> FastAPI:
     setup_logging()
 
     settings = get_settings()
-    app = FastAPI(title="Complaint Management System API")
+    app = FastAPI(title="Complaint Management System API", lifespan=lifespan)
 
     # `allow_origin_regex` covers the dev server, whose port and hostname both
     # move; `allow_origins` carries the deployment's real origins. Starlette ORs

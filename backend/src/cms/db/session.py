@@ -33,3 +33,18 @@ def get_supabase() -> AsyncClient:
         raise
     logger.debug("Supabase client constructed for %s", settings.supabase_url)
     return client
+
+
+async def close_supabase() -> None:
+    """Close the client's connection pools, if it was built.
+
+    supabase-py has no `close()`, so the PostgREST and Storage sub-clients, the
+    only ones this app uses, are closed directly.
+    """
+    if get_supabase.cache_info().currsize == 0:
+        return
+    client = get_supabase()
+    for sub_client in (client._postgrest, client._storage):
+        if sub_client is not None:
+            await sub_client.session.aclose()
+    logger.info("Supabase client closed")
