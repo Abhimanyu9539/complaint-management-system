@@ -10,11 +10,11 @@ import { TONE_CLASSES, healthTone } from '@/lib/status';
 import { adminTransport } from '@/lib/admin/transport';
 
 /**
- * Dependency health, from `/health/deps`.
+ * Dependency health, from `/api/v1/admin/health`.
  *
- * Polls at 3× the base cadence: this endpoint makes an outbound HTTP call to
- * Supabase auth and a Qdrant handshake on every hit, so treating it like a
- * cheap read would put real load on both just to keep a green dot green.
+ * Polls at 3× the base cadence: every hit checks Supabase, Qdrant, Mongo,
+ * OpenRouter and SMTP, so treating it like a cheap read would put real load
+ * on all of them just to keep a green dot green.
  */
 export function HealthPanel() {
   const { data, status, error, errorDetail, failureCount, refresh } = usePanelData(
@@ -45,14 +45,14 @@ export function HealthPanel() {
         onRetry={refresh}
         empty={<EmptyState icon={<Activity size={18} strokeWidth={1.5} />} title="No health data." />}
         skeleton={
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            {Array.from({ length: 4 }, (_, index) => (
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }, (_, index) => (
               <Skeleton key={index} className="h-16" />
             ))}
           </div>
         }
       >
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
           {data?.services.map((service) => {
             const tone = healthTone(service.status);
             return (

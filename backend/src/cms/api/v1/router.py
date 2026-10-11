@@ -1,4 +1,4 @@
-"""Mounts every route: `/health` unversioned for probes, the rest under `/api/v1`.
+"""Mounts every route: `/health/*` unversioned for probes, the rest under `/api/v1`.
 
 `/admin/*` is admins only. The other routers check the agent per route, because each has a public
 exception: the customer form and n8n's `/emails/inbound`.

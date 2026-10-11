@@ -50,7 +50,7 @@ const RULES: Rule[] = [
   {
     test: /ResponseHandlingException|ReadTimeout|timed out/i,
     cause: 'Qdrant did not respond within the timeout.',
-    action: 'The collection may be cold or the URL wrong. Check /health/deps first.',
+    action: 'The collection may be cold or the URL wrong. Check the System health panel first.',
   },
   {
     test: /row-level security|APIError|PostgrestError|42501/i,

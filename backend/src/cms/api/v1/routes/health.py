@@ -1,55 +1,37 @@
-"""Liveness (`/health`) and a dependency check (`/health/deps`) for Supabase and Qdrant."""
+"""Load-balancer probes: `/health/live` (the process is up) and `/health/ready` (it can serve).
+
+Public, so errors are reported as a status only; the cause is in the log.
+The admin panel's detailed view is `GET /api/v1/admin/health`.
+"""
 
 import logging
 
-import httpx
-from fastapi import APIRouter
-from qdrant_client import AsyncQdrantClient
+from fastapi import APIRouter, Response
 
 from cms.config.settings import get_settings
+from cms.schemas.health import LiveResponse, ReadyResponse
+from cms.services import health_checks
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health")
-async def health() -> dict:
-    return {"status": "ok"}
+@router.get("/health/live", response_model=LiveResponse)
+async def live() -> LiveResponse:
+    """Checks nothing else, so a dependency outage never gets the process restarted."""
+    return LiveResponse()
 
 
-@router.get("/health/deps")
-async def health_deps() -> dict:
-    """Pings Supabase and Qdrant so a broken .env shows up here, not on the first real request."""
-    settings = get_settings()
-    results: dict[str, str] = {}
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            # GoTrue's health endpoint needs no schema/tables to exist yet — safe before Step 2.
-            resp = await client.get(
-                f"{settings.supabase_url}/auth/v1/health",
-                headers={"apikey": settings.supabase_publishable_key},
-            )
-            resp.raise_for_status()
-        results["supabase"] = "ok"
-    except Exception as exc:
-        logger.warning("health: the Supabase check failed", exc_info=True)
-        results["supabase"] = f"error: {exc}"
-
-    try:
-        qdrant = AsyncQdrantClient(
-            url=settings.qdrant_url, api_key=settings.qdrant_api_key
-        )
-        try:
-            # Listing collections proves connectivity without requiring one to exist yet (Step 3).
-            await qdrant.get_collections()
-        finally:
-            await qdrant.close()
-        results["qdrant"] = "ok"
-    except Exception as exc:
-        logger.warning("health: the Qdrant check failed", exc_info=True)
-        results["qdrant"] = f"error: {exc}"
-
-    overall = "ok" if all(v == "ok" for v in results.values()) else "degraded"
-    return {"status": overall, "dependencies": results}
+@router.get("/health/ready", response_model=ReadyResponse, responses={503: {"model": ReadyResponse}})
+async def ready(response: Response) -> ReadyResponse:
+    """200 when every hard dependency answers, 503 when one does not."""
+    checks = await health_checks.check_dependencies(get_settings().health_ready_dependencies)
+    is_down = health_checks.any_down(checks)
+    if is_down:
+        response.status_code = 503
+        logger.warning("health: not ready: %s", {name: check.status for name, check in checks.items()})
+    return ReadyResponse(
+        status="unavailable" if is_down else "ready",
+        dependencies={name: check.status for name, check in checks.items()},
+    )

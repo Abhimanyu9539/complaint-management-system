@@ -30,7 +30,7 @@ export function collectionTone(status: CollectionStatus) {
  */
 function collectionRemedy(status: CollectionStatus): string | null {
   if (status === 'missing') return 'Collection not created yet — run `uv run cms-create-collections`.';
-  if (status === 'unknown') return 'Qdrant could not be reached — check QDRANT_URL and /health/deps.';
+  if (status === 'unknown') return 'Qdrant could not be reached — check QDRANT_URL and the System health panel.';
   return null;
 }
 

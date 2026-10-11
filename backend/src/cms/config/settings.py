@@ -2,6 +2,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -449,6 +450,17 @@ class Settings(BaseSettings):
 
     # --- Seed corpus ---
     seed_data_dir: Path | None = None
+
+    # --- Health checks ---
+    # Cap on each dependency check. A load balancer's probe usually gives up at about 5s.
+    health_check_timeout_seconds: float = 3.0
+    # What `/health/ready` checks; any of them down is a 503. Mongo, OpenRouter and SMTP are
+    # left to the admin panel: their outages hit every instance alike, so failing readiness
+    # for them would only take the whole app out of the load balancer.
+    health_ready_dependencies: list[Literal["supabase", "qdrant", "mongo", "openrouter", "smtp"]] = [
+        "supabase",
+        "qdrant",
+    ]
 
 
 @lru_cache

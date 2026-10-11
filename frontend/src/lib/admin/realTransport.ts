@@ -241,10 +241,24 @@ interface WireStuckDocument {
   since: string;
 }
 
-interface WireHealthDeps {
-  status: 'ok' | 'degraded';
-  dependencies: Record<string, string>;
+interface WireDependencyCheck {
+  status: 'ok' | 'error' | 'disabled';
+  /** The error's type or "timed out" — never its message. */
+  detail: string | null;
 }
+
+interface WireDependencyHealth {
+  status: 'ok' | 'degraded';
+  dependencies: Record<string, WireDependencyCheck>;
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  supabase: 'Supabase',
+  qdrant: 'Qdrant',
+  mongo: 'MongoDB',
+  openrouter: 'OpenRouter',
+  smtp: 'SMTP',
+};
 
 interface WireTicket {
   id: string;
@@ -493,13 +507,16 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
    * is a genuine failure here.
    */
   async function getSystemHealth(signal: AbortSignal): Promise<AdminResult<SystemHealth>> {
-    const wire = await getJson<WireHealthDeps>(`${baseUrl}/health/deps`, signal);
+    const wire = await getJson<WireDependencyHealth>(`${api}/health`, signal);
 
-    const services = Object.entries(wire.dependencies).map(([name, value]) => ({
-      name: name.charAt(0).toUpperCase() + name.slice(1),
-      status: value === 'ok' ? ('ok' as const) : ('error' as const),
-      detail: value === 'ok' ? null : value,
-    }));
+    const services = Object.entries(wire.dependencies)
+      // Chat memory switched off is a setting, not an outage.
+      .filter(([, check]) => check.status !== 'disabled')
+      .map(([name, check]) => ({
+        name: SERVICE_LABELS[name] ?? name.charAt(0).toUpperCase() + name.slice(1),
+        status: check.status === 'ok' ? ('ok' as const) : ('error' as const),
+        detail: check.status === 'ok' ? null : (check.detail ?? 'Unreachable'),
+      }));
 
     return live<SystemHealth>({
       overall: wire.status === 'ok' ? 'ok' : 'degraded',

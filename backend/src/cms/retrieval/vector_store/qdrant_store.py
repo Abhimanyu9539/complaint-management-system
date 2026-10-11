@@ -109,7 +109,7 @@ async def collection_stats(name: str) -> dict:
     network when the real fix is one command:
 
     - the collection does not exist yet  -> run `uv run cms-create-collections`
-    - Qdrant itself cannot be reached    -> check QDRANT_URL and /health/deps
+    - Qdrant itself cannot be reached    -> check QDRANT_URL and /health/ready
 
     `points_count` and `indexed_vectors_count` are Optional in the Qdrant API
     (they are approximate, and absent on some backends), so both are coerced to

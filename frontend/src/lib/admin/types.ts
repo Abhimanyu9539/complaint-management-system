@@ -63,7 +63,7 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 export interface ServiceHealth {
   name: string;
   status: 'ok' | 'error';
-  /** The error string when `status === 'error'`, else a short "how" note. */
+  /** The error's type (or "timed out") when `status === 'error'`, else null. */
   detail: string | null;
 }
 
@@ -159,7 +159,7 @@ export interface CollectionStorage {
    * - `missing` — the server answered but has no such collection. The fix is
    *   `uv run cms-create-collections`.
    * - `unknown` — Qdrant could not be reached at all. The fix is checking
-   *   QDRANT_URL and /health/deps.
+   *   QDRANT_URL and the System health panel.
    *
    * Kept distinct because reporting both as "unreachable" sends an operator to
    * debug their network when the real remedy is one command.
@@ -439,9 +439,9 @@ export interface DocumentOption {
  */
 export interface AdminTransport {
   /**
-   * LIVE. Wraps `GET /health/deps` plus the reachability of the API itself.
-   * Poll this more slowly than everything else: it makes an outbound HTTP call
-   * to GoTrue and a Qdrant handshake on every hit.
+   * LIVE. Wraps `GET /api/v1/admin/health` plus the reachability of the API
+   * itself. Poll this more slowly than everything else: every hit checks
+   * Supabase, Qdrant, Mongo, OpenRouter and SMTP.
    */
   getSystemHealth(signal: AbortSignal): Promise<AdminResult<SystemHealth>>;
 

@@ -404,7 +404,7 @@ export function confidenceTone(confidence: number): Tone {
   return 'danger';
 }
 
-/** Health of a whole subsystem, as reported by /health/deps. */
+/** Health of a whole subsystem, as reported by /api/v1/admin/health. */
 export function healthTone(status: 'ok' | 'degraded' | 'down' | 'error'): Tone {
   if (status === 'ok') return 'ok';
   if (status === 'degraded') return 'warn';

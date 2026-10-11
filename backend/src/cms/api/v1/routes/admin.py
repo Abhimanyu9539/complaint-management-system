@@ -22,7 +22,8 @@ from cms.schemas.admin import (
     TriggerIngestionRequest,
     TriggerIngestionResponse,
 )
-from cms.services import admin_ingest, admin_stats
+from cms.schemas.health import DependencyHealthResponse
+from cms.services import admin_ingest, admin_stats, health_checks
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,15 @@ router = APIRouter(prefix="/admin", tags=["admin"], route_class=ErrorRoute)
 def _seed_corpus_unavailable() -> HTTPException:
     """A missing SEED_DATA_DIR is a deployment problem, so it gets its own 503 message."""
     return HTTPException(status_code=503, detail=get_settings().seed_corpus_unavailable_message)
+
+
+@router.get("/health", response_model=DependencyHealthResponse)
+async def get_health() -> DependencyHealthResponse:
+    """Every dependency, with the error's type when one is down. Always 200: a red tile is the answer."""
+    checks = await health_checks.check_dependencies(health_checks.CHECKS)
+    return DependencyHealthResponse(
+        status="degraded" if health_checks.any_down(checks) else "ok", dependencies=checks
+    )
 
 
 @router.get("/overview", response_model=OverviewResponse)
