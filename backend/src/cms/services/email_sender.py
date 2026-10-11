@@ -3,6 +3,8 @@
 import asyncio
 import logging
 import smtplib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from email.message import EmailMessage
 from email.utils import make_msgid, parseaddr
 
@@ -30,8 +32,9 @@ def build_message(to: str, subject: str, body: str) -> EmailMessage:
     return message
 
 
-def _send(message: EmailMessage) -> None:
-    """The blocking SMTP conversation; run in a thread."""
+@contextmanager
+def _session() -> Iterator[smtplib.SMTP]:
+    """A connected SMTP session, with STARTTLS and login when configured. Blocking."""
     settings = get_settings()
     with smtplib.SMTP(
         settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds
@@ -40,7 +43,19 @@ def _send(message: EmailMessage) -> None:
             smtp.starttls()
         if settings.smtp_username:
             smtp.login(settings.smtp_username, settings.smtp_password or "")
+        yield smtp
+
+
+def _send(message: EmailMessage) -> None:
+    """The blocking SMTP conversation; run in a thread."""
+    with _session() as smtp:
         smtp.send_message(message)
+
+
+def check_connection() -> None:
+    """Connect and log in without sending anything, for the health check. Blocking; raises on failure."""
+    with _session() as smtp:
+        smtp.noop()
 
 
 async def send_email(to: str, subject: str, body: str) -> str:

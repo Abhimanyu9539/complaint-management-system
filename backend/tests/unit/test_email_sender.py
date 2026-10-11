@@ -7,9 +7,10 @@ from cms.services import email_sender
 
 
 class _FakeSMTP:
-    """Stands in for `smtplib.SMTP`: records the host and every message sent."""
+    """Stands in for `smtplib.SMTP`: records the host, every message sent and every NOOP."""
 
     sent: ClassVar[list] = []
+    pinged: ClassVar[list] = []
 
     def __init__(self, host, port, timeout=None) -> None:
         self.host = host
@@ -23,12 +24,19 @@ class _FakeSMTP:
     def send_message(self, message) -> None:
         _FakeSMTP.sent.append(message)
 
+    def noop(self) -> None:
+        _FakeSMTP.pinged.append(self.host)
+
 
 @pytest.fixture
 def fake_smtp(monkeypatch):
     _FakeSMTP.sent = []
+    _FakeSMTP.pinged = []
     monkeypatch.setattr(email_sender.smtplib, "SMTP", _FakeSMTP)
+    # Mailpit's settings, whatever the local .env points at: the fake has no TLS or login.
     monkeypatch.setattr(get_settings(), "smtp_host", "localhost")
+    monkeypatch.setattr(get_settings(), "smtp_starttls", False)
+    monkeypatch.setattr(get_settings(), "smtp_username", None)
     return _FakeSMTP.sent
 
 
@@ -63,3 +71,10 @@ async def test_smtp_failure_becomes_email_send_error(monkeypatch) -> None:
 
     with pytest.raises(email_sender.EmailSendError, match="ConnectionRefusedError"):
         await email_sender.send_email("jo@example.com", "s", "b")
+
+
+def test_check_connection_connects_and_sends_nothing(fake_smtp) -> None:
+    email_sender.check_connection()
+
+    assert _FakeSMTP.pinged == ["localhost"]
+    assert fake_smtp == []
