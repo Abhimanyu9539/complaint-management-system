@@ -309,7 +309,13 @@ uv run cms-seed                  # ingests 34 policies + 20 cases
 uv run uvicorn cms.main:app --reload
 ```
 
-Open http://localhost:8000/health/deps. It should report Supabase and Qdrant as reachable.
+Startup loads the spaCy and BM25 models first, so the port opens after several seconds. Then open
+http://localhost:8000/health/ready. It should return `"status": "ready"` with Supabase and Qdrant `ok`.
+Set `WARM_UP_ON_STARTUP=false` in `.env` to skip the model loading and keep `--reload` fast.
+
+Behind a load balancer, probe `/health/live` (the process is up) and `/health/ready` (503 while Supabase
+or Qdrant is down). Give the probes an initial delay longer than the warm-up. The admin dashboard's
+System health panel also checks Mongo, OpenRouter and SMTP.
 
 **5. Create a sign-in.** In the Supabase dashboard, go to **Authentication → Users → Add user**. New
 users are `agent`s. To make one an admin, run this in the SQL editor:
