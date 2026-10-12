@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cms.api.errors import register_error_handlers
+from cms.api.middleware import RequestIdMiddleware
 from cms.api.v1.router import api_router
 from cms.config.logging_config import setup_logging
 from cms.config.settings import get_settings
@@ -39,7 +40,11 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Lets the browser read the id, to quote it when reporting an error.
+        expose_headers=[settings.request_id_header],
     )
+    # Added last, so it is the outermost layer and every response carries the id.
+    app.add_middleware(RequestIdMiddleware)
 
     register_error_handlers(app)
     app.include_router(api_router)

@@ -309,6 +309,16 @@ class Settings(BaseSettings):
     # Row cap on the read behind the activity summary; a window above it is truncated and logged.
     agent_runs_summary_max_rows: int = 5000
 
+    # --- Logging and metrics ---
+    log_level: str = "INFO"
+    # "json" for one JSON object per line; "text" is easier to read in a terminal.
+    log_format: Literal["json", "text"] = "json"
+    # A caller's own id is kept only if it matches the pattern, so it cannot inject into the log.
+    request_id_header: str = "X-Request-ID"
+    request_id_pattern: str = r"^[A-Za-z0-9._-]{1,64}$"
+    # Polled every few seconds by probes and Prometheus; an access line for each would bury the rest.
+    access_log_skip_paths: list[str] = ["/health/live", "/health/ready", "/metrics"]
+
     @property
     def case_pii_entities(self) -> list[str]:
         """What is masked out of a case before indexing: the input guard's entities plus names."""

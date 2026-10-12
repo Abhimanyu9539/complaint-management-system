@@ -19,6 +19,7 @@ from cms.db.repositories import (
     tickets,
     utc_now_iso,
 )
+from cms.observability.context import run_id_var, ticket_id_var
 from cms.rag.context import build_generation_context, guidance_hit
 from cms.rag.nodes.classify_ticket import join_complaint
 from cms.rag.ticket_graph import DRAFT_REPLY, get_ticket_graph
@@ -327,8 +328,21 @@ async def _save_and_gate(
 async def process_ticket(ticket_id: str, trigger: str = "created") -> None:
     """Guard, classify and draft one ticket, save what each part produced, then gate it.
 
-    `trigger` says why it ran (`agent_runs.TRIGGERS`), for the activity log.
+    `trigger` says why it ran (`agent_runs.TRIGGERS`), for the activity log. Every log line
+    carries the ticket and run ids; reset after, as `cms-triage` runs many in one process.
     """
+    # The root run's id in LangSmith, stored on the draft so feedback can find the trace.
+    run_id = uuid4()
+    ticket_token = ticket_id_var.set(ticket_id)
+    run_token = run_id_var.set(str(run_id))
+    try:
+        await _process_ticket(ticket_id, trigger, run_id)
+    finally:
+        run_id_var.reset(run_token)
+        ticket_id_var.reset(ticket_token)
+
+
+async def _process_ticket(ticket_id: str, trigger: str, run_id: UUID) -> None:
     try:
         row = await ticket_service.start_processing(ticket_id)
     except ticket_service.IllegalTransition as exc:
@@ -349,8 +363,6 @@ async def process_ticket(ticket_id: str, trigger: str = "created") -> None:
         await _finish(ticket_id, "processing_failed", [])
         return
 
-    # The root run's id in LangSmith, stored on the draft so feedback can find the trace.
-    run_id = uuid4()
     run = {
         "id": str(run_id),
         "ticket_id": ticket_id,
