@@ -318,6 +318,8 @@ class Settings(BaseSettings):
     request_id_pattern: str = r"^[A-Za-z0-9._-]{1,64}$"
     # Polled every few seconds by probes and Prometheus; an access line for each would bury the rest.
     access_log_skip_paths: list[str] = ["/health/live", "/health/ready", "/metrics"]
+    # Seconds. A ticket-graph run takes about 5-30s.
+    graph_latency_buckets: list[float] = [1, 2, 5, 10, 20, 30, 60, 120]
 
     @property
     def case_pii_entities(self) -> list[str]:

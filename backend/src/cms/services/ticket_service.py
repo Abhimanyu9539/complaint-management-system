@@ -7,6 +7,7 @@ import asyncio
 import logging
 
 from cms.db.repositories import departments, draft_feedback, drafts, ticket_events, tickets
+from cms.observability import metrics
 from cms.schemas.tickets import (
     DraftFeedback,
     Ticket,
@@ -186,6 +187,7 @@ async def create_ticket(
     # After the insert commits, never before: an audit row for a ticket that
     # failed to insert would describe something that did not happen.
     await ticket_events.append_event(row["id"], "created", {"source": source, "severity": severity})
+    metrics.record_transition(row["status"])
 
     logger.info("Ticket %s created (T-%s) from %s", row["id"], row["ticket_no"], source)
     return TicketCreated(
@@ -211,7 +213,9 @@ async def start_processing(ticket_id: str, resume: bool = True) -> dict:
         return row
 
     assert_transition(row["status"], "processing")
-    return await tickets.update_ticket(ticket_id, {"status": "processing", "review_reasons": []})
+    updated = await tickets.update_ticket(ticket_id, {"status": "processing", "review_reasons": []})
+    metrics.record_transition("processing")
+    return updated
 
 
 async def finish_processing(ticket_id: str, status: str, reasons: list[str]) -> None:
@@ -220,6 +224,7 @@ async def finish_processing(ticket_id: str, status: str, reasons: list[str]) -> 
     assert_transition(current["status"], status)
 
     await tickets.update_ticket(ticket_id, {"status": status, "review_reasons": reasons})
+    metrics.record_transition(status)
     await ticket_events.append_event(ticket_id, "gated", {"status": status, "reasons": reasons})
     logger.info("Ticket %s gated to %s: %s", ticket_id, status, reasons)
 
@@ -258,6 +263,7 @@ async def escalate_ticket(
         ticket_id,
         {"status": "escalated", "escalated_dept": department_id},
     )
+    metrics.record_transition("escalated")
     await ticket_events.append_event(
         ticket_id,
         "escalated",
@@ -283,6 +289,7 @@ async def mark_dept_responded(ticket_id: str, response: dict, actor_id: str | No
     assert_transition(current["status"], "dept_responded")
 
     row = await tickets.update_ticket(ticket_id, {"status": "dept_responded"})
+    metrics.record_transition("dept_responded")
     await ticket_events.append_event(
         ticket_id,
         "dept_responded",
@@ -312,6 +319,7 @@ async def resolve_ticket(
 
     path = _resolution_path_for(current)
     row = await tickets.mark_resolved(ticket_id, path)
+    metrics.record_transition("resolved")
     await ticket_events.append_event(
         ticket_id,
         "resolved",
@@ -343,6 +351,7 @@ async def record_customer_reply(ticket_id: str, text: str) -> None:
             "resolved_at": None,
         },
     )
+    metrics.record_transition("needs_review")
     await ticket_events.append_event(ticket_id, "reopened", {"from_status": "resolved"})
     logger.info("Ticket %s reopened: the customer replied after resolution", ticket_id)
 

@@ -19,6 +19,7 @@ from cms.db.repositories import (
     tickets,
     utc_now_iso,
 )
+from cms.observability import metrics
 from cms.observability.context import run_id_var, ticket_id_var
 from cms.rag.context import build_generation_context, guidance_hit
 from cms.rag.nodes.classify_ticket import join_complaint
@@ -259,6 +260,7 @@ async def _record_run(
     """Write the run's row in `agent_runs`. `insert_run` swallows its own failures."""
     classification = state.get("classification")
     status = run_status(state, outcome)
+    metrics.record_graph_run(status, latency_ms)
     await agent_runs.insert_run(
         {
             **run,

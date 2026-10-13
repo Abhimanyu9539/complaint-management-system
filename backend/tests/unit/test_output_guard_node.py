@@ -1,4 +1,5 @@
 from langchain_core.documents import Document
+from prometheus_client import REGISTRY
 
 from cms.config.settings import get_settings
 from cms.rag.nodes import output_guard as output_guard_module
@@ -82,3 +83,19 @@ async def test_disabled_guardrails_leave_the_draft_unchecked(monkeypatch) -> Non
 
     assert update == {"grounded": None}
     assert calls == []
+
+
+async def test_each_result_is_counted(monkeypatch) -> None:
+    def count(result: str) -> float:
+        labels = {"guard": "output_guard", "result": result}
+        return REGISTRY.get_sample_value("cms_guard_checks_total", labels) or 0.0
+
+    blocked, errors = count("blocked"), count("error")
+
+    _install(monkeypatch, GuardResult(passed=False, text="x", reasons=["uncited"]))
+    await output_guard_module.output_guard(STATE)
+    _install(monkeypatch, RuntimeError("nemo timed out"))
+    await output_guard_module.output_guard(STATE)
+
+    assert count("blocked") - blocked == 1
+    assert count("error") - errors == 1

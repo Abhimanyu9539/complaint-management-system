@@ -8,10 +8,13 @@ from langsmith import traceable
 from cms.config.settings import get_settings
 from cms.guardrails.guards import run_lookup_guard
 from cms.guardrails.nemo_rails import check_output
+from cms.observability import metrics
 from cms.rag.context import BLOCK_SEPARATOR, build_generation_context
 from cms.rag.state import GraphState
 
 logger = logging.getLogger(__name__)
+
+GUARD = "lookup_guard"
 
 
 @traceable(name="lookup_guard")
@@ -42,7 +45,9 @@ async def lookup_guard(state: GraphState) -> dict:
             result = await check_output(state["query"], draft, context)
     except Exception:
         logger.exception("lookup_guard: a check failed; treating the answer as ungrounded")
+        metrics.record_guard(GUARD, metrics.GUARD_ERROR)
         return {"grounded": False, "guard_reasons": [settings.guard_error_reason]}
 
     logger.info("lookup_guard: grounded=%s, reasons=%s", result.passed, result.reasons)
+    metrics.record_guard(GUARD, metrics.GUARD_PASSED if result.passed else metrics.GUARD_BLOCKED)
     return {"grounded": result.passed, "guard_reasons": result.reasons}

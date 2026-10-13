@@ -8,9 +8,12 @@ from langsmith import traceable
 from cms.config.settings import get_settings
 from cms.guardrails.guards import run_input_guard
 from cms.guardrails.nemo_rails import check_input
+from cms.observability import metrics
 from cms.rag.state import GraphState
 
 logger = logging.getLogger(__name__)
+
+GUARD = "input_guard"
 
 
 @traceable(name="input_guard")
@@ -35,11 +38,14 @@ async def input_guard(state: GraphState) -> dict:
             result = await check_input(result.text)
     except Exception:
         logger.exception("input_guard: a check failed; blocking the complaint")
+        metrics.record_guard(GUARD, metrics.GUARD_ERROR)
         return {"input_blocked": True, "guard_reasons": [settings.guard_error_reason]}
 
     if not result.passed:
         logger.warning("input_guard: blocked: %s", result.reasons)
+        metrics.record_guard(GUARD, metrics.GUARD_BLOCKED)
         return {"input_blocked": True, "guard_reasons": result.reasons}
 
     logger.info("input_guard: passed")
+    metrics.record_guard(GUARD, metrics.GUARD_PASSED)
     return {"query": result.text, "input_blocked": False, "guard_reasons": []}

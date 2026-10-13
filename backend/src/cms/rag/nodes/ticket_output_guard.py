@@ -8,10 +8,13 @@ from langsmith import traceable
 from cms.config.settings import get_settings
 from cms.guardrails.guards import run_output_guard
 from cms.guardrails.nemo_rails import check_customer_reply
+from cms.observability import metrics
 from cms.rag.context import BLOCK_SEPARATOR, build_generation_context
 from cms.rag.ticket_state import TicketState, drafting_sources
 
 logger = logging.getLogger(__name__)
+
+GUARD = "ticket_output_guard"
 
 
 @traceable(name="ticket_output_guard")
@@ -45,7 +48,9 @@ async def ticket_output_guard(state: TicketState) -> dict:
             result = await check_customer_reply(state["query"], draft, context)
     except Exception:
         logger.exception("ticket_output_guard: a check failed; treating the draft as ungrounded")
+        metrics.record_guard(GUARD, metrics.GUARD_ERROR)
         return {"grounded": False, "guard_reasons": [settings.guard_error_reason]}
 
     logger.info("ticket_output_guard: grounded=%s, reasons=%s", result.passed, result.reasons)
+    metrics.record_guard(GUARD, metrics.GUARD_PASSED if result.passed else metrics.GUARD_BLOCKED)
     return {"grounded": result.passed, "guard_reasons": result.reasons}

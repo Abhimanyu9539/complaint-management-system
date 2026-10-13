@@ -8,10 +8,13 @@ from langsmith import traceable
 from cms.config.settings import get_settings
 from cms.guardrails.guards import run_output_guard
 from cms.guardrails.nemo_rails import check_output
+from cms.observability import metrics
 from cms.rag.context import BLOCK_SEPARATOR, build_generation_context
 from cms.rag.state import GraphState
 
 logger = logging.getLogger(__name__)
+
+GUARD = "output_guard"
 
 
 @traceable(name="output_guard")
@@ -42,7 +45,9 @@ async def output_guard(state: GraphState) -> dict:
             result = await check_output(state["query"], draft, context)
     except Exception:
         logger.exception("output_guard: a check failed; treating the draft as ungrounded")
+        metrics.record_guard(GUARD, metrics.GUARD_ERROR)
         return {"grounded": False, "guard_reasons": [settings.guard_error_reason]}
 
     logger.info("output_guard: grounded=%s, reasons=%s", result.passed, result.reasons)
+    metrics.record_guard(GUARD, metrics.GUARD_PASSED if result.passed else metrics.GUARD_BLOCKED)
     return {"grounded": result.passed, "guard_reasons": result.reasons}

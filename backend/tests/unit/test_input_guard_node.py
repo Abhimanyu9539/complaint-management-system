@@ -1,3 +1,5 @@
+from prometheus_client import REGISTRY
+
 from cms.config.settings import get_settings
 from cms.rag.nodes import input_guard as input_guard_module
 from cms.schemas.guardrails import GuardResult
@@ -69,3 +71,19 @@ async def test_disabled_guardrails_pass_the_query_through(monkeypatch) -> None:
 
     assert update == {"input_blocked": False}
     assert calls == []
+
+
+async def test_each_result_is_counted(monkeypatch) -> None:
+    def count(result: str) -> float:
+        labels = {"guard": "input_guard", "result": result}
+        return REGISTRY.get_sample_value("cms_guard_checks_total", labels) or 0.0
+
+    blocked, errors = count("blocked"), count("error")
+
+    _install(monkeypatch, GuardResult(passed=False, text="", reasons=["too short"]))
+    await input_guard_module.input_guard({"query": "hi"})
+    _install(monkeypatch, RuntimeError("presidio exploded"))
+    await input_guard_module.input_guard({"query": "a real complaint"})
+
+    assert count("blocked") - blocked == 1
+    assert count("error") - errors == 1
