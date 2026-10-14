@@ -1,6 +1,7 @@
 """Run the ticket graph for one ticket, save the classification and the draft, then gate it.
 
-A background task, so it never raises: failures become `failed` events. Every run is saved to `agent_runs`.
+A background task, so it never raises: failures become `failed` events. Every run is saved to `agent_runs`,
+with each LLM call's tokens and cost.
 """
 
 import logging
@@ -21,6 +22,7 @@ from cms.db.repositories import (
 )
 from cms.observability import metrics
 from cms.observability.context import run_id_var, ticket_id_var
+from cms.observability.usage import UsageCollector
 from cms.rag.context import build_generation_context, guidance_hit
 from cms.rag.nodes.classify_ticket import join_complaint
 from cms.rag.ticket_graph import DRAFT_REPLY, get_ticket_graph
@@ -255,11 +257,17 @@ def run_status(state: TicketState, outcome: str) -> str:
 
 
 async def _record_run(
-    run: dict, state: TicketState, outcome: str, reasons: list[str], latency_ms: int
+    run: dict,
+    state: TicketState,
+    outcome: str,
+    reasons: list[str],
+    latency_ms: int,
+    usage: UsageCollector,
 ) -> None:
     """Write the run's row in `agent_runs`. `insert_run` swallows its own failures."""
     classification = state.get("classification")
     status = run_status(state, outcome)
+    totals = usage.totals()
     metrics.record_graph_run(status, latency_ms)
     await agent_runs.insert_run(
         {
@@ -276,11 +284,22 @@ async def _record_run(
             "steps": state.get("steps", []),
             "errors": state.get("errors", {}),
             "latency_ms": latency_ms,
+            "llm_calls": usage.calls,
+            **totals,
             "finished_at": utc_now_iso(),
         }
     )
     logger.info(
-        "Ticket %s run %s: %s, gated to %s in %d ms", run["ticket_id"], run["id"], status, outcome, latency_ms
+        "Ticket %s run %s: %s, gated to %s in %d ms, %d LLM call(s), %d+%d tokens, $%.6f",
+        run["ticket_id"],
+        run["id"],
+        status,
+        outcome,
+        latency_ms,
+        len(usage.calls),
+        totals["input_tokens"],
+        totals["output_tokens"],
+        totals["cost_usd"],
     )
 
 
@@ -365,6 +384,7 @@ async def _process_ticket(ticket_id: str, trigger: str, run_id: UUID) -> None:
         await _finish(ticket_id, "processing_failed", [])
         return
 
+    usage = UsageCollector(default_node="ticket_graph")
     run = {
         "id": str(run_id),
         "ticket_id": ticket_id,
@@ -382,7 +402,7 @@ async def _process_ticket(ticket_id: str, trigger: str, run_id: UUID) -> None:
                 "query": join_complaint(row["subject"], row.get("body")),
                 "guidance_hits": guidance_hits,
             },
-            config={"run_id": run_id},
+            config={"run_id": run_id, "callbacks": [usage]},
         )
     except Exception as exc:
         logger.exception("Ticket %s: the ticket graph failed", ticket_id)
@@ -390,10 +410,12 @@ async def _process_ticket(ticket_id: str, trigger: str, run_id: UUID) -> None:
         latency_ms = round((time.perf_counter() - start) * 1000)
         await _fail(ticket_id, "ticket_graph", {"error": error})
         await _finish(ticket_id, "processing_failed", [])
-        await _record_run(run, {"errors": {"ticket_graph": error}}, "processing_failed", [], latency_ms)
+        await _record_run(
+            run, {"errors": {"ticket_graph": error}}, "processing_failed", [], latency_ms, usage
+        )
         return
     latency_ms = round((time.perf_counter() - start) * 1000)
 
     status, reasons = await _save_and_gate(ticket_id, row, state, run_id, guidance_hits)
     await _finish(ticket_id, status, reasons)
-    await _record_run(run, state, status, reasons, latency_ms)
+    await _record_run(run, state, status, reasons, latency_ms, usage)

@@ -21,6 +21,7 @@ from cms.ingestion.extract.cases_extractor import build_case_text
 from cms.ingestion.pipeline import ingest_case
 from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
+from cms.observability.usage import UsageCollector
 from cms.rag.nodes.classify_ticket import join_complaint
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,11 @@ async def _summarise_resolution(complaint: str, guidance: str, reply: str) -> st
     settings = get_settings()
     prompt = load_prompt(PROMPT_NAME, settings.case_resolution_prompt_version)
     chain = prompt | get_chat_model(settings.openrouter_model_cheap)
-    message = await chain.ainvoke({"complaint": complaint, "guidance": guidance, "reply": reply})
+    message = await chain.ainvoke(
+        {"complaint": complaint, "guidance": guidance, "reply": reply},
+        # Counted in the metrics only; there is no run row to save it on.
+        config={"callbacks": [UsageCollector(default_node=PROMPT_NAME)]},
+    )
     return message.content.strip()
 
 

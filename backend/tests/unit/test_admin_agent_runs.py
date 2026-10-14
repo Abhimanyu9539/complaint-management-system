@@ -1,5 +1,7 @@
 from unittest.mock import AsyncMock
 
+import pytest
+
 from cms.services import admin_stats
 
 
@@ -87,3 +89,57 @@ async def test_run_page_sorts_steps_by_start_time(monkeypatch) -> None:
 
     assert page.total == 1
     assert [step.node for step in page.items[0].steps] == ["input_guard", "analyze_ticket"]
+
+
+def _call(model: str, cost: float | None, input_tokens: int = 100, output_tokens: int = 20) -> dict:
+    return {
+        "node": "draft_reply",
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "cost_usd": cost,
+    }
+
+
+async def test_summary_adds_up_cost_per_model_most_expensive_first(monkeypatch) -> None:
+    rows = [
+        {**RUNS[0], "cost_usd": 0.003, "llm_calls": [_call("cheap", 0.001), _call("main", 0.002)]},
+        # A call with no reported cost counts its tokens but adds no cost.
+        {**RUNS[1], "cost_usd": 0.004, "llm_calls": [_call("main", 0.004), _call("cheap", None)]},
+        RUNS[2],
+    ]
+    monkeypatch.setattr(admin_stats.agent_runs, "list_runs_since", AsyncMock(return_value=rows))
+
+    summary = await admin_stats.build_agent_summary(7)
+
+    assert summary.cost_usd == pytest.approx(0.007)
+    assert [(m.model, m.calls, m.input_tokens, m.output_tokens) for m in summary.cost_by_model] == [
+        ("main", 2, 200, 40),
+        ("cheap", 2, 200, 40),
+    ]
+    assert summary.cost_by_model[0].cost_usd == pytest.approx(0.006)
+
+
+async def test_run_page_maps_the_llm_calls(monkeypatch) -> None:
+    row = {
+        "id": "r1",
+        "ticket_id": "t1",
+        "trigger": "created",
+        "status": "succeeded",
+        "regenerated": False,
+        "precedents_offered": 0,
+        "llm_calls": [_call("main", 0.002), _call("nemo", None)],
+        "input_tokens": 200,
+        "output_tokens": 40,
+        "cost_usd": "0.002000",
+        "started_at": "2026-10-03T10:00:00+00:00",
+        "finished_at": "2026-10-03T10:00:02+00:00",
+    }
+    monkeypatch.setattr(admin_stats.agent_runs, "list_runs", AsyncMock(return_value=([row], 1)))
+
+    page = await admin_stats.build_agent_run_page(status=None, search=None, limit=25, offset=0)
+
+    [run] = page.items
+    assert [(call.model, call.cost_usd) for call in run.llm_calls] == [("main", 0.002), ("nemo", None)]
+    assert run.input_tokens == 200 and run.output_tokens == 40 and run.cost_usd == 0.002

@@ -36,6 +36,8 @@ from cms.schemas.admin import (
     IngestionSummaryResponse,
     JobPage,
     JobSummary,
+    LlmCall,
+    ModelCost,
     NodeLatency,
     OverviewResponse,
     QueueSnapshot,
@@ -557,6 +559,10 @@ def _to_agent_run(row: dict) -> AgentRun:
         steps=sorted(row.get("steps") or [], key=lambda step: step.get("started_at", "")),
         errors=row.get("errors") or {},
         latency_ms=row.get("latency_ms"),
+        llm_calls=[LlmCall(**call) for call in row.get("llm_calls") or []],
+        input_tokens=row.get("input_tokens") or 0,
+        output_tokens=row.get("output_tokens") or 0,
+        cost_usd=float(row.get("cost_usd") or 0),
         started_at=row["started_at"],
         finished_at=row["finished_at"],
     )
@@ -574,8 +580,27 @@ async def build_agent_run_page(
     )
 
 
+def _cost_by_model(rows: list[dict]) -> list[ModelCost]:
+    """Calls, tokens and cost per model over the runs, most expensive first."""
+    totals: dict[str, dict] = {}
+    for row in rows:
+        for call in row.get("llm_calls") or []:
+            model = totals.setdefault(
+                call["model"], {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+            )
+            model["calls"] += 1
+            model["input_tokens"] += call.get("input_tokens") or 0
+            model["output_tokens"] += call.get("output_tokens") or 0
+            model["cost_usd"] += call.get("cost_usd") or 0.0
+    return sorted(
+        (ModelCost(model=name, **values) for name, values in totals.items()),
+        key=lambda item: item.cost_usd,
+        reverse=True,
+    )
+
+
 async def build_agent_summary(days: int) -> AgentSummaryResponse:
-    """Run counts, graph latency percentiles and per-node median latency over a window."""
+    """Run counts, graph latency percentiles, per-node median latency and LLM cost over a window."""
     since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     rows = await agent_runs.list_runs_since(since, get_settings().agent_runs_summary_max_rows)
 
@@ -613,4 +638,6 @@ async def build_agent_summary(days: int) -> AgentSummaryResponse:
             samples=len(latencies),
         ),
         node_latency=node_latency,
+        cost_usd=sum(float(row.get("cost_usd") or 0) for row in rows),
+        cost_by_model=_cost_by_model(rows),
     )

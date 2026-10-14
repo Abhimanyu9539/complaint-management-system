@@ -3,6 +3,7 @@ from uuid import UUID
 from langchain_core.documents import Document
 
 from cms.config.settings import get_settings
+from cms.observability.usage import UsageCollector
 from cms.rag.context import build_generation_context, guidance_hit
 from cms.rag.nodes.find_precedents import precedent_hit
 from cms.schemas.ticket_classification import (
@@ -63,15 +64,30 @@ DEPT_RESPONSE = {
 GUIDANCE_HIT = guidance_hit(DEPT_RESPONSE, "Warranty")
 
 
+# One LLM call as `UsageCollector` records it.
+LLM_CALL = {
+    "node": "draft_reply",
+    "model": "openai/gpt-6-luna",
+    "input_tokens": 1200,
+    "output_tokens": 300,
+    "total_tokens": 1500,
+    "cost_usd": 0.0042,
+}
+
+
 class _FakeGraph:
     def __init__(self, result: dict | Exception) -> None:
         self.result = result
         self.inputs: list[dict] = []
         self.configs: list[dict] = []
+        # Handed to the run's collectors, as the chat models would.
+        self.llm_calls: list[dict] = []
 
     async def ainvoke(self, state: dict, config: dict | None = None) -> dict:
         self.inputs.append(state)
         self.configs.append(config or {})
+        for collector in (config or {}).get("callbacks", []):
+            collector.calls.extend(self.llm_calls)
         if isinstance(self.result, Exception):
             raise self.result
         # Like LangGraph, the final state still holds the input.
@@ -380,6 +396,31 @@ async def test_drafted_run_is_recorded(monkeypatch) -> None:
     assert run["precedents_offered"] == 0
     assert run["steps"] == steps and run["errors"] == {}
     assert isinstance(run["latency_ms"], int) and run["started_at"] and run["finished_at"]
+
+
+async def test_run_records_each_llm_call_and_its_totals(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, DRAFTED)
+    graph.llm_calls = [LLM_CALL, {**LLM_CALL, "node": "classify_ticket", "cost_usd": None}]
+
+    await ticket_pipeline.process_ticket("t1")
+
+    [collector] = graph.configs[0]["callbacks"]
+    assert isinstance(collector, UsageCollector)
+    [run] = graph.runs
+    assert run["llm_calls"] == graph.llm_calls
+    assert run["input_tokens"] == 2400 and run["output_tokens"] == 600
+    # A call with no reported cost adds nothing.
+    assert run["cost_usd"] == 0.0042
+
+
+async def test_failed_graph_run_still_records_its_llm_calls(monkeypatch) -> None:
+    graph, _, _, _ = _install(monkeypatch, ConnectionError("getaddrinfo failed"))
+    graph.llm_calls = [LLM_CALL]
+
+    await ticket_pipeline.process_ticket("t1")
+
+    [run] = graph.runs
+    assert run["llm_calls"] == [LLM_CALL] and run["cost_usd"] == 0.0042
 
 
 async def test_holding_reply_run_is_recorded_as_no_match(monkeypatch) -> None:

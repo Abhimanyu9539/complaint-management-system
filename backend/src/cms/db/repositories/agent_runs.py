@@ -11,7 +11,7 @@ TABLE = "agent_runs"
 RUN_COLUMNS = (
     "id,ticket_id,ticket_no,subject,trigger,status,outcome,review_reasons,"
     "predicted_dept,dept_confidence,category,grounded,regenerated,precedents_offered,"
-    "steps,errors,latency_ms,started_at,finished_at"
+    "steps,errors,latency_ms,llm_calls,input_tokens,output_tokens,cost_usd,started_at,finished_at"
 )
 
 # Why a run happened, and how it ended. Mirrors the CHECKs in migration 0025.
@@ -65,7 +65,7 @@ async def list_runs_since(since_iso: str, limit: int) -> list[dict]:
         response = await (
             get_supabase()
             .table(TABLE)
-            .select("status,outcome,latency_ms,steps")
+            .select("status,outcome,latency_ms,steps,llm_calls,cost_usd")
             .gte("started_at", since_iso)
             .order("started_at", desc=False)
             .limit(limit)

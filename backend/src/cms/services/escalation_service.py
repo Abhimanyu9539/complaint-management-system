@@ -12,6 +12,7 @@ from cms.db.repositories import dept_responses, drafts, tickets
 from cms.guardrails.guards import run_input_guard
 from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
+from cms.observability.usage import UsageCollector
 from cms.rag.nodes.classify_ticket import join_complaint
 from cms.schemas.tickets import DeptQuestion, Ticket
 from cms.services import ticket_service
@@ -52,7 +53,9 @@ async def _write_question(
             "complaint": complaint,
             "current_draft": current_draft,
             "review_reasons": "\n".join(f"- {reason}" for reason in review_reasons),
-        }
+        },
+        # Counted in the metrics only; there is no run row to save it on.
+        config={"callbacks": [UsageCollector(default_node=PROMPT_NAME)]},
     )
     return message.content.strip()
 

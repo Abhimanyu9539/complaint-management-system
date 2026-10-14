@@ -14,6 +14,7 @@ from langchain_core.messages import BaseMessage
 
 from cms.config.settings import get_settings
 from cms.db.mongo import get_checkpointer
+from cms.observability.usage import UsageCollector
 from cms.rag.graph import SMALLTALK, get_graph
 from cms.rag.state import new_turn
 from cms.rag.subgraphs.complaint import GENERATE
@@ -52,7 +53,12 @@ async def stream_turn(
     """
     settings = get_settings()
     session = session_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id(user_id, session), "user_id": user_id}}
+    # Counted in the metrics only; a chat turn has no run row to save it on.
+    usage = UsageCollector(default_node="chat")
+    config = {
+        "configurable": {"thread_id": thread_id(user_id, session), "user_id": user_id},
+        "callbacks": [usage],
+    }
     streamed = ""
     step: int | None = None
     final: dict[str, Any] = {}
@@ -113,11 +119,15 @@ async def stream_turn(
                 session_id=session,
             ).model_dump(),
         )
+        totals = usage.totals()
         logger.info(
-            "chat: answered session %s with %d char(s) and %d citation(s)",
+            "chat: answered session %s with %d char(s) and %d citation(s), %d+%d tokens, $%.6f",
             session,
             len(draft),
             len(citations),
+            totals["input_tokens"],
+            totals["output_tokens"],
+            totals["cost_usd"],
         )
     except Exception:
         # The response has already started, so this cannot become a 500 —

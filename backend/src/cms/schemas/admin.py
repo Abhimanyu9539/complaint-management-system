@@ -317,6 +317,19 @@ class AgentRunStep(_Base):
     ok: bool
 
 
+class LlmCall(_Base):
+    """One chat-model call in the run (migration 0027)."""
+
+    node: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cost_usd: float | None = Field(
+        default=None, description="What OpenRouter billed. Null when the client reported no cost."
+    )
+
+
 class AgentRun(_Base):
     id: str = Field(description="The graph run id, which is also the LangSmith root run id.")
     ticket_id: str
@@ -335,6 +348,10 @@ class AgentRun(_Base):
     steps: list[AgentRunStep]
     errors: dict[str, str]
     latency_ms: int | None = None
+    llm_calls: list[LlmCall]
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
     started_at: str
     finished_at: str
 
@@ -352,6 +369,14 @@ class NodeLatency(_Base):
     samples: int
 
 
+class ModelCost(_Base):
+    model: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+
+
 class AgentSummaryResponse(_Base):
     range_days: int
     total: int
@@ -363,3 +388,5 @@ class AgentSummaryResponse(_Base):
     )
     latency: DurationStats
     node_latency: list[NodeLatency] = Field(description="Slowest node first.")
+    cost_usd: float = Field(description="LLM cost of every run in the window.")
+    cost_by_model: list[ModelCost] = Field(description="Most expensive model first.")
