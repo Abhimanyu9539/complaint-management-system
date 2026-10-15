@@ -256,6 +256,17 @@ export interface AgentRunStep {
   ok: boolean;
 }
 
+/** One chat-model call in a run (migration 0027). */
+export interface LlmCall {
+  node: AgentNode;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** What OpenRouter billed. Null when the client reported no cost (NeMo's rails). */
+  costUsd: number | null;
+}
+
 export interface AgentRun {
   /** The graph run id, which is also the LangSmith root run id. */
   id: string;
@@ -279,6 +290,11 @@ export interface AgentRun {
   /** Stage → error, for nodes that failed without ending the run. */
   errors: Record<string, string>;
   latencyMs: number | null;
+  llmCalls: LlmCall[];
+  inputTokens: number;
+  outputTokens: number;
+  /** Sum of the costs reported. */
+  costUsd: number;
   startedAt: string;
   finishedAt: string;
 }
@@ -299,6 +315,18 @@ export interface AgentSummary {
   latency: DurationStats;
   /** Slowest node first. */
   nodeLatency: NodeLatency[];
+  /** LLM cost of every run in the window. */
+  costUsd: number;
+  /** Most expensive model first. */
+  costByModel: ModelCost[];
+}
+
+export interface ModelCost {
+  model: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -204,6 +204,17 @@ interface WireAgentRun {
   steps: { node: AgentRun['steps'][number]['node']; started_at: string; ms: number; ok: boolean }[];
   errors: Record<string, string>;
   latency_ms: number | null;
+  llm_calls: {
+    node: AgentRun['llmCalls'][number]['node'];
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    cost_usd: number | null;
+  }[];
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
   started_at: string;
   finished_at: string;
 }
@@ -490,6 +501,17 @@ function toAgentRun(wire: WireAgentRun): AgentRun {
     })),
     errors: wire.errors,
     latencyMs: wire.latency_ms,
+    llmCalls: wire.llm_calls.map((call) => ({
+      node: call.node,
+      model: call.model,
+      inputTokens: call.input_tokens,
+      outputTokens: call.output_tokens,
+      totalTokens: call.total_tokens,
+      costUsd: call.cost_usd,
+    })),
+    inputTokens: wire.input_tokens,
+    outputTokens: wire.output_tokens,
+    costUsd: wire.cost_usd,
     startedAt: wire.started_at,
     finishedAt: wire.finished_at,
   };
@@ -682,6 +704,14 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
         p50_ms: number;
         samples: number;
       }[];
+      cost_usd: number;
+      cost_by_model: {
+        model: string;
+        calls: number;
+        input_tokens: number;
+        output_tokens: number;
+        cost_usd: number;
+      }[];
     }>(`${api}/agent/summary?days=${rangeDays}`, signal);
 
     return live<AgentSummary>({
@@ -700,6 +730,14 @@ export function createRealAdminTransport(baseUrl: string): AdminTransport {
         node: item.node,
         p50Ms: item.p50_ms,
         samples: item.samples,
+      })),
+      costUsd: wire.cost_usd,
+      costByModel: wire.cost_by_model.map((item) => ({
+        model: item.model,
+        calls: item.calls,
+        inputTokens: item.input_tokens,
+        outputTokens: item.output_tokens,
+        costUsd: item.cost_usd,
       })),
     });
   }

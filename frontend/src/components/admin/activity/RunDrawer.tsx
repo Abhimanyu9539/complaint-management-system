@@ -1,7 +1,7 @@
 import { CopyableValue, Field, SectionLabel } from '@/components/admin/DrawerParts';
 import { Drawer } from '@/components/ui/Drawer';
 import { RunStatusPill, StatusPill } from '@/components/ui/StatusPill';
-import { formatDuration, formatTimestamp, titleCase } from '@/lib/format';
+import { formatCount, formatCurrency, formatDuration, formatTimestamp, titleCase } from '@/lib/format';
 import {
   TONE_CLASSES,
   agentNodeLabel,
@@ -31,6 +31,11 @@ export function RunDrawer({ run, onClose }: RunDrawerProps) {
             <Field label="Trigger" value={runTriggerLabel(run.trigger)} />
             <Field label="Started" value={formatTimestamp(run.startedAt)} />
             <Field label="Graph latency" value={formatDuration(run.latencyMs)} />
+            <Field
+              label="Tokens"
+              value={`${formatCount(run.inputTokens)} in / ${formatCount(run.outputTokens)} out`}
+            />
+            <Field label="LLM cost" value={formatCurrency(run.costUsd)} />
           </div>
 
           <section>
@@ -62,6 +67,11 @@ export function RunDrawer({ run, onClose }: RunDrawerProps) {
           <section>
             <SectionLabel>Node timeline</SectionLabel>
             <NodeWaterfall run={run} />
+          </section>
+
+          <section>
+            <SectionLabel>Model calls</SectionLabel>
+            <ModelCalls run={run} />
           </section>
 
           {Object.keys(run.errors).length > 0 && (
@@ -156,6 +166,32 @@ function NodeWaterfall({ run }: { run: AgentRun }) {
           </li>
         );
       })}
+    </ol>
+  );
+}
+
+/** Each chat-model call, in the order it finished: node, model, tokens and what it cost. */
+function ModelCalls({ run }: { run: AgentRun }) {
+  if (run.llmCalls.length === 0) {
+    return <p className="text-[12px] text-text-faint">No model calls recorded for this run.</p>;
+  }
+
+  return (
+    <ol className="flex flex-col gap-1.5">
+      {run.llmCalls.map((call, index) => (
+        <li key={`${call.node}-${index}`} className="flex items-baseline gap-2 text-[11.5px]">
+          <span className="w-[120px] shrink-0 truncate text-text-muted">{agentNodeLabel(call.node)}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-faint" title={call.model}>
+            {call.model}
+          </span>
+          <span className="shrink-0 font-mono text-[11px] text-text-faint tabular-nums">
+            {formatCount(call.totalTokens)} tok
+          </span>
+          <span className="w-[60px] shrink-0 text-right font-mono text-[11px] text-text tabular-nums">
+            {formatCurrency(call.costUsd)}
+          </span>
+        </li>
+      ))}
     </ol>
   );
 }

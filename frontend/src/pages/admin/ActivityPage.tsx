@@ -2,6 +2,7 @@ import { Activity, ClipboardCheck, Gauge, Timer } from 'lucide-react';
 import { useState } from 'react';
 import { AdminPageHeader } from '@/components/admin/layout/AdminShell';
 import { LiveIndicator } from '@/components/admin/layout/LiveIndicator';
+import { ModelCostPanel } from '@/components/admin/activity/ModelCostPanel';
 import { NodeLatencyPanel } from '@/components/admin/activity/NodeLatencyPanel';
 import { RunDrawer } from '@/components/admin/activity/RunDrawer';
 import { RunsTable } from '@/components/admin/activity/RunsTable';
@@ -21,7 +22,7 @@ import type { AgentRun, AgentRunStatus } from '@/lib/admin/types';
 const PAGE_SIZE = 25;
 const SUMMARY_DAYS = 7;
 
-/** Ticket-graph runs: one row per run, with its path, routing decisions and node timings. */
+/** Ticket-graph runs: one row per run, with its path, routing decisions, node timings and LLM cost. */
 export function ActivityPage() {
   const { openMobileNav } = useAdminLayout();
   const [selectedRun, setSelectedRun] = useState<AgentRun | null>(null);
@@ -55,7 +56,7 @@ export function ActivityPage() {
     <>
       <AdminPageHeader
         title="Agent activity"
-        description="Graph executions, routing decisions and latency"
+        description="Graph executions, routing decisions, latency and LLM cost"
         onOpenNav={openMobileNav}
         actions={<LiveIndicator />}
       />
@@ -93,7 +94,10 @@ export function ActivityPage() {
           />
         </div>
 
-        <NodeLatencyPanel summary={summary} />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <NodeLatencyPanel summary={summary} />
+          <ModelCostPanel summary={summary} />
+        </div>
 
         <Panel title="Execution history" eyebrow="Runs" flush>
           <div className="flex flex-wrap items-end gap-2 px-4 pb-3">
