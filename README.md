@@ -231,6 +231,11 @@ in the evals before it ships.
 - **Streaming.** SSE events `token` → `citations` → `done`. If the output guard triggers a
   regeneration, a `reset` event tells the browser to drop the first draft.
 - **Tracing.** Every node is a LangSmith span under a `chat_turn` or `ticket_run` root.
+- **Logs.** JSON lines tagged with `request_id`, `ticket_id` and `run_id`, so one complaint's lines can
+  be pulled out of the log. Every response carries its id in `X-Request-ID`.
+- **Metrics and cost.** `/metrics` serves Prometheus counters for the status funnel, graph latency,
+  guard results and LLM tokens and cost. Each ticket run's LLM calls (node, model, tokens, cost) are
+  saved on its `agent_runs` row and shown on the admin Activity page.
 
 ---
 
@@ -266,6 +271,7 @@ kept out of the normal test suite.
 | Chat memory             | MongoDB (LangGraph checkpointer)                               |
 | Guardrails              | Guardrails AI, Microsoft Presidio, NeMo Guardrails             |
 | Evals and tracing       | deepeval, LangSmith                                            |
+| Logs and metrics        | JSON logs, Prometheus                                          |
 | API                     | FastAPI, SSE (Python 3.13, uv)                                 |
 | Frontend                | React 19, Vite, Tailwind v4                                    |
 | Email                   | SMTP out (Mailpit in dev), GreenMail + n8n in                  |
@@ -298,7 +304,7 @@ uv sync
 
 ```bash
 supabase link --project-ref <your-project-ref>
-supabase db push                 # applies the 26 migrations in supabase/migrations
+supabase db push                 # applies the 27 migrations in supabase/migrations
 uv run cms-create-collections    # creates the two Qdrant collections
 uv run cms-seed                  # ingests 34 policies + 20 cases
 ```
@@ -351,6 +357,11 @@ open the ticket in the workbench.
 **Optional: inbound email.** Run `docker compose up -d greenmail n8n`, then follow
 [backend/n8n/README.md](backend/n8n/README.md). Customer emails then become tickets, and department
 replies are picked up automatically.
+
+**Optional: metrics and alerts.** Run `docker compose up -d prometheus`, then open
+http://localhost:9090. It scrapes the API's `/metrics`, and the Alerts tab shows the rules in
+[backend/prometheus/alerts.yml](backend/prometheus/alerts.yml), such as the daily LLM budget. See
+[backend/README.md](backend/README.md#observability).
 
 **From the terminal**, without the UI:
 

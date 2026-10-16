@@ -1,0 +1,44 @@
+# Alert rules over the API's /metrics. Thresholds are the numbers on the right of each `expr`.
+# A ratio over a window with no traffic is NaN, which never fires.
+groups:
+  - name: cms
+    rules:
+      - alert: LlmDailyBudgetExceeded
+        # Daily LLM budget in USD, every call (ticket graph, chat, escalation, case minting).
+        expr: sum(increase(cms_llm_cost_usd_total[1d])) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM spend over the last 24h is ${{ $value | printf \"%.2f\" }}, above the $5 budget."
+
+      - alert: ProcessingFailedRateHigh
+        # Ticket processing attempts that ended at processing_failed.
+        expr: >
+          sum(increase(cms_ticket_transitions_total{status="processing_failed"}[1h]))
+          / sum(increase(cms_ticket_transitions_total{status="processing"}[1h])) > 0.10
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of ticket runs failed in the last hour."
+
+      - alert: GuardFailureRateHigh
+        # Guard checks that blocked or errored, across every guard node.
+        expr: >
+          sum(increase(cms_guard_checks_total{result!="passed"}[1h]))
+          / sum(increase(cms_guard_checks_total[1h])) > 0.30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of guard checks failed in the last hour."
+
+      - alert: TicketGraphSlow
+        # p95 ticket-graph run time, in seconds.
+        expr: >
+          histogram_quantile(0.95, sum by (le) (rate(cms_ticket_graph_duration_seconds_bucket[1h]))) > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ticket-graph p95 is {{ $value | humanizeDuration }} over the last hour."
