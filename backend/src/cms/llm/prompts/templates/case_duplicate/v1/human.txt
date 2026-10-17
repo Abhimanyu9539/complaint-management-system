@@ -1,0 +1,7 @@
+<new_case>
+{new_case}
+</new_case>
+
+<past_case>
+{past_case}
+</past_case>

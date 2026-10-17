@@ -304,6 +304,12 @@ class Settings(BaseSettings):
     flywheel_case_title_template: str = "T-{ticket_no} — {department} / {category}"
     # The ticket's own identifiers, replaced before Presidio runs (privacy §6).
     case_entity_masks: dict[str, str] = {"order_no": "<ORDER_NO>", "invoice_no": "<INVOICE_NO>"}
+    # A past case at or above this rerank score is compared with the new one. Same scale and
+    # reasoning as `precedent_relevance_threshold`; the judge, not this score, decides.
+    flywheel_similar_case_threshold: float = 0.70
+    # Past cases the judge compares at most.
+    flywheel_dedupe_top_n: int = 3
+    case_duplicate_prompt_version: str = "v1"
 
     # --- Agent activity (admin) ---
     # Row cap on the read behind the activity summary; a window above it is truncated and logged.
