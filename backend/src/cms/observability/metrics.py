@@ -39,6 +39,11 @@ LLM_COST = Counter(
     "LLM cost in USD as OpenRouter billed it, by model and node.",
     ["model", "node"],
 )
+FLYWHEEL_OUTCOMES = Counter(
+    "cms_flywheel_outcomes_total",
+    "Tickets the daily minting job handled, by outcome (minted, duplicate, skipped, failed).",
+    ["outcome"],
+)
 
 
 def record_transition(status: str) -> None:
@@ -60,6 +65,13 @@ def record_guard(guard: str, result: str) -> None:
         GUARD_CHECKS.labels(guard, result).inc()
     except Exception:
         logger.exception("Could not count the %s check", guard)
+
+
+def record_flywheel_outcome(outcome: str) -> None:
+    try:
+        FLYWHEEL_OUTCOMES.labels(outcome).inc()
+    except Exception:
+        logger.exception("Could not count the flywheel outcome %s", outcome)
 
 
 def record_llm_call(call: dict) -> None:

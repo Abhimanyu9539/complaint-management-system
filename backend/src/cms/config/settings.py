@@ -304,6 +304,12 @@ class Settings(BaseSettings):
     flywheel_case_title_template: str = "T-{ticket_no} — {department} / {category}"
     # The ticket's own identifiers, replaced before Presidio runs (privacy §6).
     case_entity_masks: dict[str, str] = {"order_no": "<ORDER_NO>", "invoice_no": "<INVOICE_NO>"}
+
+    # --- Flywheel daily job (Airflow calls /api/v1/flywheel/*) ---
+    # A "day" runs midnight to midnight IST. IST has no daylight saving, so a fixed offset is exact.
+    flywheel_day_utc_offset_minutes: int = 330
+    # Cap on the tickets one day's run lists.
+    flywheel_batch_max_tickets: int = 500
     # A past case at or above this rerank score is compared with the new one. Same scale and
     # reasoning as `precedent_relevance_threshold`; the judge, not this score, decides.
     flywheel_similar_case_threshold: float = 0.70

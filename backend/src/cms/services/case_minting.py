@@ -1,6 +1,7 @@
-"""The flywheel: a ticket whose reply was sent becomes a past case. A background task, so it never raises."""
+"""The flywheel: the daily job turns a resolved, sent ticket into a past case, unless one covers it."""
 
 import logging
+from datetime import UTC, date, datetime, time, timedelta, timezone
 
 from guardrails import OnFailAction
 from guardrails.validator_base import FailResult
@@ -21,8 +22,11 @@ from cms.ingestion.extract.cases_extractor import build_case_text
 from cms.ingestion.pipeline import ingest_case
 from cms.llm.chat.openrouter_chat import get_chat_model
 from cms.llm.prompts.registry import load_prompt
+from cms.observability import metrics
 from cms.observability.usage import UsageCollector
 from cms.rag.nodes.classify_ticket import join_complaint
+from cms.schemas.flywheel import MintResult
+from cms.services import case_dedupe
 
 logger = logging.getLogger(__name__)
 
@@ -95,22 +99,40 @@ async def _resolution_text(complaint: str, guidance: str, reply: str) -> tuple[s
     return await scrub_case_text(summary), False
 
 
-async def _mint(ticket_id: str) -> None:
+def day_bounds(day: date) -> tuple[str, str]:
+    """One IST day, midnight to midnight, as UTC ISO timestamps."""
+    offset = timezone(timedelta(minutes=get_settings().flywheel_day_utc_offset_minutes))
+    start = datetime.combine(day, time.min, tzinfo=offset).astimezone(UTC)
+    return start.isoformat(), (start + timedelta(days=1)).isoformat()
+
+
+async def list_candidates(day: date) -> list[str]:
+    """The tickets resolved on `day` and still resolved: what the daily job mints, one by one."""
+    start, end = day_bounds(day)
+    ticket_ids = await tickets.list_resolved_between(start, end, get_settings().flywheel_batch_max_tickets)
+    logger.info("Flywheel day %s: %d resolved ticket(s) to mint", day, len(ticket_ids))
+    return ticket_ids
+
+
+def _skipped(ticket_id: str, reason: str) -> MintResult:
+    logger.info("Ticket %s: no case minted, %s", ticket_id, reason)
+    return MintResult(ticket_id=ticket_id, outcome="skipped", reason=reason)
+
+
+async def _mint(ticket_id: str) -> MintResult:
     settings = get_settings()
     ticket = await tickets.fetch_ticket(ticket_id)
     if ticket["status"] != "resolved":
-        logger.info("Ticket %s is %s, not resolved: no case minted", ticket_id, ticket["status"])
-        return
+        return _skipped(ticket_id, f"the ticket is {ticket['status']}, not resolved")
 
     reply = await _sent_reply(ticket_id)
     if not reply:
-        logger.info("Ticket %s has no sent reply: no case minted", ticket_id)
-        return
+        return _skipped(ticket_id, "the ticket has no sent reply")
 
     department = ticket.get("escalated_dept") or ticket.get("predicted_dept")
     if not department:
-        logger.warning("Ticket %s has no department: no case minted", ticket_id)
-        return
+        logger.warning("Ticket %s has no department", ticket_id)
+        return _skipped(ticket_id, "the ticket has no department")
 
     # Our own identifiers first, then Presidio; nothing unscrubbed is stored.
     entities = ticket.get("entities") or {}
@@ -135,6 +157,20 @@ async def _mint(ticket_id: str) -> None:
         "resolution_path": ticket.get("resolution_path"),
         "source": "flywheel",
     }
+
+    # A reopened and re-resolved ticket refreshes its own case; only a new case is checked.
+    if not await cases.fetch_case_by_ticket(ticket_id):
+        duplicate = await case_dedupe.find_duplicate(build_case_text(row), complaint)
+        if duplicate:
+            await ticket_events.append_event(ticket_id, "case_skipped", duplicate)
+            logger.info("Ticket %s is covered by case %s: no case minted", ticket_id, duplicate["case_id"])
+            return MintResult(
+                ticket_id=ticket_id,
+                outcome="duplicate",
+                similar_case_id=duplicate["case_id"],
+                reason=duplicate["reason"],
+            )
+
     case_id = await cases.upsert_flywheel_case(row)
     # Its own ingestion job, so a failed run shows on the admin ingestion page and can be retried.
     await ingest_case(case_id, build_case_text(row))
@@ -150,18 +186,25 @@ async def _mint(ticket_id: str) -> None:
         },
     )
     logger.info("Ticket %s minted case %s (fallback=%s)", ticket_id, case_id, fallback)
+    return MintResult(ticket_id=ticket_id, outcome="minted", case_id=case_id)
 
 
-async def mint_case(ticket_id: str) -> None:
-    """Add the ticket to the case corpus, or refresh its case. Never raises."""
+async def mint_case(ticket_id: str) -> MintResult:
+    """Add the ticket to the case corpus, refresh its case, or skip it as a duplicate.
+
+    A failure is recorded on the ticket and re-raised for the caller to log, so the daily job retries it.
+    """
     if not get_settings().flywheel_enabled:
-        logger.info("Ticket %s: the flywheel is off, no case minted", ticket_id)
-        return
+        return _skipped(ticket_id, "the flywheel is off")
 
     try:
-        await _mint(ticket_id)
+        result = await _mint(ticket_id)
     except Exception as exc:
-        logger.exception("Ticket %s: minting the case failed", ticket_id)
+        metrics.record_flywheel_outcome("failed")
         await ticket_events.append_event(
             ticket_id, "failed", {"stage": FAILED_STAGE, "error": f"{type(exc).__name__}: {exc}"}
         )
+        raise
+
+    metrics.record_flywheel_outcome(result.outcome)
+    return result

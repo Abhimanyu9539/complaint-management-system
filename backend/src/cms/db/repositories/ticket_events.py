@@ -29,8 +29,10 @@ EVENTS: tuple[str, ...] = (
     # Added with the gate and the send action; not in 0016's comment.
     "gated",
     "discarded",
-    # The flywheel: a sent reply became a past case, or that case was removed.
+    # The flywheel: a sent reply became a past case, was skipped as a duplicate,
+    # or its case was removed.
     "case_minted",
+    "case_skipped",
     "case_removed",
     # A customer's email reply to an existing ticket (incoming email).
     "customer_replied",

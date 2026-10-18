@@ -163,6 +163,26 @@ async def list_ticket_ids_by_status(status: str, limit: int = 500) -> list[str]:
     return [row["id"] for row in response.data or []]
 
 
+async def list_resolved_between(start_iso: str, end_iso: str, limit: int) -> list[str]:
+    """Ids of tickets still resolved whose `resolved_at` is in `[start, end)`, oldest first."""
+    try:
+        response = await (
+            get_supabase()
+            .table(TABLE)
+            .select("id")
+            .eq("status", "resolved")
+            .gte("resolved_at", start_iso)
+            .lt("resolved_at", end_iso)
+            .order("resolved_at", desc=False)
+            .limit(limit)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Failed to list %s rows resolved between %s and %s", TABLE, start_iso, end_iso)
+        raise
+    return [row["id"] for row in response.data or []]
+
+
 async def mark_resolved(ticket_id: str, resolution_path: str) -> dict:
     """Close a ticket, stamping the path it took to get there.
 

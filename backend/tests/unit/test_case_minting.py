@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from cms.config.settings import get_settings
@@ -33,9 +35,11 @@ def _install(
     summary=SUMMARY,
     summary_error=None,
     scrub_error=None,
+    existing_case=None,
+    duplicate=None,
 ) -> dict:
     """Stub every read, write, the model and the scrubber. Returns a dict recording what happened."""
-    calls = {"summarised": [], "upserts": [], "ingested": [], "events": []}
+    calls = {"summarised": [], "upserts": [], "ingested": [], "events": [], "dedupe": []}
 
     async def fetch_ticket(ticket_id):
         return ticket or TICKET
@@ -70,6 +74,15 @@ def _install(
     async def append_event(ticket_id, event, payload=None, actor_id=None):
         calls["events"].append((event, payload))
 
+    async def fetch_case_by_ticket(ticket_id):
+        return existing_case
+
+    async def find_duplicate(new_case, complaint):
+        calls["dedupe"].append((new_case, complaint))
+        return duplicate
+
+    monkeypatch.setattr(case_minting.cases, "fetch_case_by_ticket", fetch_case_by_ticket)
+    monkeypatch.setattr(case_minting.case_dedupe, "find_duplicate", find_duplicate)
     monkeypatch.setattr(case_minting.tickets, "fetch_ticket", fetch_ticket)
     monkeypatch.setattr(case_minting.drafts, "fetch_latest_draft", fetch_latest_draft)
     monkeypatch.setattr(case_minting.draft_feedback, "fetch_feedback", fetch_feedback)
@@ -86,10 +99,12 @@ def _install(
 async def test_a_sent_escalated_ticket_mints_a_scrubbed_case(monkeypatch) -> None:
     calls = _install(monkeypatch)
 
-    await case_minting.mint_case("t1")
+    result = await case_minting.mint_case("t1")
 
+    assert result.outcome == "minted" and result.case_id == "c1"
     [row] = calls["upserts"]
     assert row["ticket_id"] == "t1" and row["source"] == "flywheel"
+    assert calls["dedupe"] == [(build_case_text(row), row["complaint_text"])]
     assert row["department_id"] == "warranty"
     assert row["title"] == "T-1042 — warranty / faulty_product"
     assert row["dept_guidance"] == "Confirmed it is within warranty.\n\nApprove a replacement."
@@ -140,8 +155,9 @@ async def test_nothing_is_minted_without_a_sent_reply(monkeypatch, enabled, tick
     calls = _install(monkeypatch, ticket=ticket, feedback=feedback)
     monkeypatch.setattr(get_settings(), "flywheel_enabled", enabled)
 
-    await case_minting.mint_case("t1")
+    result = await case_minting.mint_case("t1")
 
+    assert result.outcome == "skipped" and result.reason
     assert calls["upserts"] == [] and calls["ingested"] == [] and calls["events"] == []
 
 
@@ -169,12 +185,42 @@ async def test_a_failed_summary_call_falls_back_to_the_reply(monkeypatch) -> Non
     assert event == "case_minted" and payload["fallback"] is True
 
 
-async def test_a_failed_scrub_stores_nothing_and_records_a_failed_event(monkeypatch) -> None:
+async def test_a_failed_scrub_stores_nothing_records_a_failed_event_and_raises(monkeypatch) -> None:
     calls = _install(monkeypatch, scrub_error=RuntimeError("presidio down"))
 
-    await case_minting.mint_case("t1")
+    with pytest.raises(RuntimeError, match="presidio down"):
+        await case_minting.mint_case("t1")
 
     assert calls["upserts"] == [] and calls["ingested"] == [] and calls["summarised"] == []
     [(event, payload)] = calls["events"]
     assert event == "failed" and payload["stage"] == "mint_case"
     assert "presidio down" in payload["error"]
+
+
+DUPLICATE = {"case_id": "c9", "title": "C-1009", "score": 0.91, "reason": "Same fault, same replacement."}
+
+
+async def test_a_duplicate_is_skipped_with_an_event_and_nothing_stored(monkeypatch) -> None:
+    calls = _install(monkeypatch, duplicate=DUPLICATE)
+
+    result = await case_minting.mint_case("t1")
+
+    assert result.outcome == "duplicate" and result.similar_case_id == "c9"
+    assert calls["upserts"] == [] and calls["ingested"] == []
+    assert calls["events"] == [("case_skipped", DUPLICATE)]
+
+
+async def test_a_ticket_with_a_case_refreshes_it_without_a_duplicate_check(monkeypatch) -> None:
+    calls = _install(monkeypatch, existing_case={"id": "c1"}, duplicate=DUPLICATE)
+
+    result = await case_minting.mint_case("t1")
+
+    assert result.outcome == "minted" and calls["dedupe"] == []
+    assert len(calls["upserts"]) == 1
+
+
+def test_an_ist_day_maps_to_utc_bounds() -> None:
+    assert case_minting.day_bounds(date(2026, 11, 7)) == (
+        "2026-11-06T18:30:00+00:00",
+        "2026-11-07T18:30:00+00:00",
+    )
