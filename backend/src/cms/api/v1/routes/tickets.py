@@ -27,7 +27,6 @@ from cms.schemas.tickets import (
     TicketPage,
 )
 from cms.services import (
-    case_minting,
     escalation_service,
     reply_service,
     ticket_pipeline,
@@ -154,18 +153,15 @@ async def resolve_ticket(
 async def send_reply(
     ticket_id: str,
     payload: SendReplyRequest,
-    background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
 ) -> Ticket:
     """Email the (possibly edited) draft to the customer and resolve the ticket.
 
-    Once sent, the ticket becomes a past case in the background (the flywheel).
+    The daily Airflow job later turns it into a past case (the flywheel).
     """
-    ticket = await reply_service.send_reply(
+    return await reply_service.send_reply(
         ticket_id, payload.draft_id, payload.final_text, user.id
     )
-    background_tasks.add_task(case_minting.mint_case, ticket_id)
-    return ticket
 
 
 @router.post("/{ticket_id}/discard", response_model=Ticket)

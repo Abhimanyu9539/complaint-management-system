@@ -295,8 +295,8 @@ class Settings(BaseSettings):
     # Enough to act on; more turns the retry feedback into a second draft.
     fact_check_max_claims: int = 5
 
-    # --- Flywheel (a sent reply becomes a past case) ---
-    # Kill switch: off, sending a reply mints no case.
+    # --- Flywheel (a resolved ticket becomes a past case) ---
+    # Kill switch: off, the daily job mints no case.
     flywheel_enabled: bool = True
     # The internal summary of what was sent, stored as the case's resolution.
     case_resolution_prompt_version: str = "v1"
@@ -306,6 +306,8 @@ class Settings(BaseSettings):
     case_entity_masks: dict[str, str] = {"order_no": "<ORDER_NO>", "invoice_no": "<INVOICE_NO>"}
 
     # --- Flywheel daily job (Airflow calls /api/v1/flywheel/*) ---
+    # The shared secret Airflow sends as `X-Job-Secret`. Unset turns the job endpoints off (503).
+    flywheel_job_secret: str | None = None
     # A "day" runs midnight to midnight IST. IST has no daylight saving, so a fixed offset is exact.
     flywheel_day_utc_offset_minutes: int = 330
     # Cap on the tickets one day's run lists.
