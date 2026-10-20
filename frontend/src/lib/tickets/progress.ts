@@ -101,6 +101,9 @@ function milestones(events: readonly TicketEvent[], departmentLabel: DepartmentL
       case 'case_minted':
         steps.push(done(key, 'Added to the knowledge base', at));
         break;
+      case 'case_skipped':
+        steps.push(done(key, 'Similar case already in the knowledge base', at));
+        break;
       case 'case_removed':
         steps.push(done(key, 'Removed from the knowledge base', at));
         break;
