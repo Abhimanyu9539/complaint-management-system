@@ -3,7 +3,8 @@
 # replies the workbench sends (see src/cms/services/email_sender.py).
 # GreenMail is the support mailbox incoming email lands in; n8n reads it and posts
 # each message to the API (see n8n/README.md). Prometheus scrapes the API's /metrics
-# and evaluates the alert rules in prometheus/alerts.yml.
+# and evaluates the alert rules in prometheus/alerts.yml. Airflow runs the daily job that
+# mints resolved tickets into past cases (see airflow/README.md).
 #
 # Run from backend/. Compose reads `${...}` values from backend/.env.
 #
@@ -98,7 +99,31 @@ services:
       - ./prometheus:/etc/prometheus:ro
       - prometheus_data:/prometheus
 
+  # Runs airflow/dags/mint_cases.py at 01:00 IST: it lists yesterday's resolved tickets
+  # and posts each to the API to mint. Plumbing only, like n8n. UI at http://localhost:8080.
+  # Standalone (SQLite, one process) and no login: development only.
+  airflow:
+    image: apache/airflow:3.1.6
+    container_name: cms-airflow
+    restart: unless-stopped
+    command: standalone
+    environment:
+      CMS_API_URL: http://host.docker.internal:8000
+      # Read from backend/.env, the same value the API checks.
+      FLYWHEEL_JOB_SECRET: ${FLYWHEEL_JOB_SECRET:-}
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Kolkata
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - airflow_data:/opt/airflow
+      - ./airflow/dags:/opt/airflow/dags:ro
+
 volumes:
   mongo_data:
   n8n_data:
   prometheus_data:
+  airflow_data:

@@ -105,6 +105,13 @@ budget, processing_failed rate, guard failure rate and graph p95. There is no Al
 firing alert is shown there and sent nowhere. Change a threshold in that file, then restart the
 container.
 
+## Flywheel (daily case minting)
+
+Sending a reply no longer mints a case. At 01:00 IST, Airflow takes the tickets resolved the day
+before (and still resolved) and mints them one by one. A ticket whose complaint and resolution a
+past case already covers is skipped as a duplicate. A similar complaint resolved differently is
+still minted. Setup and backfill: [airflow/README.md](airflow/README.md).
+
 ## Building
 
 ```bash
