@@ -134,6 +134,10 @@ async def test_a_customer_reply_is_recorded_on_the_ticket(monkeypatch) -> None:
         ({"from_address": "Customer Care <support@example.com>"}, TICKET, "our own address"),
         ({"auto_submitted": "auto-replied"}, TICKET, "automatic reply"),
         ({"from_address": "warranty@example.com"}, TICKET, "without a ticket reference"),
+        ({"from_address": "Google <no-reply@accounts.google.com>"}, TICKET, "automated sender"),
+        ({"from_address": "notifications@shop.example"}, TICKET, "automated sender"),
+        ({"precedence": "Bulk"}, TICKET, "Precedence: bulk"),
+        ({"list_unsubscribe": "<mailto:unsub@news.example>"}, TICKET, "List-Unsubscribe"),
     ],
 )
 async def test_emails_that_fit_no_case_are_ignored_with_a_reason(

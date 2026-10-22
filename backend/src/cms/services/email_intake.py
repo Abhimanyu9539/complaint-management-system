@@ -49,7 +49,25 @@ def _ignored(reason: str, ticket: dict | None = None) -> tuple[InboundEmailResul
     )
 
 
-async def _new_ticket(email: InboundEmailRequest, sender: str) -> tuple[InboundEmailResult, str]:
+def _automated_reason(email: InboundEmailRequest, sender: str) -> str | None:
+    """Why the email is automated or bulk mail by its sender or headers, or None if it isn't."""
+    settings = get_settings()
+    if re.match(settings.automated_sender_pattern, sender):
+        return f"automated sender ({sender})"
+    precedence = (email.precedence or "").strip().lower()
+    if precedence in settings.bulk_precedence_values:
+        return f"bulk mail (Precedence: {precedence})"
+    if (email.list_unsubscribe or "").strip():
+        return "bulk mail (List-Unsubscribe)"
+    return None
+
+
+async def _new_ticket(email: InboundEmailRequest, sender: str) -> tuple[InboundEmailResult, str | None]:
+    """Open a ticket, unless the sender or the headers show it is automated mail."""
+    reason = _automated_reason(email, sender)
+    if reason:
+        return _ignored(reason)
+
     settings = get_settings()
     created = await ticket_service.create_ticket(
         subject=email.subject.strip()[: settings.email_subject_max_chars] or settings.email_subject_fallback,

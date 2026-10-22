@@ -47,6 +47,18 @@
               "name": "auto_submitted",
               "value": "={{ $json.metadata['auto-submitted'] || '' }}",
               "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "precedence",
+              "value": "={{ $json.metadata['precedence'] || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "a7",
+              "name": "list_unsubscribe",
+              "value": "={{ $json.metadata['list-unsubscribe'] || '' }}",
+              "type": "string"
             }
           ]
         },

@@ -20,6 +20,8 @@ class InboundEmailRequest(BaseModel):
     subject: str = Field(default="", max_length=998)
     text: str = Field(default="", max_length=100_000, description="The plain-text body.")
     auto_submitted: str | None = Field(default=None, max_length=100)
+    precedence: str | None = Field(default=None, max_length=100)
+    list_unsubscribe: str | None = Field(default=None, max_length=2000)
 
 
 class InboundEmailResult(BaseModel):

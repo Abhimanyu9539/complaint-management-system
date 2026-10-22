@@ -199,6 +199,12 @@ class Settings(BaseSettings):
         r"^-----Original Message-----",
         r"^From: ",
     ]
+    # A new email from one of these senders (the part before the @) is automated, not a customer.
+    automated_sender_pattern: str = (
+        r"^(no-?reply|do-?not-?reply|mailer-daemon|postmaster|notifications?|bounces?)([+._-].*)?@"
+    )
+    # `Precedence` values that mark bulk mail. Any `List-Unsubscribe` header does too.
+    bulk_precedence_values: list[str] = ["bulk", "list", "junk"]
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (
