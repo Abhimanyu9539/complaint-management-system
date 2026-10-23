@@ -24,6 +24,17 @@ class InboundEmailRequest(BaseModel):
     list_unsubscribe: str | None = Field(default=None, max_length=2000)
 
 
+class EmailScreen(BaseModel):
+    """The model's verdict on a new email: is a customer writing to customer care?"""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["customer", "notification", "marketing", "spam"] = Field(
+        description="customer: a person writing to customer care. The rest are automated or bulk mail."
+    )
+    reason: str = Field(description="One sentence on why.")
+
+
 class InboundEmailResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 

@@ -205,6 +205,11 @@ class Settings(BaseSettings):
     )
     # `Precedence` values that mark bulk mail. Any `List-Unsubscribe` header does too.
     bulk_precedence_values: list[str] = ["bulk", "list", "junk"]
+    # The model check on a new email that passed the rules above: is it a customer writing?
+    email_screen_enabled: bool = True
+    email_screen_prompt_version: str = "v1"
+    # How much of the body the check reads.
+    email_screen_max_chars: int = 2000
     # What we say when retrieval found nothing. Kept here rather than inline in
     # the node so the wording is tunable without a deploy.
     no_match_message: str = (

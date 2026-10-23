@@ -1,0 +1,7 @@
+<subject>
+{subject}
+</subject>
+
+<body>
+{body}
+</body>
