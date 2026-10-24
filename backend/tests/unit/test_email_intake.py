@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from cms.api.v1.routes import emails
 from cms.config.settings import get_settings
-from cms.schemas.emails import InboundEmailRequest, InboundEmailResult
+from cms.schemas.emails import EmailScreen, InboundEmailRequest, InboundEmailResult
 from cms.schemas.tickets import TicketCreated
 from cms.services import email_intake, ticket_service
 
@@ -29,9 +29,24 @@ def _email(**overrides) -> InboundEmailRequest:
     return InboundEmailRequest(**{**fields, **overrides})
 
 
-def _install(monkeypatch, ticket=TICKET, duplicate=False, error=None) -> dict:
+CUSTOMER = EmailScreen(kind="customer", reason="A customer reports a fault.")
+
+
+def _install(monkeypatch, ticket=TICKET, duplicate=False, error=None, screen=CUSTOMER) -> dict:
     """Stub every read and write. Returns a dict recording what happened."""
-    calls = {"claimed": [], "finished": [], "created": [], "answers": [], "processing": [], "replies": []}
+    calls = {
+        "claimed": [],
+        "finished": [],
+        "created": [],
+        "answers": [],
+        "processing": [],
+        "replies": [],
+        "screened": [],
+    }
+
+    async def screen_email(subject, text):
+        calls["screened"].append(subject)
+        return screen
 
     async def claim_email(row):
         calls["claimed"].append(row)
@@ -71,6 +86,7 @@ def _install(monkeypatch, ticket=TICKET, duplicate=False, error=None) -> dict:
     monkeypatch.setattr(email_intake.escalation_service, "record_answer", record_answer)
     monkeypatch.setattr(email_intake.ticket_service, "start_processing", start_processing)
     monkeypatch.setattr(email_intake.ticket_service, "record_customer_reply", record_customer_reply)
+    monkeypatch.setattr(email_intake.email_screen, "screen_email", screen_email)
     # Our own address, independent of the local .env.
     monkeypatch.setattr(get_settings(), "support_email_from", "Customer Care <support@example.com>")
     monkeypatch.setattr(get_settings(), "support_reply_to", "support@example.com")
@@ -150,6 +166,39 @@ async def test_emails_that_fit_no_case_are_ignored_with_a_reason(
     assert result.outcome == "ignored" and reason in result.reason and trigger is None
     assert calls["created"] == [] and calls["answers"] == [] and calls["replies"] == []
     assert calls["finished"][0][0] == "ignored"
+
+
+async def test_an_email_the_screen_calls_automated_is_ignored(monkeypatch) -> None:
+    notice = EmailScreen(kind="notification", reason="An account security alert.")
+    calls = _install(monkeypatch, screen=notice)
+
+    result, trigger = await email_intake.ingest_email(
+        _email(subject="You shared some Google Account data", text="You gave access to an app.")
+    )
+
+    assert result.outcome == "ignored" and trigger is None
+    assert result.reason == "not a customer message: notification (An account security alert.)"
+    assert calls["created"] == [] and calls["finished"][0][0] == "ignored"
+
+
+async def test_a_failed_screen_still_opens_the_ticket(monkeypatch) -> None:
+    calls = _install(monkeypatch, screen=None)
+
+    result, trigger = await email_intake.ingest_email(_email())
+
+    assert result.outcome == "created" and trigger == "created"
+    assert len(calls["created"]) == 1
+
+
+async def test_rules_and_replies_skip_the_screen(monkeypatch) -> None:
+    calls = _install(monkeypatch)
+
+    await email_intake.ingest_email(_email(from_address="noreply@example.org"))
+    await email_intake.ingest_email(
+        _email(message_id="<m2@example.com>", subject="Re: Kettle [T-1042]", text=QUOTED)
+    )
+
+    assert calls["screened"] == []
 
 
 async def test_a_duplicate_changes_nothing(monkeypatch) -> None:

@@ -7,7 +7,7 @@ from email.utils import parseaddr
 from cms.config.settings import get_settings
 from cms.db.repositories import departments, inbound_emails, tickets
 from cms.schemas.emails import InboundEmailRequest, InboundEmailResult
-from cms.services import escalation_service, ticket_service
+from cms.services import email_screen, escalation_service, ticket_service
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +63,13 @@ def _automated_reason(email: InboundEmailRequest, sender: str) -> str | None:
 
 
 async def _new_ticket(email: InboundEmailRequest, sender: str) -> tuple[InboundEmailResult, str | None]:
-    """Open a ticket, unless the sender or the headers show it is automated mail."""
+    """Open a ticket, unless the rules or the model check say no customer is writing."""
     reason = _automated_reason(email, sender)
     if reason:
         return _ignored(reason)
+    verdict = await email_screen.screen_email(email.subject, email.text)
+    if verdict and verdict.kind != "customer":
+        return _ignored(f"not a customer message: {verdict.kind} ({verdict.reason})")
 
     settings = get_settings()
     created = await ticket_service.create_ticket(

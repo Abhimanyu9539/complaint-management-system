@@ -64,6 +64,11 @@ to reply as the customer, send from the ticket's address with `[T-n]` in the sub
 
 ## Good to know
 
+- A new email (no `[T-n]` in the subject) opens a ticket only when a customer wrote it.
+  Mail from a no-reply style sender, with `Precedence: bulk` or a `List-Unsubscribe`
+  header, or judged automated by a cheap model check is recorded in `inbound_emails` as
+  `ignored`, with the reason. If the model check fails, the ticket opens anyway.
+- After changing `inbound-email.json`, import it again: n8n keeps the old copy.
 - Messages already in the mailbox when the workflow is published are picked up when the
   next one arrives.
 - Each message is marked read when n8n fetches it. If the API stays down through the three
