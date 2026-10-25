@@ -6,8 +6,17 @@ import { ThinkingDots } from './TypingCursor';
 
 export function MessageList() {
   const { messages, pendingUserMessage, streamingText, status } = useChat();
-  const { containerRef, pinnedToBottom, handleScroll, scrollToBottom } = useAutoScroll(
-    `${messages.length}:${streamingText.length}:${pendingUserMessage?.id ?? ''}`,
+
+  // The last turn is the latest user message and everything after it.
+  const shown = pendingUserMessage ? [...messages, pendingUserMessage] : messages;
+  const split = Math.max(shown.findLastIndex((m) => m.role === 'user'), 0);
+  const earlier = shown.slice(0, split);
+  const lastTurn = shown.slice(split);
+
+  const { containerRef, lastTurnRef, pinnedToBottom, handleScroll, scrollToBottom } = useAutoScroll(
+    lastTurn[0]?.id,
+    pendingUserMessage !== null,
+    `${messages.length}:${streamingText.length}`,
   );
 
   const isStreaming = status === 'streaming';
@@ -17,36 +26,39 @@ export function MessageList() {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="scrollbar-thin h-full overflow-y-auto"
+        className="scrollbar-thin relative h-full overflow-y-auto [container-type:size]"
       >
         <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
-          {messages.map((message) => (
+          {earlier.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
 
-          {pendingUserMessage && (
-            <MessageBubble key={pendingUserMessage.id} message={pendingUserMessage} />
-          )}
-
-          {isStreaming &&
-            (streamingText ? (
-              <MessageBubble
-                message={{
-                  id: 'streaming',
-                  role: 'assistant',
-                  content: streamingText,
-                  createdAt: new Date().toISOString(),
-                }}
-                streaming
-              />
-            ) : (
-              <div className="flex gap-3 px-4 md:px-0">
-                <div className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-accent-soft" />
-                <div className="rounded-2xl rounded-tl-sm bg-surface px-4 py-3 shadow-sm ring-1 ring-border">
-                  <ThinkingDots />
-                </div>
-              </div>
+          {/* At least one screen tall (minus the list padding), so the new message can scroll to the top. */}
+          <div ref={lastTurnRef} className="flex min-h-[calc(100cqh-3rem)] flex-col gap-5">
+            {lastTurn.map((message) => (
+              <MessageBubble key={message.id} message={message} />
             ))}
+
+            {isStreaming &&
+              (streamingText ? (
+                <MessageBubble
+                  message={{
+                    id: 'streaming',
+                    role: 'assistant',
+                    content: streamingText,
+                    createdAt: new Date().toISOString(),
+                  }}
+                  streaming
+                />
+              ) : (
+                <div className="flex gap-3 px-4 md:px-0">
+                  <div className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-accent-soft" />
+                  <div className="rounded-2xl rounded-tl-sm bg-surface px-4 py-3 shadow-sm ring-1 ring-border">
+                    <ThinkingDots />
+                  </div>
+                </div>
+              ))}
+          </div>
         </div>
       </div>
 

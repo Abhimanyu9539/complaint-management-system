@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const BOTTOM_THRESHOLD_PX = 80;
+// Same as the list's top padding (py-6), so a message scrolled to the top isn't flush with the edge.
+const TOP_GAP_PX = 24;
 
-export function useAutoScroll<T>(dependency: T) {
+// Claude-style scrolling: a message the agent just sent scrolls to the top of the view and the
+// answer streams in below it without moving the view. Opening a conversation lands at its end.
+export function useAutoScroll(lastTurnId: string | undefined, isNewSend: boolean, contentKey: string) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const lastTurnRef = useRef<HTMLDivElement | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
   const handleScroll = useCallback(() => {
@@ -20,14 +25,24 @@ export function useAutoScroll<T>(dependency: T) {
     setPinnedToBottom(true);
   }, []);
 
+  // Runs only when the last turn changes: a new message was sent, or another conversation opened.
+  // Streaming tokens and the turn being saved keep the same last turn, so they never move the view.
   useEffect(() => {
-    if (pinnedToBottom) {
-      containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight });
+    const container = containerRef.current;
+    const lastTurn = lastTurnRef.current;
+    if (!container) return;
+    if (isNewSend && lastTurn) {
+      container.scrollTo({ top: lastTurn.offsetTop - TOP_GAP_PX, behavior: 'smooth' });
+    } else {
+      container.scrollTo({ top: container.scrollHeight });
     }
-    // dependency drives re-pinning on new content; pinnedToBottom intentionally
-    // excluded so a user scroll-up isn't fought by this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dependency]);
+  }, [lastTurnId]);
 
-  return { containerRef, pinnedToBottom, handleScroll, scrollToBottom };
+  // The answer grows without scrolling, so re-check whether "Jump to latest" should show.
+  useEffect(() => {
+    handleScroll();
+  }, [contentKey, handleScroll]);
+
+  return { containerRef, lastTurnRef, pinnedToBottom, handleScroll, scrollToBottom };
 }
