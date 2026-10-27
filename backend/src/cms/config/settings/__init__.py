@@ -48,8 +48,8 @@ def resolve_env_file() -> Path | None:
         # A deleted or unreadable cwd must not stop us reaching the fallback.
         logger.exception("Could not search upward from the working directory")
 
-    # src/cms/config/settings.py -> backend/
-    source_tree = Path(__file__).resolve().parents[3] / ".env"
+    # src/cms/config/settings/__init__.py -> backend/
+    source_tree = Path(__file__).resolve().parents[4] / ".env"
     if source_tree.is_file():
         return source_tree
 
