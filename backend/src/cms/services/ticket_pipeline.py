@@ -366,8 +366,8 @@ async def process_ticket(ticket_id: str, trigger: str = "created") -> None:
 async def _process_ticket(ticket_id: str, trigger: str, run_id: UUID) -> None:
     try:
         row = await ticket_service.start_processing(ticket_id)
-    except ticket_service.IllegalTransition as exc:
-        # Escalated or resolved by a person: nothing left to draft for.
+    except (ticket_service.IllegalTransition, ticket_service.StatusChanged) as exc:
+        # Escalated or resolved by a person, or another run took it: nothing left to draft for.
         logger.info("Ticket %s not processed: %s", ticket_id, exc)
         return
     except Exception as exc:

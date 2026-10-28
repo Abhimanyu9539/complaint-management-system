@@ -14,7 +14,7 @@ from cms.db.repositories import NotFound
 from cms.services.admin_ingest import UnknownDocument
 from cms.services.email_sender import EmailSendError
 from cms.services.reply_service import DraftConflict, InvalidReply
-from cms.services.ticket_service import IllegalTransition, UnknownDepartment
+from cms.services.ticket_service import IllegalTransition, StatusChanged, UnknownDepartment
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 STATUS_BY_ERROR: dict[type[Exception], int] = {
     NotFound: 404,
     IllegalTransition: 409,
+    StatusChanged: 409,
     DraftConflict: 409,
     UnknownDepartment: 422,
     InvalidReply: 422,
