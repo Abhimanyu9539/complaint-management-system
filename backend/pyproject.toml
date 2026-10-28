@@ -10,7 +10,6 @@ classifiers = [
     "Private :: Do Not Upload",
 ]
 dependencies = [
-    "deepeval>=4.2.8",
     "en-core-web-lg",
     "fastapi>=0.139.2",
     "fastembed>=0.8.0",

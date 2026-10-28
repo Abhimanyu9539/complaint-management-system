@@ -426,7 +426,6 @@ name = "complaint-management-system"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "deepeval" },
     { name = "en-core-web-lg" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -465,7 +464,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "deepeval", specifier = ">=4.2.8" },
     { name = "en-core-web-lg", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.139.2" },
     { name = "fastembed", specifier = ">=0.8.0" },
