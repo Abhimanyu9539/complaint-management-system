@@ -1,0 +1,8 @@
+# Everything is left out, then only what the Dockerfile copies is let back in.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src
+!data/seed
+**/__pycache__

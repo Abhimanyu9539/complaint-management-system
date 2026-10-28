@@ -109,6 +109,19 @@ rm -rf "$PROMETHEUS_MULTIPROC_DIR" && mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
 uv run uvicorn cms.main:app --workers 4
 ```
 
+The Docker image does this itself on every start.
+
+**Docker image.** `docker build -t cms-api .` from `backend/` builds the API with the runtime
+dependencies only (no eval or test tools) and the models it needs, so it starts without network
+access. It takes its settings from environment variables, runs as a non-root user on port 8000,
+and `WEB_CONCURRENCY` sets the number of workers (default 1):
+
+```bash
+docker run -p 8000:8000 --env-file <env file> -e WEB_CONCURRENCY=2 cms-api
+```
+
+`--env-file` takes plain `NAME=value` lines: no spaces around `=` and no quotes.
+
 **Prometheus.** `docker compose up -d prometheus` scrapes the API on the host every 15s. The UI is
 at http://localhost:9090, and the Alerts tab shows the rules in `prometheus/alerts.yml`: daily LLM
 budget, processing_failed rate, guard failure rate and graph p95. There is no Alertmanager, so a
