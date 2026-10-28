@@ -26,7 +26,8 @@ def build_message(to: str, subject: str, body: str) -> EmailMessage:
     message["From"] = settings.support_email_from
     message["To"] = to
     message["Reply-To"] = settings.support_reply_to
-    message["Subject"] = subject
+    # One line: a header with a line break in it is refused. The customer form allows one.
+    message["Subject"] = " ".join(subject.split())
     message["Message-ID"] = make_msgid(domain=domain)
     message.set_content(body)
     return message
@@ -70,8 +71,8 @@ async def send_email(to: str, subject: str, body: str) -> str:
             f"SMTP host {settings.smtp_host!r} is not local and real delivery is disabled."
         )
 
-    message = build_message(to, subject, body)
     try:
+        message = build_message(to, subject, body)
         await asyncio.to_thread(_send, message)
     except Exception as exc:
         logger.exception("Email to %s failed via %s:%s", to, settings.smtp_host, settings.smtp_port)

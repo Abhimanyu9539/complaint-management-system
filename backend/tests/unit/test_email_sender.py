@@ -53,6 +53,19 @@ async def test_message_carries_the_headers_and_body(fake_smtp) -> None:
     assert message.get_content().strip() == "Dear customer,"
 
 
+async def test_subject_with_a_line_break_is_sent_on_one_line(fake_smtp) -> None:
+    await email_sender.send_email("jo@example.com", "Re: Kettle\r\nbroke [T-1042]", "Dear customer,")
+
+    [message] = fake_smtp
+    assert message["Subject"] == "Re: Kettle broke [T-1042]"
+
+
+async def test_a_message_that_cannot_be_built_is_an_email_send_error(fake_smtp) -> None:
+    with pytest.raises(email_sender.EmailSendError):
+        await email_sender.send_email("jo@example.com\nBcc: eve@example.com", "s", "b")
+    assert fake_smtp == []
+
+
 async def test_non_local_host_is_refused_while_real_delivery_is_off(fake_smtp, monkeypatch) -> None:
     monkeypatch.setattr(get_settings(), "smtp_host", "smtp.gmail.com")
     monkeypatch.setattr(get_settings(), "email_real_delivery_enabled", False)
