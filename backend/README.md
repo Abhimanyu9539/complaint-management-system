@@ -96,8 +96,18 @@ Token and cost metrics cover every LLM call: the ticket graph, chat, the escalat
 case minting. Only ticket-graph runs are also saved, per call, in `agent_runs.llm_calls`
 (migration 0027). NeMo's rail calls go through `ChatOpenAI`, which reports tokens but no cost.
 
-`/metrics` is public, like `/health`, so restrict it at the network in a deployment. The counters
-are per process: with `uvicorn --workers N`, use prometheus_client's multiprocess mode.
+`/metrics` is public, like `/health`, so restrict it at the network in a deployment.
+
+**More than one worker.** The counters are per process, so with `uvicorn --workers N` set
+`PROMETHEUS_MULTIPROC_DIR` to a folder: each worker writes its counts there and `/metrics` adds
+them up. It must be a real environment variable (not a line in `.env`), the folder must exist, and
+it must be emptied before each start, or the last run's counts are added in:
+
+```bash
+export PROMETHEUS_MULTIPROC_DIR=/tmp/cms-metrics
+rm -rf "$PROMETHEUS_MULTIPROC_DIR" && mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
+uv run uvicorn cms.main:app --workers 4
+```
 
 **Prometheus.** `docker compose up -d prometheus` scrapes the API on the host every 15s. The UI is
 at http://localhost:9090, and the Alerts tab shows the rules in `prometheus/alerts.yml`: daily LLM
