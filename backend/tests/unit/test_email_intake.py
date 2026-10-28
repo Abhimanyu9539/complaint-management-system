@@ -254,7 +254,7 @@ def _install_ticket(monkeypatch, status) -> dict:
     async def append_event(ticket_id, event, payload=None, actor_id=None):
         calls["events"].append((event, payload))
 
-    async def update_ticket(ticket_id, patch):
+    async def update_ticket(ticket_id, patch, expected_status=None):
         calls["updates"].append(patch)
 
     monkeypatch.setattr(ticket_service.tickets, "fetch_ticket", fetch_ticket)

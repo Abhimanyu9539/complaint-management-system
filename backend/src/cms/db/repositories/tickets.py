@@ -6,7 +6,7 @@ A null `resolution_path` means "not resolved yet", not "direct".
 import asyncio
 import logging
 
-from cms.db.repositories import NotFound, utc_now_iso
+from cms.db.repositories import NotFound
 from cms.db.session import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -109,21 +109,24 @@ async def fetch_ticket_by_no(ticket_no: int) -> dict:
     return rows[0]
 
 
-async def update_ticket(ticket_id: str, patch: dict) -> dict:
+async def update_ticket(ticket_id: str, patch: dict, expected_status: str | None = None) -> dict:
     """Apply a partial update and return the updated row.
 
-    No status validation here on purpose — `ticket_service.assert_transition` owns the
-    state machine, and duplicating the rules in the repository is how the two
-    copies drift apart.
+    With `expected_status`, the row is only updated while it is still at that status,
+    so two requests racing on one ticket cannot both move it. No row updated is `NotFound`.
+    Whether a move is legal is `ticket_service.assert_transition`'s call, not this one's.
     """
     try:
-        response = await get_supabase().table(TABLE).update(patch).eq("id", ticket_id).execute()
+        query = get_supabase().table(TABLE).update(patch).eq("id", ticket_id)
+        if expected_status:
+            query = query.eq("status", expected_status)
+        response = await query.execute()
     except Exception:
         logger.exception("Failed to update %s row %s", TABLE, ticket_id)
         raise
 
     if not response.data:
-        raise NotFound(f"No ticket with id {ticket_id}")
+        raise NotFound(f"No ticket with id {ticket_id} at status {expected_status or 'any'}")
     return response.data[0]
 
 
@@ -181,22 +184,6 @@ async def list_resolved_between(start_iso: str, end_iso: str, limit: int) -> lis
         logger.exception("Failed to list %s rows resolved between %s and %s", TABLE, start_iso, end_iso)
         raise
     return [row["id"] for row in response.data or []]
-
-
-async def mark_resolved(ticket_id: str, resolution_path: str) -> dict:
-    """Close a ticket, stamping the path it took to get there.
-
-    `resolved_at` is written here rather than by a trigger so that resolving is
-    one round trip and the timestamp matches the row the caller gets back.
-    """
-    return await update_ticket(
-        ticket_id,
-        {
-            "status": "resolved",
-            "resolution_path": resolution_path,
-            "resolved_at": utc_now_iso(),
-        },
-    )
 
 
 # ---------------------------------------------------------------------------

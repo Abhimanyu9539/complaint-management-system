@@ -6,7 +6,16 @@
 import asyncio
 import logging
 
-from cms.db.repositories import departments, draft_feedback, drafts, ticket_events, tickets
+from cms.config.settings import get_settings
+from cms.db.repositories import (
+    NotFound,
+    departments,
+    draft_feedback,
+    drafts,
+    ticket_events,
+    tickets,
+    utc_now_iso,
+)
 from cms.observability import metrics
 from cms.schemas.tickets import (
     DraftFeedback,
@@ -36,6 +45,10 @@ class UnknownDepartment(Exception):
     """An escalation target outside the closed set of twelve. Maps to 422."""
 
 
+class StatusChanged(Exception):
+    """Another request moved the ticket between our read and our write. Maps to 409 Conflict."""
+
+
 # The ticket state machine as a table: every status in the CHECK constraint is a key,
 # so a new status fails loudly here instead of silently permitting nothing.
 #
@@ -61,6 +74,15 @@ def assert_transition(current: str, target: str) -> None:
     """Raise unless `current → target` is an edge in the machine."""
     if target not in ALLOWED.get(current, frozenset()):
         raise IllegalTransition(current, target)
+
+
+async def _move(ticket_id: str, current: str, patch: dict) -> dict:
+    """Write `patch` only if the ticket is still at `current`. Raises `StatusChanged` if it is not."""
+    try:
+        return await tickets.update_ticket(ticket_id, patch, expected_status=current)
+    except NotFound:
+        logger.warning("Ticket %s left %s before it could move to %s", ticket_id, current, patch["status"])
+        raise StatusChanged(get_settings().ticket_changed_message) from None
 
 
 def _resolution_path_for(row: dict) -> str:
@@ -213,7 +235,7 @@ async def start_processing(ticket_id: str, resume: bool = True) -> dict:
         return row
 
     assert_transition(row["status"], "processing")
-    updated = await tickets.update_ticket(ticket_id, {"status": "processing", "review_reasons": []})
+    updated = await _move(ticket_id, row["status"], {"status": "processing", "review_reasons": []})
     metrics.record_transition("processing")
     return updated
 
@@ -223,7 +245,7 @@ async def finish_processing(ticket_id: str, status: str, reasons: list[str]) -> 
     current = await tickets.fetch_ticket(ticket_id)
     assert_transition(current["status"], status)
 
-    await tickets.update_ticket(ticket_id, {"status": status, "review_reasons": reasons})
+    await _move(ticket_id, current["status"], {"status": status, "review_reasons": reasons})
     metrics.record_transition(status)
     await ticket_events.append_event(ticket_id, "gated", {"status": status, "reasons": reasons})
     logger.info("Ticket %s gated to %s: %s", ticket_id, status, reasons)
@@ -259,8 +281,9 @@ async def escalate_ticket(
     current = await tickets.fetch_ticket(ticket_id)
     assert_transition(current["status"], "escalated")
 
-    row = await tickets.update_ticket(
+    row = await _move(
         ticket_id,
+        current["status"],
         {"status": "escalated", "escalated_dept": department_id},
     )
     metrics.record_transition("escalated")
@@ -288,7 +311,7 @@ async def mark_dept_responded(ticket_id: str, response: dict, actor_id: str | No
     current = await tickets.fetch_ticket(ticket_id)
     assert_transition(current["status"], "dept_responded")
 
-    row = await tickets.update_ticket(ticket_id, {"status": "dept_responded"})
+    row = await _move(ticket_id, current["status"], {"status": "dept_responded"})
     metrics.record_transition("dept_responded")
     await ticket_events.append_event(
         ticket_id,
@@ -318,7 +341,11 @@ async def resolve_ticket(
     assert_transition(current["status"], "resolved")
 
     path = _resolution_path_for(current)
-    row = await tickets.mark_resolved(ticket_id, path)
+    row = await _move(
+        ticket_id,
+        current["status"],
+        {"status": "resolved", "resolution_path": path, "resolved_at": utc_now_iso()},
+    )
     metrics.record_transition("resolved")
     await ticket_events.append_event(
         ticket_id,
@@ -342,8 +369,9 @@ async def record_customer_reply(ticket_id: str, text: str) -> None:
 
     # The path and time are cleared so the escalation metrics stop counting it as resolved.
     assert_transition("resolved", "needs_review")
-    await tickets.update_ticket(
+    await _move(
         ticket_id,
+        "resolved",
         {
             "status": "needs_review",
             "review_reasons": ["Customer replied after resolution."],

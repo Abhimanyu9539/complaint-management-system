@@ -57,6 +57,10 @@ class MessageSettings(BaseModel):
         "We could not record your complaint just now. Your message has not been lost — "
         "please try again in a moment."
     )
+    # Two requests raced on one ticket and the other one moved it first.
+    ticket_changed_message: str = (
+        "Someone else changed this ticket at the same time. Reload it and try again."
+    )
     dept_question_failed_message: str = (
         "Could not draft a question. Write it yourself, or try again in a moment."
     )
