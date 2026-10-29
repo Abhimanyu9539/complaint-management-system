@@ -52,7 +52,7 @@ async def test_an_allowed_query_is_stored_as_the_guard_left_it() -> None:
 
 
 async def test_the_typed_message_is_stored_not_the_rewrite() -> None:
-    """`contextualize_query` rewrites `query` for retrieval; the transcript keeps what was typed."""
+    """`analyze_query` rewrites `query` for retrieval; the transcript keeps what was typed."""
     update = await record_turn(
         {
             "query": "The customer's X200 stopped charging. What if it is past 12 months?",

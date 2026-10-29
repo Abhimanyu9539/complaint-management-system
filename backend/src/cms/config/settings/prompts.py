@@ -10,9 +10,11 @@ class PromptSettings(BaseModel):
     # v3 (feedback only), v2 (no feedback) and v1 (policies only) are kept as the
     # record and eval baselines.
     generate_prompt_version: str = "v6"
-    # v4 sends questions about the conversation itself to smalltalk_or_meta; v3 adds
-    # the knowledge_lookup intent and its lookup_target; v2 adds risk flags.
-    analyze_query_prompt_version: str = "v4"
+    # v5 also rewrites a follow-up into a standalone question, in the same call (the
+    # ticket graph uses this prompt too, with no conversation); v4 sends questions
+    # about the conversation itself to smalltalk_or_meta; v3 adds the knowledge_lookup
+    # intent and its lookup_target; v2 adds risk flags.
+    analyze_query_prompt_version: str = "v5"
     # v3 adds the earlier conversation, so it can recap it; v2 mentions policy and
     # case lookups in the "what can you do?" answer.
     smalltalk_prompt_version: str = "v3"

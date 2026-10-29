@@ -1,4 +1,4 @@
-"""The chat graph: input_guard → contextualize → analyze → one lane → record_turn → compact_history.
+"""The chat graph: input_guard → analyze → one lane → record_turn → compact_history.
 
 The lane is the complaint or lookup subgraph, or smalltalk; a blocked message goes straight to record_turn.
 Each branch has its own edge into record_turn: a list edge would wait for all of them. Streaming a lane's
@@ -18,7 +18,6 @@ from cms.db.mongo import get_checkpointer
 from cms.rag.nodes.analyze_query import analyze_query
 from cms.rag.nodes.blocked_input import blocked_input
 from cms.rag.nodes.compact_history import compact_history
-from cms.rag.nodes.contextualize_query import contextualize_query
 from cms.rag.nodes.input_guard import input_guard
 from cms.rag.nodes.record_turn import record_turn
 from cms.rag.nodes.smalltalk import smalltalk
@@ -31,7 +30,6 @@ logger = logging.getLogger(__name__)
 # Node names
 INPUT_GUARD = "input_guard"
 BLOCKED_INPUT = "blocked_input"
-CONTEXTUALIZE_QUERY = "contextualize_query"
 ANALYZE_QUERY = "analyze_query"
 COMPLAINT_LANE = "complaint_lane"
 LOOKUP_LANE = "lookup_lane"
@@ -76,7 +74,6 @@ def build_graph(
     # Register nodes — a lane is one node holding its whole subgraph.
     builder.add_node(INPUT_GUARD, input_guard)
     builder.add_node(BLOCKED_INPUT, blocked_input)
-    builder.add_node(CONTEXTUALIZE_QUERY, contextualize_query)
     builder.add_node(ANALYZE_QUERY, analyze_query)
     builder.add_node(COMPLAINT_LANE, build_complaint_lane(lane_checkpointer))
     builder.add_node(LOOKUP_LANE, build_lookup_lane(lane_checkpointer))
@@ -90,11 +87,10 @@ def build_graph(
         INPUT_GUARD,
         route_after_input_guard,
         {
-            "allowed": CONTEXTUALIZE_QUERY,
+            "allowed": ANALYZE_QUERY,
             "blocked": BLOCKED_INPUT,
         },
     )
-    builder.add_edge(CONTEXTUALIZE_QUERY, ANALYZE_QUERY)
 
     builder.add_conditional_edges(
         ANALYZE_QUERY,

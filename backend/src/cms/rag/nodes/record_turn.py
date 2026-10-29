@@ -17,7 +17,7 @@ def _user_text(state: GraphState) -> str:
     """What to store as the user's message.
 
     `input_guard` replaces `query` with the Presidio-masked text on the allowed
-    path, and `contextualize_query` keeps that text in `user_message` before it
+    path, and `analyze_query` keeps that text in `user_message` before it
     rewrites `query` — so the transcript shows what the user typed, masked. On
     the blocked path neither runs, and blocked is exactly when the text holds
     something worth withholding — so that one is replaced.

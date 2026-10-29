@@ -25,11 +25,6 @@ def _install_nodes(monkeypatch, seen: list[dict]) -> None:
     async def input_guard(state):
         return {"query": state["query"], "input_blocked": False}
 
-    async def contextualize_query(state):
-        if not state.get("chat_history"):
-            return {"user_message": state["query"]}
-        return {"query": f"standalone: {state['query']}", "user_message": state["query"]}
-
     async def compact_history(state):
         history = state["chat_history"]
         return {
@@ -38,7 +33,14 @@ def _install_nodes(monkeypatch, seen: list[dict]) -> None:
         }
 
     async def analyze_query(state):
-        return {"intent": "complaint_query", "policy_queries": [state["query"]]}
+        typed = state["query"]
+        query = f"standalone: {typed}" if state.get("chat_history") else typed
+        return {
+            "query": query,
+            "user_message": typed,
+            "intent": "complaint_query",
+            "policy_queries": [query],
+        }
 
     async def retrieve_policies(state):
         return {"policy_hits": [POLICY_HIT], "no_match": False}
@@ -70,7 +72,6 @@ def _install_nodes(monkeypatch, seen: list[dict]) -> None:
         return {"draft": f"caveat + {state.get('draft', '')}"}
 
     monkeypatch.setattr(graph_module, "input_guard", input_guard)
-    monkeypatch.setattr(graph_module, "contextualize_query", contextualize_query)
     monkeypatch.setattr(graph_module, "analyze_query", analyze_query)
     monkeypatch.setattr(graph_module, "compact_history", compact_history)
     for name, fn in [

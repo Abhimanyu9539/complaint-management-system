@@ -26,7 +26,7 @@ class GraphState(_RequiredState, total=False):
     # --- memory (compact_history) — carried across turns, never reset ---
     history_summary: str  # running summary of the folded turns
     summarized_count: int  # how many `chat_history` messages the summary covers
-    # The masked text the user typed this turn; `contextualize_query` may rewrite `query`.
+    # The masked text the user typed this turn; `analyze_query` may rewrite `query`.
     user_message: str
 
     # --- guardrails (input_guard, output_guard) ---
