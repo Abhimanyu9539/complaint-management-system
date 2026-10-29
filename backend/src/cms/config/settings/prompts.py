@@ -23,7 +23,6 @@ class PromptSettings(BaseModel):
     lookup_prompt_version: str = "v2"
 
     # --- Chat memory ---
-    contextualize_query_prompt_version: str = "v1"
     compact_history_prompt_version: str = "v1"
 
     # --- Ticket graph ---
