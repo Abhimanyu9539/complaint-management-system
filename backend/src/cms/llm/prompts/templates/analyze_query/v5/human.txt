@@ -1,0 +1,4 @@
+{conversation}
+<input>
+{query}
+</input>

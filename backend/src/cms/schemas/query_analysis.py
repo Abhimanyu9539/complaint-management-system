@@ -37,3 +37,19 @@ class QueryAnalysis(_Base):
         default_factory=list,
         description="Every risk the complaint raises; empty when none apply.",
     )
+
+
+class TurnAnalysis(_Base):
+    """One `analyze_query` call on a follow-up turn: the standalone message, then its analysis.
+
+    `standalone_query` comes first so the model writes it before it classifies.
+    """
+
+    standalone_query: str = Field(
+        default="",
+        description=(
+            "The input rewritten to be understood without the conversation; empty when "
+            "it needs no rewriting."
+        ),
+    )
+    analysis: QueryAnalysis
